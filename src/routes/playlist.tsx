@@ -14,7 +14,7 @@ const MAX_RENDER = 500;
 export const Route = createFileRoute("/playlist")({
   validateSearch: (s: Record<string, unknown>) => ({
     url: typeof s.url === "string" ? s.url : "",
-    name: typeof s.name === "string" ? s.name : "Lista M3U",
+    name: typeof s.name === "string" ? s.name : "",
   }),
   head: () => ({ meta: [{ title: "Lista M3U — SoaresTV" }] }),
   component: PlaylistPage,
@@ -44,14 +44,16 @@ function PlaylistPage() {
   // Prefer in-memory cache (just loaded from login flow). Fall back to URL
   // param if user landed here directly (deep link / reload).
   const cached = m3uCache.get();
-  const fallbackUrl = urlParam || cached?.url || "";
-  const displayName = name || cached?.name || "Lista M3U";
+  const savedLists = typeof window !== "undefined" ? store.getM3U() : [];
+  const savedList = savedLists.find((l) => l.url === (urlParam || cached?.url)) ?? savedLists[0];
+  const fallbackUrl = urlParam || cached?.url || savedList?.url || "";
+  const displayName = name || cached?.name || savedList?.name || "Lista M3U";
 
   const q = useQuery({
-    queryKey: ["m3u", fallbackUrl],
+    queryKey: ["m3u", fallbackUrl, savedList?.username, savedList?.password],
     enabled: !cached && !!fallbackUrl,
     queryFn: async () => {
-      const entries = await loadM3U(fallbackUrl);
+      const entries = await loadM3U(fallbackUrl, savedList?.username, savedList?.password);
       m3uCache.set(fallbackUrl, displayName, entries);
       return entries;
     },
