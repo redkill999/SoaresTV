@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { Skeleton } from "@/components/ui/skeleton";
-import { store } from "@/lib/storage";
+import { store, type M3UPlaylist } from "@/lib/storage";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -42,15 +42,26 @@ const BOTTOM_RIGHT: Tile[] = [
 function HomePage() {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
+  const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
 
   useEffect(() => {
     setMounted(true);
     const hasCreds = !!store.getCreds();
-    const hasM3U = store.getM3U().length > 0;
+    const playlists = store.getM3U();
+    const hasM3U = playlists.length > 0;
+    setM3uList(playlists[0] ?? null);
     if (!hasCreds && !hasM3U) navigate({ to: "/" });
   }, [navigate]);
 
   if (!mounted) return <HomeSkeleton />;
+
+  const openTile = (to: string) => {
+    if (m3uList && !store.getCreds()) {
+      navigate({ to: "/playlist", search: { url: m3uList.url, name: m3uList.name } });
+      return;
+    }
+    navigate({ to });
+  };
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
@@ -82,7 +93,7 @@ function HomePage() {
       {/* Main grid */}
       <main className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 gap-5 px-6 pt-4 md:grid-cols-2">
         {MAIN.map((t) => (
-          <BigTile key={t.label} tile={t} onClick={() => navigate({ to: t.to })} />
+          <BigTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
         ))}
       </main>
 

@@ -1,6 +1,6 @@
 // Single-user local storage helpers
 export type XtreamCreds = { server: string; username: string; password: string };
-export type M3UPlaylist = { name: string; url: string };
+export type M3UPlaylist = { name: string; url: string; username?: string; password?: string };
 export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
 export type HistItem = FavItem & { at: number; position?: number };
 export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
