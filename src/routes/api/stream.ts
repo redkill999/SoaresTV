@@ -43,6 +43,13 @@ function parseByteRange(range: string | null): { start: number; end?: number } |
   return { start, end };
 }
 
+function parseContentRangeTotal(value: string | null): number | undefined {
+  const total = /bytes\s+\d+-\d+\/(\d+|\*)/i.exec(value ?? "")?.[1];
+  if (!total || total === "*") return undefined;
+  const n = Number(total);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 function vodRangeForUpstream(requestedRange: string | null): string {
   const parsed = parseByteRange(requestedRange) ?? { start: 0 };
   const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
@@ -188,14 +195,16 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
-  if (isVod && status === 200) {
+  if (isVod && (status === 200 || status === 206)) {
     const parsed = parseByteRange(vodRangeForUpstream(range)) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
-    const bodyLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
-    const total = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
+    const requestedLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
+    const upstreamLength = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
+    const bodyLength = Math.min(upstreamLength ?? requestedLength, requestedLength);
+    const total = parseContentRangeTotal(respHeaders.get("content-range")) ?? (status === 200 ? upstreamLength : undefined);
     respHeaders.set("Content-Length", String(bodyLength));
     respHeaders.set("Content-Range", `bytes ${parsed.start}-${parsed.start + bodyLength - 1}/${total ?? "*"}`);
     status = 206;
-    return new Response(limitBody(upstream.body, bodyLength), { status, headers: respHeaders });
+    return new Response(request.method === "HEAD" ? null : limitBody(upstream.body, bodyLength), { status, headers: respHeaders });
   }
   if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
     const total = Number(contentLength);
