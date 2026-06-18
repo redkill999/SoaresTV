@@ -95,7 +95,7 @@ function LoginPage() {
 
       if (!entries.length) {
         try {
-        entries = await loadM3U(playlistUrl, username, password);
+          entries = await loadM3U(playlistUrl, username, password);
         } catch {
           entries = [];
         }
@@ -104,6 +104,8 @@ function LoginPage() {
       store.setCreds(creds);
       const others = store.getM3U().filter((l) => l.url !== playlistUrl);
       store.setM3U([savedList, ...others]);
+
+      if (!info && !entries.length) throw new Error("Não consegui autenticar nem carregar a lista M3U desse servidor.");
 
       if (entries.length) {
         m3uCache.set(playlistUrl, listName, entries);
