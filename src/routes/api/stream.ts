@@ -132,7 +132,17 @@ async function handle(request: Request) {
   }
   respHeaders.set("Content-Type", finalCt);
   if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
-  return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+  let status = upstream.status;
+  const requestedRange = request.headers.get("range");
+  const contentLength = respHeaders.get("content-length");
+  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
+    const total = Number(contentLength);
+    if (Number.isFinite(total) && total > 0) {
+      status = 206;
+      respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
+    }
+  }
+  return new Response(upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
