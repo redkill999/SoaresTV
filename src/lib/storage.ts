@@ -15,18 +15,28 @@ const K = {
 
 const isBrowser = () => typeof window !== "undefined";
 
+// Cached parsed snapshots so identical reads return the same reference
+// (required by useSyncExternalStore to avoid render loops).
+const snapshots: Record<string, { raw: string | null; value: unknown }> = {};
+
 function read<T>(k: string, fallback: T): T {
   if (!isBrowser()) return fallback;
   try {
-    const v = localStorage.getItem(k);
-    return v ? (JSON.parse(v) as T) : fallback;
+    const raw = localStorage.getItem(k);
+    const cached = snapshots[k];
+    if (cached && cached.raw === raw) return cached.value as T;
+    const value = raw ? (JSON.parse(raw) as T) : fallback;
+    snapshots[k] = { raw, value };
+    return value;
   } catch {
     return fallback;
   }
 }
 function write<T>(k: string, v: T) {
   if (!isBrowser()) return;
-  localStorage.setItem(k, JSON.stringify(v));
+  const raw = JSON.stringify(v);
+  localStorage.setItem(k, raw);
+  snapshots[k] = { raw, value: v };
   emit(k);
 }
 
