@@ -6,8 +6,8 @@ import Hls from "hls.js";
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
 // flows through our /api/stream proxy to dodge CORS / mixed-content.
 function toHlsCandidate(src: string): string | null {
-  if (/\.m3u8(\?|$)/i.test(src)) return src;
   if (/\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src)) return null;
+  if (/\.m3u8(\?|$)/i.test(src)) return src;
   // Apenas streams ao vivo têm variante HLS no Xtream.
   // VOD (movie/series) precisa ser reproduzido direto como mp4/mkv.
   if (/\/live\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(src)) {
@@ -57,9 +57,14 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
     let triedDirect = false;
 
     const playDirect = () => {
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
       triedDirect = true;
       const url = vodCandidates[vodIdx] ?? src;
       video.src = proxied(url);
+      video.load();
       video.play().catch(() => {});
     };
 
@@ -67,8 +72,7 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
       if (cancelled || hls) return;
       vodIdx += 1;
       if (vodIdx < vodCandidates.length) {
-        video.src = proxied(vodCandidates[vodIdx]);
-        video.play().catch(() => {});
+        playDirect();
       } else {
         setError("Não foi possível reproduzir esta mídia.");
       }
