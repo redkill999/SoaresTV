@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +7,7 @@ import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
-import { Clapperboard } from "lucide-react";
+import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
 
@@ -86,7 +86,14 @@ function SeriesPage() {
   return (
     <AppShell search={search} onSearch={setSearch}>
       <div className="mb-5">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 mb-4">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
+          <Link
+            to="/home"
+            aria-label="Voltar ao menu"
+            className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
           <div className="min-w-0">
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
               Séries
