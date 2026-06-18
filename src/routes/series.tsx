@@ -125,15 +125,14 @@ function SeriesPage() {
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (
-          <Link
+          <MediaCard
             key={s.series_id}
-            to="/player/$type/$id"
-            params={{ type: "series", id: String(s.series_id) }}
-            search={{ name: s.name }}
-            className="contents"
-          >
-            <MediaCard type="series" id={s.series_id} name={s.name} image={s.cover} aspect="poster" />
-          </Link>
+            type="series"
+            id={s.series_id}
+            name={s.name}
+            image={s.cover}
+            aspect="poster"
+          />
         ))}
       </MediaGrid>
     </AppShell>
