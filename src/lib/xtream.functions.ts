@@ -289,6 +289,50 @@ function isExplicitM3UInput(raw: string): boolean {
   }
 }
 
+function buildM3UCandidateUrls(raw: string, username?: string, password?: string): string[] {
+  const urls: string[] = [];
+  const add = (url: string) => {
+    if (!urls.includes(url)) urls.push(url);
+  };
+
+  const first = buildM3UUrl(raw, username, password);
+  add(first);
+
+  let target = (raw || "").trim();
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+  try {
+    const u = new URL(target);
+    const path = u.pathname.toLowerCase();
+    if (path.endsWith(".m3u") || path.endsWith(".m3u8")) return urls;
+
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (!user || !pass) return urls;
+
+    const origins = new Set<string>([u.origin]);
+    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
+    for (const port of ports) {
+      const origin = `http://${u.hostname}${port ? `:${port}` : ""}`;
+      origins.add(origin);
+    }
+
+    for (const origin of origins) {
+      for (const output of ["m3u8", "ts"]) {
+        const out = new URL(`${origin}/get.php`);
+        out.searchParams.set("username", user);
+        out.searchParams.set("password", pass);
+        out.searchParams.set("type", "m3u_plus");
+        out.searchParams.set("output", output);
+        add(out.toString());
+      }
+    }
+  } catch {
+    // keep the first URL only
+  }
+
+  return urls;
+}
+
 type CategoryMap = Map<string, string>;
 
 async function fetchJson(url: string): Promise<unknown> {
