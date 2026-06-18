@@ -51,13 +51,37 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setResult("");
-    const creds = { server, username, password };
+    const normalizedServer = normalizeServer(server);
+    const creds = { server: normalizedServer, username, password };
     try {
       const info = await login(creds);
       store.setCreds(creds);
+
+      // Build a get.php-style URL so this Xtream login becomes a playlist
+      // entry that the home launcher can re-open like any M3U list.
+      const playlistUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
+        username,
+      )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=ts`;
+      const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
+      const savedList = { name: listName, url: playlistUrl, username, password };
+      const others = store.getM3U().filter((l) => l.url !== playlistUrl);
+      store.setM3U([savedList, ...others]);
+
+      // Pre-load catalog (same path the M3U flow uses) so /home opens fast.
+      try {
+        const entries = await loadM3U(playlistUrl, username, password);
+        if (entries.length) {
+          m3uCache.set(playlistUrl, listName, entries);
+          toast.success(`${entries.length} itens carregados`);
+        } else {
+          toast.success("Conectado ao Xtream!");
+        }
+      } catch {
+        toast.success("Conectado ao Xtream!");
+      }
+
       setResult(JSON.stringify(info, null, 2));
-      toast.success("Conectado ao Xtream!");
-      setTimeout(() => navigate({ to: "/home" }), 600);
+      setTimeout(() => navigate({ to: "/home" }), 400);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro";
       setResult(msg);
