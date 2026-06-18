@@ -113,11 +113,15 @@ const TV_MODE_SCRIPT = `(function(){
     var w = window.innerWidth || window.screen.width;
     var h = window.innerHeight || window.screen.height;
     var smallScreen = Math.min(w, h) <= 820;
-    if (!smallScreen) return;
     var meta = document.querySelector('meta[name="viewport"]');
     if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name','viewport'); document.head.appendChild(meta); }
-    meta.setAttribute('content','width=1280, initial-scale=1, user-scalable=no');
-    document.documentElement.classList.add('tv-mode');
+    if (smallScreen) {
+      meta.setAttribute('content','width=1280, initial-scale=1, user-scalable=no');
+      document.documentElement.classList.add('tv-mode');
+    } else {
+      meta.setAttribute('content','width=device-width, initial-scale=1');
+      document.documentElement.classList.remove('tv-mode');
+    }
   } catch(e) {}
 })();`;
 
