@@ -15,21 +15,22 @@ export const Route = createFileRoute("/history")({
 
 function HistoryPage() {
   const items = useHistory();
+  const { t } = useTranslation();
 
   return (
     <AppShell>
       <div className="flex items-center justify-between mb-6 gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-            Histórico
+            {t("pages.history.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {items.length} {items.length === 1 ? "item assistido" : "itens assistidos"}
+            {items.length}
           </p>
         </div>
         {items.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => store.clearHistory()}>
-            Limpar
+            {t("common.delete")}
           </Button>
         )}
       </div>
@@ -38,8 +39,8 @@ function HistoryPage() {
         empty={items.length === 0}
         aspect="poster"
         emptyIcon={<HistoryIcon className="size-7" />}
-        emptyTitle="Sem histórico"
-        emptyHint="O que você assistir aparece aqui."
+        emptyTitle={t("empty.noResults")}
+        emptyHint={t("empty.recentHint")}
       >
         {items.map((it) => (
           <MediaCard
