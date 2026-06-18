@@ -105,6 +105,55 @@ export const xtreamApi = createServerFn({ method: "POST" })
     );
   });
 
+export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
+  .inputValidator((d: { server: string; username: string; password: string }) => d)
+  .handler(async ({ data }) => {
+    let target = data.server.trim();
+    if (!/^https?:\/\//i.test(target)) target = `https://${target}`;
+
+    const inputUrl = new URL(target);
+    const origin = inputUrl.origin;
+    const loginUrl = new URL("/login", origin).toString();
+    const dashboardUrl = new URL("/dashboard", origin).toString();
+    const body = new URLSearchParams({ username: data.username, password: data.password, save: "1" });
+
+    const loginRes = await fetch(loginUrl, {
+      method: "POST",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: dashboardUrl,
+      },
+      body,
+      redirect: "manual",
+    });
+
+    const cookies = loginRes.headers.get("set-cookie")?.split(/,(?=\s*[^;=]+=[^;]+)/).map((c) => c.split(";")[0]).join("; ") || "";
+    const location = loginRes.headers.get("location");
+    const nextUrl = location ? new URL(location, origin).toString() : dashboardUrl;
+    const pageRes = await fetch(nextUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
+        Accept: "text/html,*/*",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      redirect: "follow",
+    });
+    const html = await pageRes.text();
+    const haystack = `${location || ""}\n${html}`;
+
+    const matches = Array.from(haystack.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((m) => m[0].replace(/&amp;/g, "&"));
+    const xtreamUrl = matches.find((u) => /\/(player_api|get)\.php\b|:\d{2,5}\b/i.test(u));
+    if (xtreamUrl) return { server: normalizeServer(xtreamUrl) };
+
+    if (/Para acessar é preciso logar-se|Bem-vindo ao painel/i.test(html) && !cookies) {
+      throw new Error("Não foi possível entrar no painel web para descobrir o DNS Xtream.");
+    }
+
+    throw new Error("Login do painel web aceito, mas não encontrei DNS Xtream na página. Copie no XCIPTV o campo Portal/DNS/Host, normalmente com porta, não o link /dashboard.");
+  });
+
 type M3UEntryDTO = {
   id: string;
   name: string;
