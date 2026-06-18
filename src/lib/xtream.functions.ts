@@ -132,16 +132,18 @@ function buildM3UUrl(raw: string, username?: string, password?: string): string 
     if (user) out.searchParams.set("username", user);
     if (pass) out.searchParams.set("password", pass);
     out.searchParams.set("type", "m3u_plus");
-    out.searchParams.set("output", "ts");
+    // Browser playback needs HLS. Xtream accepts output=m3u8 and returns
+    // stream URLs with the provider's real playback host/port.
+    out.searchParams.set("output", "m3u8");
     return out.toString();
   }
 
-  // explicit get.php — make sure m3u_plus params are set
+  // explicit get.php — make sure m3u_plus/HLS params are set
   if (path.endsWith("/get.php")) {
     if (username && !u.searchParams.get("username")) u.searchParams.set("username", username);
     if (password && !u.searchParams.get("password")) u.searchParams.set("password", password);
     if (!u.searchParams.get("type")) u.searchParams.set("type", "m3u_plus");
-    if (!u.searchParams.get("output")) u.searchParams.set("output", "ts");
+    u.searchParams.set("output", "m3u8");
     return u.toString();
   }
 
@@ -160,6 +162,18 @@ function getXtreamAccess(raw: string, username?: string, password?: string) {
     return { origin: u.origin, username: user, password: pass };
   } catch {
     return null;
+  }
+}
+
+function isExplicitM3UInput(raw: string): boolean {
+  let target = (raw || "").trim();
+  if (!target) return false;
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+  try {
+    const path = new URL(target).pathname.toLowerCase();
+    return path.endsWith("/get.php") || path.endsWith(".m3u") || path.endsWith(".m3u8");
+  } catch {
+    return false;
   }
 }
 
@@ -214,9 +228,24 @@ export const fetchM3U = createServerFn({ method: "POST" })
     }
 
     try {
-      // Prefer Xtream player_api.php (compact JSON) over get.php (huge M3U dump
-      // that frequently exceeds Worker memory/time limits on large providers).
-      if (access) {
+      const target = buildM3UUrl(data.url, data.username, data.password);
+      const explicitM3U = isExplicitM3UInput(data.url);
+
+      // If the user pasted a concrete M3U/get.php URL, parse that playlist first:
+      // it contains the provider's real playback host/port. Falling back to
+      // player_api JSON can build wrong stream URLs for panels that separate API
+      // and stream hosts.
+      if (explicitM3U) {
+        const first = await fetchText(target);
+        if (first.text.includes("#EXTINF")) {
+          const entries = parseM3UText(first.text);
+          if (entries.length) return { entries };
+        }
+      }
+
+      // For bare Xtream credentials, prefer player_api.php (compact JSON) over
+      // get.php (huge M3U dump that can exceed Worker memory/time limits).
+      if (access && !explicitM3U) {
         const liveUrl = new URL(`${access.origin}/player_api.php`);
         liveUrl.searchParams.set("username", access.username);
         liveUrl.searchParams.set("password", access.password);
@@ -233,7 +262,6 @@ export const fetchM3U = createServerFn({ method: "POST" })
         }
       }
 
-      const target = buildM3UUrl(data.url, data.username, data.password);
       const first = await fetchText(target);
       if (first.text.includes("#EXTINF")) {
         const entries = parseM3UText(first.text);
