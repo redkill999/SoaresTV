@@ -11,7 +11,7 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
-const VOD_CHUNK_SIZE = 2 * 1024 * 1024;
+const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
 function proxyUrl(absolute: string) {
   return `/api/stream?u=${encodeURIComponent(absolute)}`;
@@ -50,7 +50,8 @@ function parseContentRangeTotal(value: string | null): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function vodRangeForUpstream(requestedRange: string | null): string {
+function vodRangeForUpstream(requestedRange: string | null, head = false): string {
+  if (head) return "bytes=0-0";
   const parsed = parseByteRange(requestedRange) ?? { start: 0 };
   const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
   return `bytes=${parsed.start}-${cappedEnd}`;
@@ -158,14 +159,14 @@ async function handle(request: Request) {
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
   const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
-  const effectiveVodRange = isVod ? range || (request.method === "HEAD" ? null : defaultVodRange()) : null;
+  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
   if (isVod && effectiveVodRange) headers.set("Range", effectiveVodRange);
   else if (range) headers.set("Range", range);
 
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl.toString(), {
-      method: request.method === "HEAD" ? "HEAD" : "GET",
+      method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
       headers,
       redirect: "follow",
     });
