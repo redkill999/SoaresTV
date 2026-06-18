@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
+import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
@@ -169,25 +170,25 @@ function SeriesPage() {
         )}
       </div>
 
-      <MediaGrid
-        loading={!creds || listQ.isLoading}
+      <VirtualMediaGrid
+        items={filtered}
+        loading={!creds || (listQ.isLoading && filtered.length === 0)}
         empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Clapperboard className="size-7" />}
         emptyTitle={emptyTitle(tab, "series")}
         emptyHint={emptyHint(tab, search)}
-      >
-        {filtered.map((s) => (
+        getKey={(s) => s.series_id}
+        renderItem={(s) => (
           <MediaCard
-            key={s.series_id}
             type="series"
             id={s.series_id}
             name={s.name}
             image={s.cover}
             aspect="poster"
           />
-        ))}
-      </MediaGrid>
+        )}
+      />
     </AppShell>
   );
 }

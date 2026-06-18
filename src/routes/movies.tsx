@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
+import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
@@ -146,17 +147,17 @@ function MoviesPage() {
         )}
       </div>
 
-      <MediaGrid
-        loading={!creds || listQ.isLoading}
+      <VirtualMediaGrid
+        items={filtered}
+        loading={!creds || (listQ.isLoading && filtered.length === 0)}
         empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Film className="size-7" />}
         emptyTitle={emptyTitle(tab, "movie")}
         emptyHint={emptyHint(tab, search)}
-      >
-        {filtered.map((m) => (
+        getKey={(m) => m.stream_id}
+        renderItem={(m) => (
           <MediaCard
-            key={m.stream_id}
             type="movie"
             id={`${m.stream_id}.${m.container_extension || "mp4"}`}
             name={m.name}
@@ -164,8 +165,8 @@ function MoviesPage() {
             badge={m.rating || undefined}
             aspect="poster"
           />
-        ))}
-      </MediaGrid>
+        )}
+      />
     </AppShell>
   );
 }
