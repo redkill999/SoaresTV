@@ -1,6 +1,6 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search, Home } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import { store } from "@/lib/storage";
 import { Input } from "@/components/ui/input";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -30,16 +30,12 @@ export function AppShell({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const hasCreds = !!store.getCreds();
     const hasM3U = store.getM3U().length > 0;
     if (!hasCreds && !hasM3U) navigate({ to: "/" });
   }, [navigate]);
-
-  if (!mounted) return null;
 
   const logout = () => {
     store.setCreds(null);

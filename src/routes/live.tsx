@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
@@ -22,11 +22,7 @@ function LivePage() {
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
   const [unlocked, setUnlocked] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const creds = mounted ? store.getCreds() : null;
+  const [creds] = useState(() => store.getCreds());
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const categoriesQ = useQuery({
