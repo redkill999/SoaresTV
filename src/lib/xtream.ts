@@ -55,8 +55,9 @@ async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
       connectTimeout: 20_000,
       readTimeout: 20_000,
     });
-  } catch {
-    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Falha na conexão nativa Android: ${message}`);
   }
 }
 
