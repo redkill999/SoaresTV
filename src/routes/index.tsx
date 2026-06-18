@@ -259,10 +259,16 @@ function LoginPage() {
                   <Input
                     id="server"
                     required
+                    autoComplete="url"
+                    inputMode="url"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder="http://meuservidor.com:8080"
                     value={server}
                     onChange={(e) => setServer(e.target.value)}
-                    className="bg-white/5 border-white/10 h-11"
+                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -270,9 +276,14 @@ function LoginPage() {
                   <Input
                     id="user"
                     required
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="bg-white/5 border-white/10 h-11"
+                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -281,16 +292,18 @@ function LoginPage() {
                     id="pass"
                     required
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="bg-white/5 border-white/10 h-11"
+                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
                   />
                 </div>
 
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
+                  className="w-full bg-brand-gradient shadow-glow font-semibold h-12"
                 >
                   {loading ? <Loader2 className="size-4 animate-spin" /> : t("auth.signInXtream")}
                 </Button>
@@ -320,10 +333,14 @@ function LoginPage() {
                   <Label htmlFor="m3u-name" className="text-xs tracking-wider text-muted-foreground">{t("auth.listName")}</Label>
                   <Input
                     id="m3u-name"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder={t("auth.listNamePh")}
                     value={m3uName}
                     onChange={(e) => setM3uName(e.target.value)}
-                    className="bg-white/5 border-white/10 h-11"
+                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -331,10 +348,15 @@ function LoginPage() {
                   <Input
                     id="m3u-url"
                     required
+                    inputMode="url"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder="http://seudns.com:8080 ou https://exemplo.com/lista.m3u"
                     value={m3uUrl}
                     onChange={(e) => setM3uUrl(e.target.value)}
-                    className="bg-white/5 border-white/10 h-11"
+                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
                   />
                   <p className="text-[10px] text-muted-foreground">
                     {t("auth.m3uHint")}
@@ -343,7 +365,7 @@ function LoginPage() {
                 <Button
                   type="submit"
                   disabled={m3uLoading}
-                  className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
+                  className="w-full bg-brand-gradient shadow-glow font-semibold h-12"
                 >
                   {m3uLoading ? <Loader2 className="size-4 animate-spin" /> : t("auth.loadM3U")}
                 </Button>
