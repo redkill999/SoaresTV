@@ -136,7 +136,7 @@ function LivePage() {
         empty={!!creds && !streamsQ.isLoading && filtered.length === 0}
         aspect="wide"
         emptyIcon={<Tv className="size-7" />}
-        emptyTitle={emptyTitle(tab, "canal")}
+        emptyTitle={emptyTitle(tab, "channel")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (
