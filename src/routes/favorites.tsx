@@ -77,8 +77,8 @@ function FavoritesPage() {
         empty={filtered.length === 0}
         aspect={tab === "live" ? "wide" : "poster"}
         emptyIcon={<Heart className="size-7" />}
-        emptyTitle="Nenhum favorito ainda"
-        emptyHint="Toque no coração nos cards para salvar aqui."
+        emptyTitle={t("empty.noResults")}
+        emptyHint={t("empty.favHint")}
       >
         {filtered.map((f) => (
           <MediaCard
