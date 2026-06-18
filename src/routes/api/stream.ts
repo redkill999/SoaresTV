@@ -99,7 +99,26 @@ async function handle(request: Request) {
     return new Response(rewritten, { status: upstream.status, headers: respHeaders });
   }
 
-  respHeaders.set("Content-Type", ct || "video/mp2t");
+  // VOD / segmentos: deduzir Content-Type pelo path quando o upstream manda
+  // algo inútil tipo application/octet-stream (faz o browser baixar em vez de tocar).
+  const path = upstreamUrl.pathname.toLowerCase();
+  const extMap: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+    ".avi": "video/x-msvideo",
+    ".ts": "video/mp2t",
+  };
+  let finalCt = ct;
+  const badCt = !ct || /octet-stream|binary|text\/plain/i.test(ct);
+  if (badCt) {
+    const ext = Object.keys(extMap).find((e) => path.endsWith(e));
+    finalCt = ext ? extMap[ext] : "video/mp4";
+  }
+  respHeaders.set("Content-Type", finalCt);
+  if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
   return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
 }
 
