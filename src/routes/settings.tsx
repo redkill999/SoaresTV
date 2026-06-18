@@ -8,6 +8,7 @@ import { store, type M3UPlaylist, type ParentalConfig } from "@/lib/storage";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
+  const { t } = useTranslation();
   const [lists, setLists] = useState<M3UPlaylist[]>([]);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
