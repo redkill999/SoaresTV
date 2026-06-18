@@ -363,21 +363,31 @@ export const fetchM3U = createServerFn({ method: "POST" })
 
       // For bare Xtream credentials, prefer player_api.php (compact JSON) over
       // get.php (huge M3U dump that can exceed Worker memory/time limits).
+      // Pull live + VOD + series in parallel so the playlist UI sees all three.
       if (access && !explicitM3U) {
-        const liveUrl = new URL(`${access.origin}/player_api.php`);
-        liveUrl.searchParams.set("username", access.username);
-        liveUrl.searchParams.set("password", access.password);
-        liveUrl.searchParams.set("action", "get_live_streams");
+        const apiUrl = (action: string) => {
+          const u = new URL(`${access.origin}/player_api.php`);
+          u.searchParams.set("username", access.username);
+          u.searchParams.set("password", access.password);
+          u.searchParams.set("action", action);
+          return u.toString();
+        };
 
-        const live = await fetchText(liveUrl.toString());
-        if (live.text) {
-          try {
-            const entries = mapXtreamLiveStreams(JSON.parse(live.text), access);
-            if (entries.length) return { entries };
-          } catch {
-            // fall through to M3U attempt
-          }
-        }
+        const [liveCats, vodCats, seriesCats, liveData, vodData, seriesData] = await Promise.all([
+          loadCategories(access, "get_live_categories"),
+          loadCategories(access, "get_vod_categories"),
+          loadCategories(access, "get_series_categories"),
+          fetchJson(apiUrl("get_live_streams")),
+          fetchJson(apiUrl("get_vod_streams")),
+          fetchJson(apiUrl("get_series")),
+        ]);
+
+        const liveEntries = mapXtreamLiveStreams(liveData, access, liveCats);
+        const vodEntries = mapXtreamVodStreams(vodData, access, vodCats);
+        const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
+
+        const entries = [...liveEntries, ...vodEntries, ...seriesEntries];
+        if (entries.length) return { entries };
       }
 
       const first = await fetchText(target);
