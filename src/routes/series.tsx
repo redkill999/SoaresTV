@@ -154,7 +154,7 @@ function SeriesPage() {
         empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Clapperboard className="size-7" />}
-        emptyTitle={emptyTitle(tab, "série")}
+        emptyTitle={emptyTitle(tab, "series")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (
