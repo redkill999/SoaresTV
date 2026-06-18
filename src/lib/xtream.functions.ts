@@ -214,13 +214,8 @@ export const fetchM3U = createServerFn({ method: "POST" })
     }
 
     try {
-      const target = buildM3UUrl(data.url, data.username, data.password);
-      const first = await fetchText(target);
-      if (first.text.includes("#EXTINF")) {
-        const entries = parseM3UText(first.text);
-        if (entries.length) return { entries };
-      }
-
+      // Prefer Xtream player_api.php (compact JSON) over get.php (huge M3U dump
+      // that frequently exceeds Worker memory/time limits on large providers).
       if (access) {
         const liveUrl = new URL(`${access.origin}/player_api.php`);
         liveUrl.searchParams.set("username", access.username);
@@ -228,12 +223,21 @@ export const fetchM3U = createServerFn({ method: "POST" })
         liveUrl.searchParams.set("action", "get_live_streams");
 
         const live = await fetchText(liveUrl.toString());
-        try {
-          const entries = mapXtreamLiveStreams(JSON.parse(live.text), access);
-          if (entries.length) return { entries };
-        } catch {
-          // keep controlled error below
+        if (live.text) {
+          try {
+            const entries = mapXtreamLiveStreams(JSON.parse(live.text), access);
+            if (entries.length) return { entries };
+          } catch {
+            // fall through to M3U attempt
+          }
         }
+      }
+
+      const target = buildM3UUrl(data.url, data.username, data.password);
+      const first = await fetchText(target);
+      if (first.text.includes("#EXTINF")) {
+        const entries = parseM3UText(first.text);
+        if (entries.length) return { entries };
       }
 
       const snippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
