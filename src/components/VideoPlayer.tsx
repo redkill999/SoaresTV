@@ -7,6 +7,7 @@ import Hls from "hls.js";
 // flows through our /api/stream proxy to dodge CORS / mixed-content.
 function toHlsCandidate(src: string): string | null {
   if (/\.m3u8(\?|$)/i.test(src)) return src;
+  if (/\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src)) return null;
   // Apenas streams ao vivo têm variante HLS no Xtream.
   // VOD (movie/series) precisa ser reproduzido direto como mp4/mkv.
   if (/\/live\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(src)) {
@@ -33,14 +34,22 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
-    const vodCandidates: string[] = [src];
+    const isVod = /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src);
+    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(src);
+    const vodCandidates: string[] = [];
     const vodMatch = src.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
-    if (vodMatch && !hlsCandidate) {
+    if (vodMatch && (!hlsCandidate || isVod)) {
       const [, base, ext, qs = ""] = vodMatch;
-      for (const alt of ["mp4", "mkv", "m4v"]) {
-        if (alt !== ext.toLowerCase()) vodCandidates.push(`${base}.${alt}${qs}`);
+      const currentExt = ext.toLowerCase();
+      const preferred = isVod && ["m3u8", "ts", "mkv", "avi"].includes(currentExt)
+        ? ["mp4", "m4v", "mkv"]
+        : [currentExt, "mp4", "m4v", "mkv"];
+      for (const alt of preferred) {
+        const candidate = `${base}.${alt}${qs}`;
+        if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
       }
     }
+    if (!vodCandidates.length) vodCandidates.push(src);
 
     let hls: Hls | null = null;
     let cancelled = false;
@@ -94,7 +103,12 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
           if (!data.fatal) return;
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls?.startLoad();
+              if (isLive) hls?.startLoad();
+              else {
+                hls?.destroy();
+                hls = null;
+                playDirect();
+              }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls?.recoverMediaError();
