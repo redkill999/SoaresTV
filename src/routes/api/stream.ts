@@ -15,6 +15,18 @@ function proxyUrl(absolute: string) {
   return `/api/stream?u=${encodeURIComponent(absolute)}`;
 }
 
+function contentTypeForPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".mkv")) return "video/x-matroska";
+  if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".avi")) return "video/x-msvideo";
+  if (lower.endsWith(".ts")) return "video/mp2t";
+  if (lower.endsWith(".m3u8") || lower.endsWith(".m3u")) return "application/vnd.apple.mpegurl";
+  return "video/mp4";
+}
+
 function rewritePlaylist(text: string, baseUrl: string): string {
   const base = new URL(baseUrl);
   return text
@@ -93,6 +105,7 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
+    respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
   // forward useful headers
@@ -112,20 +125,10 @@ async function handle(request: Request) {
   // VOD / segmentos: deduzir Content-Type pelo path quando o upstream manda
   // algo inútil tipo application/octet-stream (faz o browser baixar em vez de tocar).
   const path = upstreamUrl.pathname.toLowerCase();
-  const extMap: Record<string, string> = {
-    ".mp4": "video/mp4",
-    ".m4v": "video/mp4",
-    ".mov": "video/quicktime",
-    ".mkv": "video/x-matroska",
-    ".webm": "video/webm",
-    ".avi": "video/x-msvideo",
-    ".ts": "video/mp2t",
-  };
   let finalCt = ct;
   const badCt = !ct || /octet-stream|binary|text\/plain/i.test(ct);
   if (badCt) {
-    const ext = Object.keys(extMap).find((e) => path.endsWith(e));
-    finalCt = ext ? extMap[ext] : "video/mp4";
+    finalCt = contentTypeForPath(path);
   }
   respHeaders.set("Content-Type", finalCt);
   if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
