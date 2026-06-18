@@ -45,6 +45,22 @@ function PlaylistPage() {
     retry: 1,
   });
 
+  const groups = useMemo(() => {
+    const set = new Set<string>();
+    (q.data ?? []).forEach((e) => e.group && set.add(e.group));
+    return ["all", ...Array.from(set)];
+  }, [q.data]);
+
+  const filtered = useMemo(() => {
+    let list = q.data ?? [];
+    if (group !== "all") list = list.filter((e) => e.group === group);
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter((e) => e.name.toLowerCase().includes(s));
+    }
+    return list;
+  }, [q.data, group, search]);
+
   if (!url) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
@@ -58,16 +74,6 @@ function PlaylistPage() {
       </div>
     );
   }
-
-  const filtered = useMemo(() => {
-    let list = q.data ?? [];
-    if (group !== "all") list = list.filter((e) => e.group === group);
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter((e) => e.name.toLowerCase().includes(s));
-    }
-    return list;
-  }, [q.data, group, search]);
 
   return (
     <div className="min-h-screen p-4 md:p-6">
