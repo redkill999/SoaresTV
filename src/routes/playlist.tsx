@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,8 @@ function PlaylistPage() {
   // Prefer in-memory cache (just loaded from login flow). Fall back to URL
   // param if user landed here directly (deep link / reload).
   const cached = m3uCache.get();
-  const savedLists = typeof window !== "undefined" ? store.getM3U() : [];
+  const [savedLists, setSavedLists] = useState(() => store.getM3U());
+  useEffect(() => setSavedLists(store.getM3U()), []);
   const savedList = savedLists.find((l) => l.url === (urlParam || cached?.url)) ?? savedLists[0];
   const fallbackUrl = urlParam || cached?.url || savedList?.url || "";
   const displayName = name || cached?.name || savedList?.name || "Lista M3U";
@@ -143,7 +144,11 @@ function PlaylistPage() {
         <div>
           {active ? (
             <>
-              <VideoPlayer src={active.url} poster={active.logo} />
+              <VideoPlayer
+                src={active.url}
+                poster={active.logo}
+                kind={/\/movie\/|\/series\//i.test(active.url) || /^Filmes\s*\|/i.test(active.group ?? "") ? "vod" : "live"}
+              />
               <div className="mt-3 flex items-center justify-between">
                 <div>
                   <div className="font-semibold">{active.name}</div>
@@ -255,7 +260,8 @@ function PlaylistSwitcher({
   currentUrl: string;
   onPick: (p: { url: string; name: string }) => void;
 }) {
-  const lists = typeof window !== "undefined" ? store.getM3U() : [];
+  const [lists, setLists] = useState(() => store.getM3U());
+  useEffect(() => setLists(store.getM3U()), []);
   if (lists.length <= 1) return null;
   return (
     <select
