@@ -89,7 +89,8 @@ function LivePage() {
     return list;
   }, [streamsQ.data, search, sort, tab, favIds, recentIds]);
 
-  const needGate = cat !== "all";
+  const parental = useMemo(() => store.getParental(), [cat]);
+  const needGate = cat !== "all" && !!parental.pin && parental.lockedCategories.includes(cat);
   if (needGate && !unlocked) {
     return (
       <AppShell>
@@ -97,6 +98,7 @@ function LivePage() {
       </AppShell>
     );
   }
+
 
   return (
     <AppShell search={search} onSearch={setSearch}>

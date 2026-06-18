@@ -14,7 +14,7 @@ export function loadPersisted<T>(key: string): { data: T; updatedAt: number } | 
     const raw = localStorage.getItem(PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Entry<T>;
-    if (!parsed || typeof parsed.t !== "number") return null;
+    if (!parsed || typeof parsed.t !== "number" || parsed.t <= 0) return null;
     return { data: parsed.v, updatedAt: parsed.t };
   } catch {
     return null;

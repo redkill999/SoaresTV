@@ -186,17 +186,45 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         });
         hls.loadSource(url);
         hls.attachMedia(video);
+
+        let netRetries = 0;
+        const MAX_NET_RETRIES = 5;
+        let mediaRetries = 0;
+        const MAX_MEDIA_RETRIES = 3;
+
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
           if (!data.fatal) return;
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (isLive) hls?.startLoad();
-              else tryNextVod();
+              if (isLive) {
+                if (netRetries++ >= MAX_NET_RETRIES) {
+                  hls?.destroy();
+                  hls = null;
+                  setError("Conexão instável com o canal. Tente novamente.");
+                  return;
+                }
+                const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
+                setTimeout(() => {
+                  if (cancelled) return;
+                  hls?.startLoad();
+                }, delay);
+              } else {
+                tryNextVod();
+              }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              if (isLive) hls?.recoverMediaError();
-              else tryNextVod();
+              if (isLive) {
+                if (mediaRetries++ >= MAX_MEDIA_RETRIES) {
+                  hls?.destroy();
+                  hls = null;
+                  setError("Erro de mídia no canal. Tente novamente.");
+                  return;
+                }
+                hls?.recoverMediaError();
+              } else {
+                tryNextVod();
+              }
               return;
             default:
               hls?.destroy();
@@ -205,6 +233,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
               else setError("Não foi possível reproduzir este canal.");
           }
         });
+
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));

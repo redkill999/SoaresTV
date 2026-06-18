@@ -1,18 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
-import { store, type XtreamCreds } from "@/lib/storage";
+import { store, type XtreamCreds, type FavItem } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, type EpgListing } from "@/lib/xtream";
+import { useIsFavorite } from "@/hooks/use-favorites";
 import { ArrowLeft, Heart, Clock } from "lucide-react";
+
+const VALID_TYPES = ["live", "movie", "series"] as const;
+type PlayerType = (typeof VALID_TYPES)[number];
+const isPlayerType = (t: string): t is PlayerType =>
+  (VALID_TYPES as readonly string[]).includes(t);
 
 export const Route = createFileRoute("/player/$type/$id")({
   validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
   head: ({ params }) => ({ meta: [{ title: `Player — ${params.id}` }] }),
   component: PlayerPage,
 });
+
 
 type SeriesInfo = {
   seasons?: Array<{ season_number: number; name?: string }>;
@@ -28,7 +35,7 @@ type MovieInfo = {
 };
 
 function PlayerPage() {
-  const { type, id } = Route.useParams();
+  const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
@@ -40,6 +47,12 @@ function PlayerPage() {
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
+  // Valida o tipo da URL — params são `string`, podem vir errados.
+  const type: PlayerType | null = isPlayerType(rawType) ? rawType : null;
+  useEffect(() => {
+    if (hydrated && !type) navigate({ to: "/home" });
+  }, [hydrated, type, navigate]);
+
   useEffect(() => {
     if (hydrated && !creds) navigate({ to: "/" });
   }, [hydrated, creds, navigate]);
@@ -49,6 +62,7 @@ function PlayerPage() {
     enabled: !!creds && type === "series",
     queryFn: () => api<SeriesInfo>(creds!, "get_series_info", { series_id: id }),
   });
+
 
   const movieQ = useQuery({
     queryKey: ["movie-info", id],
@@ -92,21 +106,42 @@ function PlayerPage() {
     return "";
   }, [creds, type, id, episodeUrl, movieQ.data]);
 
+  // Mantém o título atual em ref para evitar duplicar histórico quando
+  // só `activeTitle` muda (mas a URL não).
+  const activeTitleRef = useRef(activeTitle);
   useEffect(() => {
-    if (!url || !creds) return;
-    store.pushHistory({ type: type as never, id, name: activeTitle || id, at: Date.now() });
-  }, [url, type, id, activeTitle, creds]);
+    activeTitleRef.current = activeTitle;
+  }, [activeTitle]);
 
-  const fav = creds ? store.isFav(type as never, id) : false;
+  useEffect(() => {
+    if (!url || !creds || !type) return;
+    store.pushHistory({
+      type,
+      id,
+      name: activeTitleRef.current || id,
+      at: Date.now(),
+    });
+  }, [url, type, id, creds]);
+
+  const favType: FavItem["type"] = type ?? "movie";
+  const fav = useIsFavorite(favType, id) && !!type;
+
 
   return (
     <AppShell>
       <button
-        onClick={() => history.back()}
+        onClick={() => {
+          if (typeof window !== "undefined" && window.history.length > 1) {
+            window.history.back();
+          } else {
+            navigate({ to: "/home" });
+          }
+        }}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft className="size-4" /> Voltar
       </button>
+
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-6">
         <div>
@@ -124,11 +159,15 @@ function PlayerPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => store.toggleFav({ type: type as never, id, name: activeTitle || name })}
+              onClick={() => {
+                if (!type) return;
+                store.toggleFav({ type, id, name: activeTitle || name });
+              }}
             >
               <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
               Favorito
             </Button>
+
           </div>
         </div>
 
