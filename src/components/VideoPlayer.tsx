@@ -42,16 +42,46 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
     const attachHls = (url: string) => {
       if (Hls.isSupported()) {
-        hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          // Buffer bem maior reduz travamentos em IPTV ao vivo
+          backBufferLength: 30,
+          maxBufferLength: 60,
+          maxMaxBufferLength: 120,
+          maxBufferSize: 120 * 1000 * 1000,
+          maxBufferHole: 1.0,
+          highBufferWatchdogPeriod: 3,
+          nudgeMaxRetry: 10,
+          // Recuperação automática de falhas de rede/fragmento
+          fragLoadingMaxRetry: 8,
+          manifestLoadingMaxRetry: 6,
+          levelLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          // Live tuning: ficar um pouco atrás da borda evita stalls
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 10,
+          // Inicia em qualidade mais baixa e sobe conforme banda
+          startLevel: -1,
+          abrEwmaDefaultEstimate: 1_000_000,
+        });
         hls.loadSource(url);
         hls.attachMedia(video);
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
-          if (data.fatal) {
-            hls?.destroy();
-            hls = null;
-            if (!triedDirect) playDirect();
-            else setError("Não foi possível reproduzir este canal.");
+          if (!data.fatal) return;
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls?.startLoad();
+              return;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls?.recoverMediaError();
+              return;
+            default:
+              hls?.destroy();
+              hls = null;
+              if (!triedDirect) playDirect();
+              else setError("Não foi possível reproduzir este canal.");
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
