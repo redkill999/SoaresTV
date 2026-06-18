@@ -10,6 +10,7 @@ import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
