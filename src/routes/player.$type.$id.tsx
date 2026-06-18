@@ -35,7 +35,7 @@ type MovieInfo = {
 };
 
 function PlayerPage() {
-  const { type, id } = Route.useParams();
+  const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
@@ -47,6 +47,12 @@ function PlayerPage() {
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
+  // Valida o tipo da URL — params são `string`, podem vir errados.
+  const type: PlayerType | null = isPlayerType(rawType) ? rawType : null;
+  useEffect(() => {
+    if (hydrated && !type) navigate({ to: "/home" });
+  }, [hydrated, type, navigate]);
+
   useEffect(() => {
     if (hydrated && !creds) navigate({ to: "/" });
   }, [hydrated, creds, navigate]);
@@ -56,6 +62,7 @@ function PlayerPage() {
     enabled: !!creds && type === "series",
     queryFn: () => api<SeriesInfo>(creds!, "get_series_info", { series_id: id }),
   });
+
 
   const movieQ = useQuery({
     queryKey: ["movie-info", id],
