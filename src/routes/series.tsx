@@ -10,6 +10,7 @@ import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/x
 import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
