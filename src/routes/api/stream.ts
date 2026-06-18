@@ -11,6 +11,8 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
+const VOD_CHUNK_SIZE = 2 * 1024 * 1024;
+
 function proxyUrl(absolute: string) {
   return `/api/stream?u=${encodeURIComponent(absolute)}`;
 }
@@ -25,6 +27,55 @@ function contentTypeForPath(path: string): string {
   if (lower.endsWith(".ts")) return "video/mp2t";
   if (lower.endsWith(".m3u8") || lower.endsWith(".m3u")) return "application/vnd.apple.mpegurl";
   return "video/mp4";
+}
+
+function isVodPath(path: string): boolean {
+  return /\/movie\/[^/]+\/[^/]+\//i.test(path) || /\/series\/[^/]+\/[^/]+\//i.test(path);
+}
+
+function parseByteRange(range: string | null): { start: number; end?: number } | null {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : undefined;
+  if (!Number.isFinite(start) || start < 0) return null;
+  if (end !== undefined && (!Number.isFinite(end) || end < start)) return null;
+  return { start, end };
+}
+
+function vodRangeForUpstream(requestedRange: string | null): string {
+  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
+  const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
+  return `bytes=${parsed.start}-${cappedEnd}`;
+}
+
+function limitBody(body: ReadableStream<Uint8Array> | null, bytes: number) {
+  if (!body) return body;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      let sent = 0;
+      try {
+        while (sent < bytes) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const remaining = bytes - sent;
+          if (value.byteLength <= remaining) {
+            controller.enqueue(value);
+            sent += value.byteLength;
+          } else {
+            controller.enqueue(value.slice(0, remaining));
+            sent += remaining;
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
 }
 
 function rewritePlaylist(text: string, baseUrl: string): string {
@@ -75,10 +126,9 @@ async function handle(request: Request) {
   headers.set("Accept", "*/*");
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
-  if (range) headers.set("Range", range);
-  else if (/\/movie\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname) || /\/series\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname)) {
-    headers.set("Range", "bytes=0-");
-  }
+  const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
+  if (isVod) headers.set("Range", vodRangeForUpstream(range));
+  else if (range) headers.set("Range", range);
 
   let upstream: Response;
   try {
@@ -102,6 +152,12 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
+    if (isVod) {
+      return Response.json(
+        { error: `UPSTREAM_${upstream.status}`, fallback: true },
+        { status: 200, headers: respHeaders },
+      );
+    }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
@@ -132,6 +188,15 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
+  if (isVod && status === 200) {
+    const parsed = parseByteRange(vodRangeForUpstream(range)) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
+    const bodyLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
+    const total = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
+    respHeaders.set("Content-Length", String(bodyLength));
+    respHeaders.set("Content-Range", `bytes ${parsed.start}-${parsed.start + bodyLength - 1}/${total ?? "*"}`);
+    status = 206;
+    return new Response(limitBody(upstream.body, bodyLength), { status, headers: respHeaders });
+  }
   if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {

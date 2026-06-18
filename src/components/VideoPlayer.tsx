@@ -16,8 +16,8 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
   return null;
 }
 
-function proxied(url: string): string {
-  return `/api/stream?u=${encodeURIComponent(url)}`;
+function proxied(url: string, kind?: "live" | "vod"): string {
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}`;
 }
 
 export function VideoPlayer({ src, poster, kind }: { src: string; poster?: string; kind?: "live" | "vod" }) {
@@ -30,7 +30,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     setError(null);
 
     const hlsCandidate = toHlsCandidate(src, kind);
-    const hlsProxied = hlsCandidate ? proxied(hlsCandidate) : null;
+    const hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
@@ -51,8 +51,8 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     }
     if (!vodCandidates.length) vodCandidates.push(src);
     const playbackCandidates = isVod
-      ? vodCandidates.flatMap((url) => (/^https:\/\//i.test(url) ? [url, proxied(url)] : [proxied(url)]))
-      : vodCandidates.map((url) => proxied(url));
+      ? vodCandidates.flatMap((url) => (/^https:\/\//i.test(url) ? [url, proxied(url, "vod")] : [proxied(url, "vod")]))
+      : vodCandidates.map((url) => proxied(url, kind));
 
     let hls: Hls | null = null;
     let cancelled = false;
@@ -91,7 +91,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         hls = null;
       }
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? proxied(src);
+      const url = playbackCandidates[vodIdx] ?? proxied(src, kind);
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);

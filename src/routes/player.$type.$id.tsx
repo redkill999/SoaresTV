@@ -68,7 +68,17 @@ function PlayerPage() {
       // id may include ".ext"
       const [sid, ext] = id.split(".");
       const direct = movieQ.data?.movie_data?.direct_source;
-      if (direct && /^https?:\/\//i.test(direct)) return direct;
+      if (direct && /^https?:\/\//i.test(direct)) {
+        const directPath = (() => {
+          try {
+            return new URL(direct).pathname.toLowerCase();
+          } catch {
+            return "";
+          }
+        })();
+        const looksLikePlayableFile = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+        if (looksLikePlayableFile) return direct;
+      }
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
       return streamUrl.movie(creds, movieId, movieExt);
@@ -133,9 +143,20 @@ function PlayerPage() {
                         key={ep.id}
                         onClick={() => {
                           if (!creds) return;
+                          const directPath = (() => {
+                            try {
+                              return ep.direct_source ? new URL(ep.direct_source).pathname.toLowerCase() : "";
+                            } catch {
+                              return "";
+                            }
+                          })();
+                          const usableDirect =
+                            ep.direct_source &&
+                            /^https?:\/\//i.test(ep.direct_source) &&
+                            /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
                           setEpisodeUrl(
-                            ep.direct_source && /^https?:\/\//i.test(ep.direct_source)
-                              ? ep.direct_source
+                            usableDirect
+                              ? ep.direct_source!
                               : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
                           );
                           setActiveTitle(`${name} — ${ep.title}`);
