@@ -44,6 +44,16 @@ const IPTV_HEADERS = {
 
 type NativeHttpResponse = { status: number; data: unknown };
 
+export async function isNativeApp(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
+
 async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -85,13 +95,43 @@ async function nativeApi<T = unknown>(
   return parseNativeJson(res.data) as T;
 }
 
+async function nativeApiWithFallbackPorts<T = unknown>(
+  c: XtreamCreds,
+  action?: string,
+  params?: Record<string, string | number>,
+): Promise<{ data: T; creds: XtreamCreds } | null> {
+  if (!(await isNativeApp())) return null;
+  let base = normalizeServer(c.server);
+  const candidates = new Set<string>([base]);
+  try {
+    const u = new URL(base);
+    for (const port of ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"]) {
+      candidates.add(`http://${u.hostname}${port ? `:${port}` : ""}`);
+    }
+  } catch {
+    // keep normalized base only
+  }
+
+  let lastError: unknown = null;
+  for (const server of candidates) {
+    try {
+      const data = await nativeApi<T>({ ...c, server }, action, params);
+      if (data) return { data, creds: { ...c, server } };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
 export async function api<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<T> {
-  const native = await nativeApi<T>(c, action, params);
-  if (native) return native;
+  const native = await nativeApiWithFallbackPorts<T>(c, action, params);
+  if (native) return native.data;
 
   const r = await xtreamApi({ data: { ...c, action, params } });
   if (!r.ok) throw new Error("Resposta inválida do servidor");
@@ -99,12 +139,12 @@ export async function api<T = unknown>(
 }
 
 export async function login(c: XtreamCreds) {
-  const r = await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
-    c,
-  );
+  const native = await nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+  const r = native?.data ?? await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
+  if (native?.creds.server && native.creds.server !== normalizeServer(c.server)) storeServerOverride(c, native.creds.server);
   return r;
 }
 
