@@ -101,8 +101,8 @@ function LivePage() {
   return (
     <AppShell search={search} onSearch={setSearch}>
       <Header
-        title="Canais ao Vivo"
-        subtitle="Transmissão em tempo real"
+        title={t("pages.live.title")}
+        subtitle={t("pages.live.subtitle")}
         tab={tab}
         setTab={setTab}
         sort={sort}
