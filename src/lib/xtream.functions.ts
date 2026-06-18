@@ -50,6 +50,16 @@ type M3UEntryDTO = {
   group?: string;
 };
 
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
 function parseM3UText(text: string): M3UEntryDTO[] {
   const out: M3UEntryDTO[] = [];
   let cur: { name: string; logo?: string; group?: string } | null = null;
@@ -64,10 +74,10 @@ function parseM3UText(text: string): M3UEntryDTO[] {
       const t = line.trim();
       if (!t) continue;
       if (t.startsWith("#EXTINF")) {
-        const name = t.split(",").slice(1).join(",").trim();
+        const name = decodeEntities(t.split(",").slice(1).join(",").trim());
         const logo = /tvg-logo="([^"]+)"/.exec(t)?.[1];
-        const group = /group-title="([^"]+)"/.exec(t)?.[1];
-        cur = { name, logo, group };
+        const group = decodeEntities(/group-title="([^"]+)"/.exec(t)?.[1] ?? "");
+        cur = { name, logo, group: group || undefined };
       } else if (t.startsWith("#")) {
         // skip other directives
       } else if (cur) {
