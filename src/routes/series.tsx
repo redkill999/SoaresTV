@@ -132,11 +132,15 @@ function SeriesPage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {(catsQ.data ?? []).map((c) => (
-          <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
-            {c.category_name}
-          </CatChip>
-        ))}
+        {catsQ.isLoading && !catsQ.data ? (
+          <CatChipsSkeleton />
+        ) : (
+          (catsQ.data ?? []).map((c) => (
+            <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
+              {c.category_name}
+            </CatChip>
+          ))
+        )}
       </div>
 
       <MediaGrid
