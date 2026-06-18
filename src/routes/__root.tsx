@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
+import { syncLangFromStorage } from "../lib/i18n";
 
 function NotFoundComponent() {
   return (
@@ -176,6 +177,8 @@ function RootComponent() {
       // eslint-disable-next-line no-new-func
       new Function(TV_MODE_SCRIPT)();
     } catch {}
+    // Aplica idioma salvo após hidratação (evita mismatch SSR).
+    syncLangFromStorage();
   }, []);
 
   return (

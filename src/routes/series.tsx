@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
@@ -45,16 +45,22 @@ function SeriesPage() {
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [creds] = useState<XtreamCreds | null>(() => {
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => {
     const saved = store.getCreds();
-    if (saved) return saved;
+    if (saved) {
+      setCreds(saved);
+      return;
+    }
     const firstList = store.getM3U()[0];
     const recovered = firstList
       ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
       : null;
-    if (recovered) store.setCreds(recovered);
-    return recovered;
-  });
+    if (recovered) {
+      store.setCreds(recovered);
+      setCreds(recovered);
+    }
+  }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
@@ -132,7 +138,7 @@ function SeriesPage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {catsQ.isLoading && !catsQ.data ? (
+        {!creds || (catsQ.isLoading && !catsQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (catsQ.data ?? []).map((c) => (
@@ -144,8 +150,8 @@ function SeriesPage() {
       </div>
 
       <MediaGrid
-        loading={listQ.isLoading}
-        empty={!listQ.isLoading && filtered.length === 0}
+        loading={!creds || listQ.isLoading}
+        empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Clapperboard className="size-7" />}
         emptyTitle={emptyTitle(tab, "série")}

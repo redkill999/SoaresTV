@@ -1,20 +1,22 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search, Home } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { store } from "@/lib/storage";
 import { Input } from "@/components/ui/input";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 const PRIMARY_NAV = [
-  { to: "/live", label: "Canais", icon: Tv },
-  { to: "/movies", label: "Filmes", icon: Film },
-  { to: "/series", label: "Séries", icon: Clapperboard },
+  { to: "/live", labelKey: "nav.channels", icon: Tv },
+  { to: "/movies", labelKey: "nav.movies", icon: Film },
+  { to: "/series", labelKey: "nav.series", icon: Clapperboard },
 ] as const;
 
 const SECONDARY_NAV = [
-  { to: "/favorites", label: "Favoritos", icon: Heart },
-  { to: "/history", label: "Histórico", icon: History },
-  { to: "/settings", label: "Ajustes", icon: Settings },
+  { to: "/favorites", labelKey: "nav.favorites", icon: Heart },
+  { to: "/history", labelKey: "nav.history", icon: History },
+  { to: "/settings", labelKey: "nav.settings", icon: Settings },
 ] as const;
 
 const ALL_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV] as const;
@@ -80,20 +82,20 @@ export function AppShell({
         </Link>
 
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 px-2">
-          Biblioteca
+          {t("nav.library")}
         </div>
         <nav className="flex flex-col gap-1">
           {PRIMARY_NAV.map((n) => (
-            <NavItem key={n.to} {...n} active={isActive(n.to)} />
+            <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
           ))}
         </nav>
 
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mt-6 mb-2 px-2">
-          Geral
+          {t("nav.general")}
         </div>
         <nav className="flex flex-col gap-1 flex-1">
           {SECONDARY_NAV.map((n) => (
-            <NavItem key={n.to} {...n} active={isActive(n.to)} />
+            <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
           ))}
         </nav>
 
@@ -102,7 +104,7 @@ export function AppShell({
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-white/5 transition-colors"
         >
           <LogOut className="size-4" />
-          Sair
+          {t("common.signOut")}
         </button>
       </aside>
 
@@ -122,7 +124,7 @@ export function AppShell({
                 <Input
                   value={search ?? ""}
                   onChange={(e) => onSearch(e.target.value)}
-                  placeholder="Buscar…"
+                  placeholder={t("common.search")}
                   className="pl-9 bg-white/5 border-white/10 rounded-full h-9"
                 />
               </div>
@@ -130,13 +132,14 @@ export function AppShell({
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
               <Link
                 to="/home"
-                title="Ir para o Launcher"
-                aria-label="Ir para o Launcher"
+                title={t("common.home")}
+                aria-label={t("common.home")}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
               >
                 <Home className="size-4" />
-                <span className="hidden sm:inline">Início</span>
+                <span className="hidden sm:inline">{t("common.home")}</span>
               </Link>
+              <LanguageSwitcher />
               <ThemeSwitcher />
             </div>
           </div>
@@ -147,7 +150,7 @@ export function AppShell({
 
       {/* Bottom nav — mobile/tablet */}
       <nav
-        aria-label="Navegação"
+        aria-label={t("nav.library")}
         className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-border/60"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
@@ -174,7 +177,7 @@ export function AppShell({
                   >
                     <Icon className="size-[18px]" />
                   </span>
-                  <span className="tracking-wide">{n.label}</span>
+                  <span className="tracking-wide">{t(n.labelKey)}</span>
                 </Link>
               </li>
             );

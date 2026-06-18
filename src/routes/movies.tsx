@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
-import { store } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
@@ -35,7 +35,8 @@ function MoviesPage() {
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [creds] = useState(() => store.getCreds());
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
@@ -114,7 +115,7 @@ function MoviesPage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {catsQ.isLoading && !catsQ.data ? (
+        {!creds || (catsQ.isLoading && !catsQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (catsQ.data ?? []).map((c) => (
@@ -126,8 +127,8 @@ function MoviesPage() {
       </div>
 
       <MediaGrid
-        loading={listQ.isLoading}
-        empty={!listQ.isLoading && filtered.length === 0}
+        loading={!creds || listQ.isLoading}
+        empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Film className="size-7" />}
         emptyTitle={emptyTitle(tab, "filme")}

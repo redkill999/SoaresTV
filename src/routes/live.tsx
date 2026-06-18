@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { ParentalGate } from "@/components/ParentalGate";
-import { store } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
 import { ArrowLeft, Tv } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
@@ -36,7 +36,9 @@ function LivePage() {
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
   const [unlocked, setUnlocked] = useState(false);
-  const [creds] = useState(() => store.getCreds());
+  // Lê creds só depois da hidratação para evitar mismatch SSR/CSR.
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const categoriesQ = useQuery({
@@ -109,7 +111,7 @@ function LivePage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {categoriesQ.isLoading && !categoriesQ.data ? (
+        {!creds || (categoriesQ.isLoading && !categoriesQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (categoriesQ.data ?? []).map((c) => (
@@ -128,8 +130,8 @@ function LivePage() {
       </div>
 
       <MediaGrid
-        loading={streamsQ.isLoading}
-        empty={!streamsQ.isLoading && filtered.length === 0}
+        loading={!creds || streamsQ.isLoading}
+        empty={!!creds && !streamsQ.isLoading && filtered.length === 0}
         aspect="wide"
         emptyIcon={<Tv className="size-7" />}
         emptyTitle={emptyTitle(tab, "canal")}

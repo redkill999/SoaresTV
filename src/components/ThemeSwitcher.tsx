@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { THEMES, applyTheme, getStoredTheme } from "@/lib/themes";
 import { Palette, Check } from "lucide-react";
 import {
@@ -16,6 +17,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function ThemeSwitcher() {
+  const { t } = useTranslation();
   const [current, setCurrent] = useState<string>(THEMES[0].id);
 
   useEffect(() => {
@@ -36,12 +38,12 @@ export function ThemeSwitcher() {
           className="bg-white/5 border-white/10 hover:bg-white/10"
         >
           <Palette className="size-4 mr-1.5" />
-          Tema
+          {t("theme.label")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-2" align="end">
         <div className="px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">
-          Escolha um tema
+          {t("theme.label")}
         </div>
         <div className="space-y-1">
           {THEMES.map((t) => {
