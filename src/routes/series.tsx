@@ -17,17 +17,17 @@ export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
   // Prefetch ao passar o mouse / focar no link do menu (defaultPreload: "intent").
   loader: ({ context }) => {
+    // Sem efeitos colaterais aqui: prefetch só roda em hover/focus.
+    // A recuperação de credenciais a partir do M3U fica no componente.
     let creds = store.getCreds();
     if (!creds) {
       const firstList = store.getM3U()[0];
       const recovered = firstList
         ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
         : null;
-      if (recovered) {
-        store.setCreds(recovered);
-        creds = recovered;
-      }
+      if (recovered) creds = recovered;
     }
+
     if (!creds) return;
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
