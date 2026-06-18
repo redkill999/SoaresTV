@@ -55,7 +55,7 @@ export function AppShell({
       <aside className="w-64 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-5 sticky top-0 h-dvh">
         <Link to="/home" className="flex items-center gap-3 mb-10">
           <div className="size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center">
-            <span className="font-display font-bold text-primary-foreground">S</span>
+            <Tv className="size-5 text-primary-foreground" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
             <div className="font-display font-bold text-lg tracking-tight leading-none">
