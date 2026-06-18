@@ -294,6 +294,7 @@ function LoginPage() {
                       className="bg-white/5 border-white/10 h-11"
                     />
                   </div>
+                </div>
                 <Button
                   type="submit"
                   disabled={m3uLoading}
