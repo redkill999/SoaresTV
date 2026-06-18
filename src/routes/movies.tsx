@@ -21,10 +21,7 @@ function MoviesPage() {
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const creds = mounted ? store.getCreds() : null;
+  const [creds] = useState(() => store.getCreds());
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
