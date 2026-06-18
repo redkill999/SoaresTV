@@ -31,13 +31,18 @@ export const xtreamApi = createServerFn({ method: "POST" })
       }
     }
 
-    // Some Xtream panels respond 502/503/504 transiently when overloaded.
-    // Retry a couple of times with backoff before surfacing a friendly error,
-    // and rotate User-Agent on the last try (a few panels block default UAs).
+    // Some Xtream panels respond 502/503/504 transiently when overloaded,
+    // OR permanently reject requests whose User-Agent isn't on their allow-list.
+    // We try the most common IPTV-app UAs in order — if the panel works in
+    // Xciptv/Smarters/TiviMate, one of these will match.
     const UAS = [
+      "Xciptv/6.0",
+      "IPTVSmartersPro/3.1.5",
+      "TiviMate/4.7.0",
+      "okhttp/4.9.3",
+      "Lavf/58.76.100",
       "VLC/3.0.20 LibVLC/3.0.20",
-      "Mozilla/5.0 SoaresTV",
-      "IPTVSmarters/1.0",
+      "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
     ];
     let lastStatus = 0;
     let lastErr: unknown = null;
