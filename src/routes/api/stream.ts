@@ -126,7 +126,7 @@ async function handle(request: Request) {
   headers.set("Accept", "*/*");
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
-  const isVod = isVodPath(upstreamUrl.pathname);
+  const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
   if (isVod) headers.set("Range", vodRangeForUpstream(range));
   else if (range) headers.set("Range", range);
 
