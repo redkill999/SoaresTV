@@ -28,13 +28,14 @@ function LivePage() {
 
   const creds = mounted ? store.getCreds() : null;
 
+  const acct = creds ? `${creds.server}|${creds.username}` : "";
   const categoriesQ = useQuery({
-    queryKey: ["live-cats"],
+    queryKey: ["live-cats", acct],
     enabled: !!creds,
     queryFn: () => api<LiveCategory[]>(creds!, "get_live_categories"),
   });
   const streamsQ = useQuery({
-    queryKey: ["live-streams", cat],
+    queryKey: ["live-streams", acct, cat],
     enabled: !!creds,
     queryFn: () =>
       api<LiveStream[]>(

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -41,13 +41,14 @@ function SeriesPage() {
     }
   }, []);
 
+  const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
-    queryKey: ["series-cats"],
+    queryKey: ["series-cats", acct],
     enabled: !!creds,
     queryFn: () => api<LiveCategory[]>(creds!, "get_series_categories"),
   });
   const listQ = useQuery({
-    queryKey: ["series-list", cat],
+    queryKey: ["series-list", acct, cat],
     enabled: !!creds,
     queryFn: () =>
       api<Series[]>(creds!, "get_series", cat !== "all" ? { category_id: cat } : undefined),
@@ -125,15 +126,14 @@ function SeriesPage() {
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (
-          <Link
+          <MediaCard
             key={s.series_id}
-            to="/player/$type/$id"
-            params={{ type: "series", id: String(s.series_id) }}
-            search={{ name: s.name }}
-            className="contents"
-          >
-            <MediaCard type="series" id={s.series_id} name={s.name} image={s.cover} aspect="poster" />
-          </Link>
+            type="series"
+            id={s.series_id}
+            name={s.name}
+            image={s.cover}
+            aspect="poster"
+          />
         ))}
       </MediaGrid>
     </AppShell>

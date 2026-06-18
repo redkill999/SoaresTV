@@ -26,13 +26,14 @@ function MoviesPage() {
 
   const creds = mounted ? store.getCreds() : null;
 
+  const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
-    queryKey: ["vod-cats"],
+    queryKey: ["vod-cats", acct],
     enabled: !!creds,
     queryFn: () => api<LiveCategory[]>(creds!, "get_vod_categories"),
   });
   const listQ = useQuery({
-    queryKey: ["vod-list", cat],
+    queryKey: ["vod-list", acct, cat],
     enabled: !!creds,
     queryFn: () =>
       api<VodStream[]>(creds!, "get_vod_streams", cat !== "all" ? { category_id: cat } : undefined),

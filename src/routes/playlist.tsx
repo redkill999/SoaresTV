@@ -169,14 +169,17 @@ function PlaylistPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
+                    const isMovie = /\/movie\//i.test(active.url) || /^Filmes\s*\|/i.test(active.group ?? "");
+                    const isSeries = /\/series\//i.test(active.url) || /^Séries\s*\|/i.test(active.group ?? "");
+                    const favType: "live" | "movie" | "series" = isMovie ? "movie" : isSeries ? "series" : "live";
                     store.toggleFav({
-                      type: "live",
+                      type: favType,
                       id: active.id,
                       name: active.name,
                       logo: active.logo,
-                    })
-                  }
+                    });
+                  }}
                 >
                   <Heart className="size-4" /> Favoritar
                 </Button>
