@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Search, Heart, ListVideo } from "lucide-react";
 import { loadM3U, type M3UEntry } from "@/lib/xtream";
 import { store } from "@/lib/storage";
+import { m3uCache } from "@/lib/m3u-cache";
+
+const MAX_RENDER = 500;
 
 export const Route = createFileRoute("/playlist")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -19,7 +22,7 @@ export const Route = createFileRoute("/playlist")({
     <div className="min-h-screen flex items-center justify-center p-6 text-center">
       <div>
         <h2 className="text-lg font-semibold mb-2">Erro ao carregar a lista</h2>
-        <p className="text-sm text-muted-foreground mb-4">{error.message}</p>
+        <p className="text-sm text-muted-foreground mb-4 max-w-md">{error.message}</p>
         <a href="/" className="text-primary underline">Voltar para o login</a>
       </div>
     </div>
@@ -32,36 +35,51 @@ export const Route = createFileRoute("/playlist")({
 });
 
 function PlaylistPage() {
-  const { url, name } = Route.useSearch();
+  const { url: urlParam, name } = Route.useSearch();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<M3UEntry | null>(null);
   const [group, setGroup] = useState<string>("all");
 
+  // Prefer in-memory cache (just loaded from login flow). Fall back to URL
+  // param if user landed here directly (deep link / reload).
+  const cached = m3uCache.get();
+  const fallbackUrl = urlParam || cached?.url || "";
+  const displayName = name || cached?.name || "Lista M3U";
+
   const q = useQuery({
-    queryKey: ["m3u", url],
-    enabled: !!url,
-    queryFn: () => loadM3U(url),
+    queryKey: ["m3u", fallbackUrl],
+    enabled: !cached && !!fallbackUrl,
+    queryFn: async () => {
+      const entries = await loadM3U(fallbackUrl);
+      m3uCache.set(fallbackUrl, displayName, entries);
+      return entries;
+    },
     retry: 1,
+    staleTime: Infinity,
   });
+
+  const entries: M3UEntry[] = cached?.entries ?? q.data ?? [];
 
   const groups = useMemo(() => {
     const set = new Set<string>();
-    (q.data ?? []).forEach((e) => e.group && set.add(e.group));
-    return ["all", ...Array.from(set)];
-  }, [q.data]);
+    entries.forEach((e) => e.group && set.add(e.group));
+    return ["all", ...Array.from(set).sort()];
+  }, [entries]);
 
   const filtered = useMemo(() => {
-    let list = q.data ?? [];
+    let list = entries;
     if (group !== "all") list = list.filter((e) => e.group === group);
     if (search) {
       const s = search.toLowerCase();
       list = list.filter((e) => e.name.toLowerCase().includes(s));
     }
     return list;
-  }, [q.data, group, search]);
+  }, [entries, group, search]);
 
-  if (!url) {
+  const visible = filtered.slice(0, MAX_RENDER);
+
+  if (!cached && !fallbackUrl) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
         <div>
@@ -84,10 +102,15 @@ function PlaylistPage() {
         <div className="size-9 rounded-xl bg-brand-gradient shadow-glow" />
         <div>
           <h1 className="font-bold flex items-center gap-2">
-            <ListVideo className="size-4" /> {name}
+            <ListVideo className="size-4" /> {displayName}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {q.data ? `${q.data.length} canais` : "Carregando…"}
+            {q.isLoading
+              ? "Carregando…"
+              : `${entries.length.toLocaleString("pt-BR")} canais` +
+                (filtered.length !== entries.length
+                  ? ` • ${filtered.length.toLocaleString("pt-BR")} filtrados`
+                  : "")}
           </p>
         </div>
       </div>
@@ -138,7 +161,7 @@ function PlaylistPage() {
             />
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2">
-            {groups.map((g) => (
+            {groups.slice(0, 200).map((g) => (
               <button
                 key={g}
                 onClick={() => setGroup(g)}
@@ -153,7 +176,7 @@ function PlaylistPage() {
             ))}
           </div>
           <div className="flex-1 overflow-y-auto space-y-1">
-            {filtered.map((e) => (
+            {visible.map((e) => (
               <button
                 key={e.id}
                 onClick={() => setActive(e)}
@@ -180,6 +203,12 @@ function PlaylistPage() {
                 </div>
               </button>
             ))}
+            {filtered.length > MAX_RENDER && (
+              <p className="text-[11px] text-muted-foreground text-center py-3">
+                Mostrando {MAX_RENDER.toLocaleString("pt-BR")} de{" "}
+                {filtered.length.toLocaleString("pt-BR")}. Use a busca para refinar.
+              </p>
+            )}
             {q.isLoading && (
               <p className="text-xs text-muted-foreground text-center py-4">Carregando…</p>
             )}
