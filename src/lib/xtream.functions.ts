@@ -289,6 +289,50 @@ function isExplicitM3UInput(raw: string): boolean {
   }
 }
 
+function buildM3UCandidateUrls(raw: string, username?: string, password?: string): string[] {
+  const urls: string[] = [];
+  const add = (url: string) => {
+    if (!urls.includes(url)) urls.push(url);
+  };
+
+  const first = buildM3UUrl(raw, username, password);
+  add(first);
+
+  let target = (raw || "").trim();
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+  try {
+    const u = new URL(target);
+    const path = u.pathname.toLowerCase();
+    if (path.endsWith(".m3u") || path.endsWith(".m3u8")) return urls;
+
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (!user || !pass) return urls;
+
+    const origins = new Set<string>([u.origin]);
+    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
+    for (const port of ports) {
+      const origin = `http://${u.hostname}${port ? `:${port}` : ""}`;
+      origins.add(origin);
+    }
+
+    for (const origin of origins) {
+      for (const output of ["m3u8", "ts"]) {
+        const out = new URL(`${origin}/get.php`);
+        out.searchParams.set("username", user);
+        out.searchParams.set("password", pass);
+        out.searchParams.set("type", "m3u_plus");
+        out.searchParams.set("output", output);
+        add(out.toString());
+      }
+    }
+  } catch {
+    // keep the first URL only
+  }
+
+  return urls;
+}
+
 type CategoryMap = Map<string, string>;
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -471,7 +515,8 @@ export const fetchM3U = createServerFn({ method: "POST" })
     }
 
     try {
-      const target = buildM3UUrl(data.url, data.username, data.password);
+      const candidates = buildM3UCandidateUrls(data.url, data.username, data.password);
+      const target = candidates[0];
       const explicitM3U = isExplicitM3UInput(data.url);
 
       // If the user pasted a concrete M3U/get.php URL, parse that playlist first:
@@ -525,16 +570,21 @@ export const fetchM3U = createServerFn({ method: "POST" })
         if (entries.length) return { entries };
       }
 
-      const first = await fetchText(target);
-      if (first.text.includes("#EXTINF")) {
-        const entries = parseM3UText(first.text);
-        if (entries.length) return { entries };
+      let lastError = "";
+      let lastSnippet = "";
+      for (const candidate of candidates) {
+        const first = await fetchText(candidate);
+        if (first.text.includes("#EXTINF")) {
+          const entries = parseM3UText(first.text);
+          if (entries.length) return { entries };
+        }
+        lastError = first.error || "Conteúdo não parece M3U válido";
+        lastSnippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
       }
 
-      const snippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
       return {
         entries: [],
-        error: `${first.error || "Conteúdo não parece M3U válido"}. Verifique URL/usuário/senha.${snippet ? ` Resposta: ${snippet}` : ""}`,
+        error: `${lastError || "Conteúdo não parece M3U válido"}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${lastSnippet ? ` Resposta: ${lastSnippet}` : ""}`,
       };
     } catch (e) {
       return {
