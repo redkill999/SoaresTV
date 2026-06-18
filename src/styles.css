@@ -130,33 +130,34 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border-radius: var(--radius-md);
 }
 
-/* Force a fixed 16:9 (1280x720) TV-like canvas on phones/small tablets.
-   - Portrait: rotate 90deg + scale-to-fit, perfectly centered.
-   - Landscape: scale-to-fit (no rotation), perfectly centered.
-   The WHOLE page is always visible with correct 16:9 proportion. */
-@media (max-width: 820px) and (orientation: portrait) {
-  html {
-    overflow: hidden;
-    width: 100vw;
-    height: 100vh;
-    margin: 0;
-    padding: 0;
-    background: var(--background);
-  }
-  body {
+/* TV-mode: on touch phones we set <meta viewport width=1280> via JS so
+   Tailwind md/lg/xl breakpoints kick in (layout viewport = 1280 CSS px),
+   then we rotate + scale the 1280x720 canvas to fit the physical screen. */
+html.tv-mode,
+html.tv-mode body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+}
+
+html.tv-mode {
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Portrait phone: rotate 90deg and fit 16:9 canvas */
+@media (orientation: portrait) {
+  html.tv-mode body {
     --design-w: 1280px;
     --design-h: 720px;
-    /* Fit rotated canvas (720 wide x 1280 tall) into viewport */
     --scale: min(calc(100vw / 720px), calc(100vh / 1280px));
-    margin: 0;
     width: var(--design-w);
     height: var(--design-h);
     position: absolute;
     top: 0;
     left: 0;
     transform-origin: 0 0;
-    /* After rotate(90), body occupies x:[-720*s,0], y:[0,1280*s].
-       Center: tx = (100vw + 720*s)/2, ty = (100vh - 1280*s)/2. */
     transform:
       translate(
         calc((100vw + var(--design-h) * var(--scale)) / 2),
@@ -166,29 +167,17 @@ h1, h2, h3, h4, h5, h6, .font-display {
       scale(var(--scale));
     overflow: hidden;
   }
-  /* Tailwind's *-screen utilities use 100vh = real viewport height,
-     which breaks our fixed 720px canvas. Pin them to the canvas. */
-  body .min-h-screen { min-height: 720px !important; }
-  body .h-screen { height: 720px !important; }
-  body .max-h-screen { max-height: 720px !important; }
-  body .min-w-screen { min-width: 1280px !important; }
-  body .w-screen { width: 1280px !important; }
+  html.tv-mode body .min-h-screen { min-height: 720px !important; }
+  html.tv-mode body .h-screen { height: 720px !important; }
+  html.tv-mode body .max-h-screen { max-height: 720px !important; }
 }
 
-@media (max-width: 950px) and (orientation: landscape) and (max-height: 500px) {
-  html {
-    overflow: hidden;
-    width: 100vw;
-    height: 100vh;
-    margin: 0;
-    padding: 0;
-    background: var(--background);
-  }
-  body {
+/* Landscape phone: no rotation, just scale-to-fit centered */
+@media (orientation: landscape) {
+  html.tv-mode body {
     --design-w: 1280px;
     --design-h: 720px;
     --scale: min(calc(100vw / 1280px), calc(100vh / 720px));
-    margin: 0;
     width: var(--design-w);
     height: var(--design-h);
     position: absolute;
@@ -203,7 +192,11 @@ h1, h2, h3, h4, h5, h6, .font-display {
       scale(var(--scale));
     overflow: hidden;
   }
+  html.tv-mode body .min-h-screen { min-height: 720px !important; }
+  html.tv-mode body .h-screen { height: 720px !important; }
+  html.tv-mode body .max-h-screen { max-height: 720px !important; }
 }
+
 
 
 
