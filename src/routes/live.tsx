@@ -13,6 +13,20 @@ import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
 export const Route = createFileRoute("/live")({
   head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
+  // Prefetch ao passar o mouse / focar no link do menu (defaultPreload: "intent").
+  loader: ({ context }) => {
+    const creds = store.getCreds();
+    if (!creds) return;
+    const acct = `${creds.server}|${creds.username}`;
+    void context.queryClient.prefetchQuery({
+      queryKey: ["live-cats", acct],
+      queryFn: () => api<LiveCategory[]>(creds, "get_live_categories"),
+    });
+    void context.queryClient.prefetchQuery({
+      queryKey: ["live-streams", acct, "all"],
+      queryFn: () => api<LiveStream[]>(creds, "get_live_streams"),
+    });
+  },
   component: LivePage,
 });
 
