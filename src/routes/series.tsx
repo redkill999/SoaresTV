@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
-import { MediaGrid } from "@/components/MediaGrid";
 import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store, type XtreamCreds } from "@/lib/storage";
