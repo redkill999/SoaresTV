@@ -41,8 +41,8 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
     if (vodMatch && (!hlsCandidate || isVod)) {
       const [, base, ext, qs = ""] = vodMatch;
       const currentExt = ext.toLowerCase();
-      const preferred = isVod && ["m3u8", "ts", "mkv", "avi"].includes(currentExt)
-        ? ["mp4", "m4v", "mkv"]
+      const preferred = isVod
+        ? [currentExt, "mp4", "m3u8", "m4v", "mkv"]
         : [currentExt, "mp4", "m4v", "mkv"];
       for (const alt of preferred) {
         const candidate = `${base}.${alt}${qs}`;
@@ -63,6 +63,10 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
       }
       triedDirect = true;
       const url = vodCandidates[vodIdx] ?? src;
+      if (/\.m3u8(\?|$)/i.test(url)) {
+        attachHls(proxied(url));
+        return;
+      }
       video.src = proxied(url);
       video.load();
       video.play().catch(() => {});
