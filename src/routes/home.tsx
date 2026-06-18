@@ -6,6 +6,7 @@ import {
   Circle, ShieldCheck, Lock, MessageSquare, RefreshCw,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { Skeleton } from "@/components/ui/skeleton";
 import { store } from "@/lib/storage";
 
 export const Route = createFileRoute("/home")({
