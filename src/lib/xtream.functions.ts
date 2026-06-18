@@ -46,12 +46,17 @@ export const xtreamApi = createServerFn({ method: "POST" })
     ];
     let lastStatus = 0;
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < UAS.length; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20_000);
       try {
         const res = await fetch(url.toString(), {
-          headers: { "User-Agent": UAS[attempt] ?? UAS[0], Accept: "*/*" },
+          headers: {
+            "User-Agent": UAS[attempt],
+            Accept: "*/*",
+            "Accept-Encoding": "identity",
+            Connection: "keep-alive",
+          },
           redirect: "follow",
           signal: controller.signal,
         });
