@@ -195,7 +195,7 @@ function LoginPage() {
         </div>
 
         {/* Right — login card */}
-        <div className="glass rounded-3xl p-6 md:p-8 shadow-card border border-white/10">
+        <div className="glass rounded-3xl p-6 md:p-8 shadow-card border border-white/10 min-h-[520px] flex flex-col">
           <h2 className="text-2xl font-bold">Entrar</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
             Escolha como deseja acessar seu conteúdo.
