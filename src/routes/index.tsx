@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tv, Loader2, ListVideo, PlayCircle } from "lucide-react";
+import { Tv, Loader2, ListVideo, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, login, streamUrl, loadM3U } from "@/lib/xtream";
 import { toast } from "sonner";
