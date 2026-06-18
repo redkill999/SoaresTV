@@ -102,17 +102,18 @@ export function SortMenu({
   value: SortKey;
   onChange: (v: SortKey) => void;
 }) {
+  const { t } = useTranslation();
   const opts: { key: SortKey; label: string }[] = [
-    { key: "default", label: "Padrão" },
-    { key: "az", label: "A → Z" },
-    { key: "za", label: "Z → A" },
+    { key: "default", label: t("sort.default") },
+    { key: "az", label: t("sort.az") },
+    { key: "za", label: t("sort.za") },
   ];
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as SortKey)}
       className="text-xs bg-white/5 border border-white/10 rounded-full px-3 py-1.5 hover:bg-white/10 transition-colors cursor-pointer"
-      aria-label="Ordenar"
+      aria-label={t("sort.default")}
     >
       {opts.map((o) => (
         <option key={o.key} value={o.key} className="bg-card">
