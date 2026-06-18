@@ -60,6 +60,26 @@ function defaultVodRange(): string {
   return `bytes=0-${VOD_CHUNK_SIZE - 1}`;
 }
 
+function numericHeader(headers: Headers, name: string): number | undefined {
+  const value = Number(headers.get(name));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: string) {
+  const parsed = parseByteRange(effectiveRange);
+  if (!parsed) return;
+
+  const total = parseContentRangeTotal(headers.get("content-range"));
+  const contentLength = numericHeader(headers, "content-length");
+  const end = parsed.end ?? (contentLength !== undefined ? parsed.start + contentLength - 1 : total !== undefined ? total - 1 : undefined);
+  if (end === undefined || end < parsed.start) return;
+
+  const bodyLength = end - parsed.start + 1;
+  headers.set("Content-Length", String(bodyLength));
+  headers.set("Content-Range", `bytes ${parsed.start}-${end}/${total ?? "*"}`);
+  headers.set("Accept-Ranges", "bytes");
+}
+
 function limitBody(body: ReadableStream<Uint8Array> | null, bytes: number) {
   if (!body) return body;
   return new ReadableStream<Uint8Array>({
@@ -138,7 +158,8 @@ async function handle(request: Request) {
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
   const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
-  if (isVod) headers.set("Range", range || defaultVodRange());
+  const effectiveVodRange = isVod ? range || (request.method === "HEAD" ? null : defaultVodRange()) : null;
+  if (isVod && effectiveVodRange) headers.set("Range", effectiveVodRange);
   else if (range) headers.set("Range", range);
 
   let upstream: Response;
@@ -199,11 +220,12 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
-  if (isVod && status === 206 && range) {
+  if (isVod && status === 206 && effectiveVodRange) {
+    normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
     return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
   }
-  if (isVod && (status === 200 || status === 206)) {
-    const parsed = parseByteRange(defaultVodRange()) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
+  if (isVod && status === 200 && effectiveVodRange) {
+    const parsed = parseByteRange(effectiveVodRange) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
     const requestedLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
     const upstreamLength = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
     const bodyLength = Math.min(upstreamLength ?? requestedLength, requestedLength);
