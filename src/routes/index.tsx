@@ -190,21 +190,30 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative">
+    <div className="min-h-screen flex items-start md:items-center justify-center px-3 sm:px-4 py-4 sm:py-6 md:py-10 relative">
       <Toaster theme="dark" />
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 size-96 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 size-96 rounded-full bg-accent/20 blur-3xl" />
       </div>
 
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
         <LanguageSwitcher />
         <ThemeSwitcher />
       </div>
 
-      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6">
-        {/* Left — brand panel with gradient */}
-        <div className="relative overflow-hidden rounded-3xl p-8 md:p-10 bg-brand-gradient shadow-glow min-h-[520px] flex flex-col justify-between">
+      {/* Mobile brand header */}
+      <div className="w-full max-w-5xl">
+        <div className="md:hidden flex items-center gap-3 mb-4 mt-10">
+          <div className="size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center shrink-0">
+            <Tv className="size-5 text-white" strokeWidth={2.25} />
+          </div>
+          <span className="font-semibold text-lg truncate">{t("auth.appName")}</span>
+        </div>
+
+      <div className="w-full grid md:grid-cols-2 gap-6">
+        {/* Left — brand panel (desktop only) */}
+        <div className="hidden md:flex relative overflow-hidden rounded-3xl p-8 md:p-10 bg-brand-gradient shadow-glow min-h-[520px] flex-col justify-between">
           <div>
             <div className="flex items-center gap-3 mb-12">
               <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center">
@@ -227,7 +236,7 @@ function LoginPage() {
         </div>
 
         {/* Right — login card */}
-        <div className="glass rounded-3xl p-6 md:p-8 shadow-card border border-white/10 min-h-[520px] flex flex-col">
+        <div className="glass rounded-3xl p-5 sm:p-6 md:p-8 shadow-card border border-white/10 md:min-h-[520px] flex flex-col">
           <h2 className="text-2xl font-bold">{t("auth.signIn")}</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
             {t("auth.signInSub")}
@@ -356,6 +365,8 @@ function LoginPage() {
           </p>
         </div>
       </div>
+      </div>
     </div>
   );
 }
+
