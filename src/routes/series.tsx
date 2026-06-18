@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
-import { store } from "@/lib/storage";
-import { api, type LiveCategory, type Series } from "@/lib/xtream";
+import { store, type XtreamCreds } from "@/lib/storage";
+import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/series")({
@@ -15,7 +15,23 @@ export const Route = createFileRoute("/series")({
 function SeriesPage() {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
-  const creds = typeof window !== "undefined" ? store.getCreds() : null;
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+
+  useEffect(() => {
+    const savedCreds = store.getCreds();
+    if (savedCreds) {
+      setCreds(savedCreds);
+      return;
+    }
+    const firstList = store.getM3U()[0];
+    const recovered = firstList
+      ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
+      : null;
+    if (recovered) {
+      store.setCreds(recovered);
+      setCreds(recovered);
+    }
+  }, []);
 
   const catsQ = useQuery({
     queryKey: ["series-cats"],

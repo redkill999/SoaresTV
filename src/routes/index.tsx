@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, ListVideo, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, login, streamUrl, loadM3U } from "@/lib/xtream";
+import { api, login, streamUrl, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -102,6 +102,8 @@ function LoginPage() {
     const others = store.getM3U().filter((l) => l.url !== url);
     // Always put the just-saved playlist FIRST so the home launcher opens it.
     store.setM3U([savedList, ...others]);
+    const xtreamCreds = xtreamCredsFromUrl(url, user, pass);
+    if (xtreamCreds) store.setCreds(xtreamCreds);
     setM3uLoading(true);
     try {
       const entries = await loadM3U(url, user, pass);

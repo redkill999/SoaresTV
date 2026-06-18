@@ -8,6 +8,7 @@ import {
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { store, type M3UPlaylist } from "@/lib/storage";
+import { xtreamCredsFromUrl } from "@/lib/xtream";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -58,6 +59,12 @@ function HomePage() {
   const openTile = (to: string) => {
     const usesPlaylistContent = to === "/live" || to === "/movies" || to === "/series";
     if (m3uList && !store.getCreds() && usesPlaylistContent) {
+      const xtreamCreds = xtreamCredsFromUrl(m3uList.url, m3uList.username, m3uList.password);
+      if (xtreamCreds) {
+        store.setCreds(xtreamCreds);
+        navigate({ to });
+        return;
+      }
       navigate({ to: "/playlist", search: { url: m3uList.url, name: m3uList.name } });
       return;
     }
