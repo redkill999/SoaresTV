@@ -162,21 +162,22 @@ function getXtreamAccess(raw: string, username?: string, password?: string) {
 
 function mapXtreamLiveStreams(data: unknown, access: NonNullable<ReturnType<typeof getXtreamAccess>>): M3UEntryDTO[] {
   if (!Array.isArray(data)) return [];
-  return data
-    .map((item, i) => {
-      const stream = item as Record<string, unknown>;
-      const id = stream.stream_id;
-      const name = typeof stream.name === "string" ? stream.name : `Canal ${i + 1}`;
-      if (id === undefined || id === null) return null;
-      return {
+  const entries: M3UEntryDTO[] = [];
+  data.forEach((item, i) => {
+    const stream = item as Record<string, unknown>;
+    const id = stream.stream_id;
+    const name = typeof stream.name === "string" ? stream.name : `Canal ${i + 1}`;
+    if (id !== undefined && id !== null) {
+      entries.push({
         id: `xtream-live-${String(id)}`,
         name: decodeEntities(name),
         url: `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`,
         logo: typeof stream.stream_icon === "string" ? stream.stream_icon : undefined,
         group: typeof stream.category_name === "string" ? stream.category_name : undefined,
-      } satisfies M3UEntryDTO;
-    })
-    .filter((entry): entry is M3UEntryDTO => Boolean(entry));
+      });
+    }
+  });
+  return entries;
 }
 
 export const fetchM3U = createServerFn({ method: "POST" })
