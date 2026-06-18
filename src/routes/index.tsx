@@ -275,29 +275,6 @@ function LoginPage() {
                     Aceita URL Xtream (DNS + usuário/senha abaixo) ou link direto .m3u/.m3u8.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="m3u-user" className="text-xs tracking-wider text-muted-foreground">USUÁRIO (XTREAM)</Label>
-                    <Input
-                      id="m3u-user"
-                      placeholder="opcional"
-                      value={m3uUser}
-                      onChange={(e) => setM3uUser(e.target.value)}
-                      className="bg-white/5 border-white/10 h-11"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="m3u-pass" className="text-xs tracking-wider text-muted-foreground">SENHA (XTREAM)</Label>
-                    <Input
-                      id="m3u-pass"
-                      type="password"
-                      placeholder="opcional"
-                      value={m3uPass}
-                      onChange={(e) => setM3uPass(e.target.value)}
-                      className="bg-white/5 border-white/10 h-11"
-                    />
-                  </div>
-                </div>
                 <Button
                   type="submit"
                   disabled={m3uLoading}
