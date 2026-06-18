@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Search, Heart, ListVideo, Trash2 } from "lucide-react";
 import { loadM3U, type M3UEntry, xtreamCredsFromUrl } from "@/lib/xtream";
-import { store } from "@/lib/storage";
+import { store, type M3UPlaylist } from "@/lib/storage";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 
@@ -42,12 +42,16 @@ function PlaylistPage() {
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<M3UEntry | null>(null);
   const [group, setGroup] = useState<string>("all");
+  const [mounted, setMounted] = useState(false);
 
   // Prefer in-memory cache (just loaded from login flow). Fall back to URL
   // param if user landed here directly (deep link / reload).
-  const cached = m3uCache.get();
-  const [savedLists, setSavedLists] = useState(() => store.getM3U());
-  useEffect(() => setSavedLists(store.getM3U()), []);
+  const cached = mounted ? m3uCache.get() : null;
+  const [savedLists, setSavedLists] = useState<M3UPlaylist[]>([]);
+  useEffect(() => {
+    setMounted(true);
+    setSavedLists(store.getM3U());
+  }, []);
   const savedList = savedLists.find((l) => l.url === (urlParam || cached?.url)) ?? savedLists[0];
   const fallbackUrl = urlParam || cached?.url || savedList?.url || "";
   const displayName = name || cached?.name || savedList?.name || "Lista M3U";
