@@ -42,6 +42,7 @@ export const Route = createFileRoute("/series")({
 });
 
 function SeriesPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
