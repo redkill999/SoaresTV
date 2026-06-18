@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +7,7 @@ import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
-import { Film } from "lucide-react";
+import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
 
