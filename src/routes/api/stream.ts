@@ -7,8 +7,8 @@ import { createFileRoute } from "@tanstack/react-router";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Range, Content-Type, Accept",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+  "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
 function proxyUrl(absolute: string) {
@@ -61,8 +61,15 @@ async function handle(request: Request) {
   const headers = new Headers();
   headers.set("User-Agent", "VLC/3.0.20 LibVLC/3.0.20");
   headers.set("Accept", "*/*");
+  headers.set("Icy-MetaData", "0");
+  headers.set("Connection", "keep-alive");
+  headers.set("Referer", upstreamUrl.origin + "/");
+  headers.set("Origin", upstreamUrl.origin);
   const range = request.headers.get("range");
   if (range) headers.set("Range", range);
+  else if (/\/movie\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname) || /\/series\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname)) {
+    headers.set("Range", "bytes=0-");
+  }
 
   let upstream: Response;
   try {
@@ -85,6 +92,9 @@ async function handle(request: Request) {
     /\.m3u(\?|$)/i.test(upstreamUrl.pathname);
 
   const respHeaders = new Headers(CORS);
+  if (!upstream.ok) {
+    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+  }
   // forward useful headers
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
     const v = upstream.headers.get(h);
