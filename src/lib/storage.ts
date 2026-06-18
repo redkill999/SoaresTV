@@ -34,10 +34,14 @@ function read<T>(k: string, fallback: T): T {
 }
 function write<T>(k: string, v: T) {
   if (!isBrowser()) return;
-  const raw = JSON.stringify(v);
-  localStorage.setItem(k, raw);
-  snapshots[k] = { raw, value: v };
-  emit(k);
+  try {
+    const raw = JSON.stringify(v);
+    localStorage.setItem(k, raw);
+    snapshots[k] = { raw, value: v };
+    emit(k);
+  } catch {
+    // Quota exceeded ou serialização falhou — não derruba o app.
+  }
 }
 
 // --- Pub/sub for reactive reads -------------------------------------------
