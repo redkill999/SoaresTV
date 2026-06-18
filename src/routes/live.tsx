@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -8,7 +8,7 @@ import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/com
 import { ParentalGate } from "@/components/ParentalGate";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
-import { Tv } from "lucide-react";
+import { ArrowLeft, Tv } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
 export const Route = createFileRoute("/live")({
