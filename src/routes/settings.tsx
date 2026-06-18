@@ -55,7 +55,7 @@ function SettingsPage() {
   return (
     <AppShell>
       <Toaster theme="dark" />
-      <h1 className="text-2xl font-bold mb-6">Ajustes</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("pages.settings.title")}</h1>
 
       <section className="glass rounded-2xl p-6 mb-6">
         <h2 className="font-semibold mb-1">Listas M3U</h2>
