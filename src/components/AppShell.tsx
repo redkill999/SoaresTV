@@ -53,7 +53,7 @@ export function AppShell({
     <div className="min-h-dvh flex">
       {/* Sidebar — desktop */}
       <aside className="w-64 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-5 sticky top-0 h-dvh">
-        <Link to="/live" className="flex items-center gap-3 mb-10">
+        <Link to="/home" className="flex items-center gap-3 mb-10">
           <div className="size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center">
             <span className="font-display font-bold text-primary-foreground">S</span>
           </div>
