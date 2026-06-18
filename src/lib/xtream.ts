@@ -44,6 +44,16 @@ const IPTV_HEADERS = {
 
 type NativeHttpResponse = { status: number; data: unknown };
 
+export async function isNativeApp(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
+
 async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -85,13 +95,43 @@ async function nativeApi<T = unknown>(
   return parseNativeJson(res.data) as T;
 }
 
+async function nativeApiWithFallbackPorts<T = unknown>(
+  c: XtreamCreds,
+  action?: string,
+  params?: Record<string, string | number>,
+): Promise<{ data: T; creds: XtreamCreds } | null> {
+  if (!(await isNativeApp())) return null;
+  let base = normalizeServer(c.server);
+  const candidates = new Set<string>([base]);
+  try {
+    const u = new URL(base);
+    for (const port of ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"]) {
+      candidates.add(`http://${u.hostname}${port ? `:${port}` : ""}`);
+    }
+  } catch {
+    // keep normalized base only
+  }
+
+  let lastError: unknown = null;
+  for (const server of candidates) {
+    try {
+      const data = await nativeApi<T>({ ...c, server }, action, params);
+      if (data) return { data, creds: { ...c, server } };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
 export async function api<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<T> {
-  const native = await nativeApi<T>(c, action, params);
-  if (native) return native;
+  const native = await nativeApiWithFallbackPorts<T>(c, action, params);
+  if (native) return native.data;
 
   const r = await xtreamApi({ data: { ...c, action, params } });
   if (!r.ok) throw new Error("Resposta inválida do servidor");
@@ -99,12 +139,12 @@ export async function api<T = unknown>(
 }
 
 export async function login(c: XtreamCreds) {
-  const r = await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
-    c,
-  );
+  const native = await nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+  const r = native?.data ?? await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
+  if (native?.creds.server) c.server = native.creds.server;
   return r;
 }
 
@@ -128,9 +168,10 @@ export function xtreamCredsFromUrl(
   username?: string,
   password?: string,
 ): XtreamCreds | null {
-  const normalized = normalizeServer(raw || "");
+  let target = (raw || "").trim();
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
   try {
-    const u = new URL(normalized);
+    const u = new URL(target);
     const user = u.searchParams.get("username") || username || "";
     const pass = u.searchParams.get("password") || password || "";
     if (!user || !pass) return null;
@@ -209,12 +250,40 @@ function buildClientM3UUrl(raw: string, username?: string, password?: string): s
 }
 
 async function nativeLoadM3U(url: string, username?: string, password?: string): Promise<M3UEntry[] | null> {
-  const target = buildClientM3UUrl(url, username, password);
-  const res = await nativeHttpGet(target);
-  if (!res) return null;
-  if (res.status < 200 || res.status >= 300) throw new Error(`M3U respondeu HTTP ${res.status}`);
-  const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
-  return parseM3U(text);
+  if (!(await isNativeApp())) return null;
+  const first = buildClientM3UUrl(url, username, password);
+  const candidates = new Set<string>([first]);
+  try {
+    const u = new URL(first);
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (user && pass && !u.pathname.toLowerCase().endsWith(".m3u") && !u.pathname.toLowerCase().endsWith(".m3u8")) {
+      for (const port of ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"]) {
+        for (const output of ["m3u8", "ts"]) {
+          const out = new URL(`http://${u.hostname}${port ? `:${port}` : ""}/get.php`);
+          out.searchParams.set("username", user);
+          out.searchParams.set("password", pass);
+          out.searchParams.set("type", "m3u_plus");
+          out.searchParams.set("output", output);
+          candidates.add(out.toString());
+        }
+      }
+    }
+  } catch {
+    // keep first URL only
+  }
+
+  let lastStatus = 0;
+  for (const target of candidates) {
+    const res = await nativeHttpGet(target);
+    if (!res) return null;
+    lastStatus = res.status;
+    if (res.status < 200 || res.status >= 300) continue;
+    const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
+    const entries = parseM3U(text);
+    if (entries.length) return entries;
+  }
+  throw new Error(lastStatus ? `M3U respondeu HTTP ${lastStatus}` : "Lista M3U vazia");
 }
 
 export async function loadM3U(
@@ -224,6 +293,10 @@ export async function loadM3U(
 ): Promise<M3UEntry[]> {
   const native = await nativeLoadM3U(url, username, password);
   if (native) return native;
+
+  if (await isNativeApp()) {
+    throw new Error("A lista não abriu pela conexão direta do Android. Confirme o Portal/DNS/Host usado no XCIPTV.");
+  }
 
   const r = await fetchM3U({ data: { url, username, password } });
   if (r.error) throw new Error(r.error);

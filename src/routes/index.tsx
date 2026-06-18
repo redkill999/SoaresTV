@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, discoverPanelServer, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
+import { api, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -63,7 +63,9 @@ function LoginPage() {
 
       try {
         info = await login(creds);
+        normalizedServer = normalizeServer(creds.server);
       } catch (loginErr) {
+        const native = await isNativeApp();
         const playlistProbeUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
           username,
         )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
@@ -83,6 +85,9 @@ function LoginPage() {
             throw loginErr;
           }
         } else {
+          if (!native && /HTTP 50[234]|datacenter|rejeitou o acesso/i.test(loginErr instanceof Error ? loginErr.message : "")) {
+            throw new Error("Esse painel está bloqueando requisições do servidor web. No APK atualizado o app usa a conexão direta do seu Android, igual ao XCIPTV.");
+          }
           if (!entries.length) throw loginErr;
         }
       }
@@ -91,7 +96,7 @@ function LoginPage() {
         username,
       )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
       const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
-      const savedList = { name: listName, url: playlistUrl, username, password };
+      const savedList = { name: listName, url: playlistUrl, username, password, mode: "xtream" as const };
 
       if (!entries.length) {
         try {
@@ -156,7 +161,7 @@ function LoginPage() {
     const name = m3uName.trim() || "Lista M3U";
     const user = m3uUser.trim() || undefined;
     const pass = m3uPass.trim() || undefined;
-    const savedList = { name, url, username: user, password: pass };
+    const savedList = { name, url, username: user, password: pass, mode: "playlist" as const };
     const others = store.getM3U().filter((l) => l.url !== url);
     // Always put the just-saved playlist FIRST so the home launcher opens it.
     store.setM3U([savedList, ...others]);
