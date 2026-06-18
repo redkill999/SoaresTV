@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // viewport is set dynamically by TV_MODE_SCRIPT (mobile -> width=1280, else width=device-width)
       { title: "SoaresTV — IPTV Player" },
       { name: "description", content: "Player IPTV web com Xtream Codes, M3U, EPG, filmes e séries." },
       { name: "author", content: "SoaresTV" },
@@ -107,13 +107,56 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+const TV_MODE_SCRIPT = `(function(){
+  try {
+    if (typeof window === 'undefined') return;
+    function apply(){
+      var sw = (window.screen && window.screen.width) || window.innerWidth;
+      var sh = (window.screen && window.screen.height) || window.innerHeight;
+      var smallScreen = Math.min(sw, sh) <= 820;
+      var metas = document.querySelectorAll('meta[name="viewport"]');
+      for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
+      var m = document.createElement('meta');
+      m.setAttribute('name','viewport');
+      m.setAttribute('content', smallScreen
+        ? 'width=1280, initial-scale=1, user-scalable=no'
+        : 'width=device-width, initial-scale=1');
+      document.head.appendChild(m);
+      var html = document.documentElement;
+      if (smallScreen) {
+        html.setAttribute('data-tv-mode','');
+        // Wait a tick so the new viewport meta takes effect, then compute scale from CSS viewport
+        setTimeout(function(){
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var portrait = vh > vw;
+          var scale = portrait
+            ? Math.min(vw / 720, vh / 1280)
+            : Math.min(vw / 1280, vh / 720);
+          html.style.setProperty('--tv-scale', String(scale));
+          html.style.setProperty('--tv-vw', vw + 'px');
+          html.style.setProperty('--tv-vh', vh + 'px');
+          html.setAttribute('data-tv-orientation', portrait ? 'portrait' : 'landscape');
+        }, 30);
+      } else {
+        html.removeAttribute('data-tv-mode');
+        html.removeAttribute('data-tv-orientation');
+      }
+    }
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+  } catch(e) {}
+})();`;
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark">
+    <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: TV_MODE_SCRIPT }} />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Scripts />
       </body>
@@ -123,6 +166,14 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // Re-apply TV mode after React hydration in case hydration cleared the attribute / meta
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(TV_MODE_SCRIPT)();
+    } catch {}
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
