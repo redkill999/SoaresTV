@@ -32,6 +32,7 @@ export function AppShell({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const hasCreds = !!store.getCreds();
