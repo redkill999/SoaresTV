@@ -198,11 +198,16 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     void isNativeApp().then((native) => {
       if (cancelled) return;
       nativeDirect = native;
-      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
+      // Para HLS ao vivo: mesmo em nativo (APK = casca https), o fetch do
+      // hls.js para URL http é bloqueado pelo WebView por mixed content.
+      // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
+      // resolve o http e devolve o stream com headers de IPTV.
+      hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
       if (native) {
+        // VOD: tenta direto (https/http) e mantém proxy como último recurso.
         playbackCandidates.splice(0, playbackCandidates.length, ...vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          return Array.from(new Set([url, secure].filter(Boolean) as string[]));
+          return Array.from(new Set([secure, url, proxied(url, "vod")].filter(Boolean) as string[]));
         }));
       }
       if (hlsProxied) attachHls(hlsProxied);
