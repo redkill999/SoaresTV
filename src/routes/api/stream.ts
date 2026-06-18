@@ -57,10 +57,6 @@ function vodRangeForUpstream(requestedRange: string | null, head = false): strin
   return `bytes=${parsed.start}-${cappedEnd}`;
 }
 
-function defaultVodRange(): string {
-  return `bytes=0-${VOD_CHUNK_SIZE - 1}`;
-}
-
 function numericHeader(headers: Headers, name: string): number | undefined {
   const value = Number(headers.get(name));
   return Number.isFinite(value) && value >= 0 ? value : undefined;
