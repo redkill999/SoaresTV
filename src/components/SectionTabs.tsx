@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 export type TabKey = "all" | "favorites" | "recent";
 
 export function SectionTabs({
@@ -9,10 +11,11 @@ export function SectionTabs({
   onChange: (v: TabKey) => void;
   counts?: Partial<Record<TabKey, number>>;
 }) {
+  const { t } = useTranslation();
   const tabs: { key: TabKey; label: string }[] = [
-    { key: "all", label: "Todos" },
-    { key: "favorites", label: "Favoritos" },
-    { key: "recent", label: "Recentes" },
+    { key: "all", label: t("tabs.all") },
+    { key: "favorites", label: t("tabs.favorites") },
+    { key: "recent", label: t("tabs.recent") },
   ];
 
   return (
