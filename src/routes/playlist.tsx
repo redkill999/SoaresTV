@@ -98,14 +98,14 @@ function PlaylistPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/" })}>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/home" })}>
           <ArrowLeft className="size-4" /> Voltar
         </Button>
         <div className="size-9 rounded-xl bg-brand-gradient shadow-glow" />
-        <div>
-          <h1 className="font-bold flex items-center gap-2">
-            <ListVideo className="size-4" /> {displayName}
+        <div className="flex-1 min-w-0">
+          <h1 className="font-bold flex items-center gap-2 truncate">
+            <ListVideo className="size-4 shrink-0" /> {displayName}
           </h1>
           <p className="text-xs text-muted-foreground">
             {q.isLoading
@@ -116,6 +116,26 @@ function PlaylistPage() {
                   : "")}
           </p>
         </div>
+        <PlaylistSwitcher
+          currentUrl={fallbackUrl}
+          onPick={(p) => {
+            m3uCache.clear();
+            setActive(null);
+            navigate({ to: "/playlist", search: { url: p.url, name: p.name } });
+          }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            m3uCache.clear();
+            qc.invalidateQueries({ queryKey: ["m3u"] });
+            setActive(null);
+            toast.success("Cache da lista limpo");
+          }}
+        >
+          <Trash2 className="size-4" /> Limpar cache
+        </Button>
       </div>
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
