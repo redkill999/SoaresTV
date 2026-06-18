@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Heart, Play } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
+import { useIsFavorite } from "@/hooks/use-favorites";
 import { useState } from "react";
 
 type Aspect = "poster" | "wide" | "square";
@@ -27,7 +28,7 @@ export function MediaCard({
   aspect?: Aspect;
 }) {
   const idStr = String(id);
-  const [fav, setFav] = useState(() => store.isFav(type, idStr));
+  const fav = useIsFavorite(type, idStr);
   const [loaded, setLoaded] = useState(false);
 
   return (
