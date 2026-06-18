@@ -104,6 +104,7 @@ export async function loadM3U(
   password?: string,
 ): Promise<M3UEntry[]> {
   const r = await fetchM3U({ data: { url, username, password } });
+  if (r.error) throw new Error(r.error);
   return r.entries as M3UEntry[];
 }
 
