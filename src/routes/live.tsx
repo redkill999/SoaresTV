@@ -195,14 +195,15 @@ function Header({
   );
 }
 
-export function emptyTitle(tab: TabKey, item: string) {
-  if (tab === "favorites") return `Nenhum ${item} favorito`;
-  if (tab === "recent") return `Nenhum ${item} recente`;
-  return "Nada encontrado";
+export function emptyTitle(tab: TabKey, itemKey: "channel" | "movie" | "series") {
+  const item = i18n.t(`empty.${itemKey}`);
+  if (tab === "favorites") return i18n.t("empty.noFav", { item });
+  if (tab === "recent") return i18n.t("empty.noRecent", { item });
+  return i18n.t("empty.noResults");
 }
 export function emptyHint(tab: TabKey, search: string) {
-  if (search) return `Sem resultados para "${search}".`;
-  if (tab === "favorites") return "Toque no coração nos cards para favoritar.";
-  if (tab === "recent") return "O que você assistir aparece aqui.";
-  return "Tente ajustar a busca ou trocar a categoria.";
+  if (search) return i18n.t("empty.searchHint", { q: search });
+  if (tab === "favorites") return i18n.t("empty.favHint");
+  if (tab === "recent") return i18n.t("empty.recentHint");
+  return i18n.t("empty.defaultHint");
 }
