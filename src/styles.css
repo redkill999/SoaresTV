@@ -166,6 +166,13 @@ h1, h2, h3, h4, h5, h6, .font-display {
       scale(var(--scale));
     overflow: hidden;
   }
+  /* Tailwind's *-screen utilities use 100vh = real viewport height,
+     which breaks our fixed 720px canvas. Pin them to the canvas. */
+  body .min-h-screen { min-height: 720px !important; }
+  body .h-screen { height: 720px !important; }
+  body .max-h-screen { max-height: 720px !important; }
+  body .min-w-screen { min-width: 1280px !important; }
+  body .w-screen { width: 1280px !important; }
 }
 
 @media (max-width: 950px) and (orientation: landscape) and (max-height: 500px) {
