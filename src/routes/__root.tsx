@@ -107,11 +107,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+const TV_MODE_SCRIPT = `(function(){
+  try {
+    if (typeof window === 'undefined') return;
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var smallScreen = Math.min(window.screen.width, window.screen.height) <= 820;
+    if (!coarse || !smallScreen) return;
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name','viewport'); document.head.appendChild(meta); }
+    meta.setAttribute('content','width=1280, initial-scale=1, user-scalable=no');
+    document.documentElement.classList.add('tv-mode');
+  } catch(e) {}
+})();`;
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" className="dark">
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: TV_MODE_SCRIPT }} />
       </head>
       <body>
         {children}
