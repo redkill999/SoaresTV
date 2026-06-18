@@ -46,8 +46,24 @@ export function AppShell({
     navigate({ to: "/" });
   };
 
-  const isActive = (to: string) =>
-    pathname === to || pathname.startsWith(to + "/");
+  // Mapeia rotas filhas (player/playlist) para o item de menu de origem,
+  // para manter o destaque do item ativo durante a navegação.
+  const playerMatch = pathname.match(/^\/player\/([^/]+)/);
+  const playerType = playerMatch?.[1];
+  const playerParent =
+    playerType === "live"
+      ? "/live"
+      : playerType === "movie"
+        ? "/movies"
+        : playerType === "series"
+          ? "/series"
+          : null;
+
+  const isActive = (to: string) => {
+    if (pathname === to || pathname.startsWith(to + "/")) return true;
+    if (playerParent && to === playerParent) return true;
+    return false;
+  };
 
   return (
     <div className="min-h-dvh flex">
