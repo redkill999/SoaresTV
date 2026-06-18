@@ -7,7 +7,9 @@ import Hls from "hls.js";
 // flows through our /api/stream proxy to dodge CORS / mixed-content.
 function toHlsCandidate(src: string): string | null {
   if (/\.m3u8(\?|$)/i.test(src)) return src;
-  if (/\/(live|movie|series)\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(src)) {
+  // Apenas streams ao vivo têm variante HLS no Xtream.
+  // VOD (movie/series) precisa ser reproduzido direto como mp4/mkv.
+  if (/\/live\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(src)) {
     return src.replace(/\.[a-z0-9]+(\?|$)/i, ".m3u8$1");
   }
   return null;
