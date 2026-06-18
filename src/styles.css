@@ -149,3 +149,18 @@ h1, h2, h3, h4, h5, h6, .font-display {
   }
 }
 
+/* On smaller phones, shrink the rotated UI so it fits naturally
+   instead of feeling oversized. `zoom` adjusts layout dimensions,
+   so the rotation math above keeps working. */
+@media (max-width: 500px) and (orientation: portrait) {
+  body {
+    zoom: 0.75;
+  }
+}
+@media (max-width: 380px) and (orientation: portrait) {
+  body {
+    zoom: 0.65;
+  }
+}
+
+
