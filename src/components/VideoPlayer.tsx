@@ -245,6 +245,28 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     };
   }, [src, kind]);
 
+  // No APK Android, força paisagem ao entrar em tela cheia e libera ao sair.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onFsChange = () => {
+      const isFs = !!(document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement);
+      if (isFs) void lockLandscape();
+      else void unlockOrientation();
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange);
+    video.addEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
+    video.addEventListener("webkitendfullscreen", unlockOrientation as EventListener);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange);
+      video.removeEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
+      video.removeEventListener("webkitendfullscreen", unlockOrientation as EventListener);
+      void unlockOrientation();
+    };
+  }, []);
+
 
   return (
     <div className="relative">
