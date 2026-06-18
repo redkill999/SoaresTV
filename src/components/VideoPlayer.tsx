@@ -92,7 +92,14 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       }
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? proxied(src);
-      if (/\.m3u8(\?|$)/i.test(url)) {
+      const decodedUrl = (() => {
+        try {
+          return decodeURIComponent(url);
+        } catch {
+          return url;
+        }
+      })();
+      if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
       }
