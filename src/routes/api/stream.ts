@@ -11,6 +11,8 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
+const VOD_CHUNK_SIZE = 2 * 1024 * 1024;
+
 function proxyUrl(absolute: string) {
   return `/api/stream?u=${encodeURIComponent(absolute)}`;
 }
@@ -25,6 +27,55 @@ function contentTypeForPath(path: string): string {
   if (lower.endsWith(".ts")) return "video/mp2t";
   if (lower.endsWith(".m3u8") || lower.endsWith(".m3u")) return "application/vnd.apple.mpegurl";
   return "video/mp4";
+}
+
+function isVodPath(path: string): boolean {
+  return /\/movie\/[^/]+\/[^/]+\//i.test(path) || /\/series\/[^/]+\/[^/]+\//i.test(path);
+}
+
+function parseByteRange(range: string | null): { start: number; end?: number } | null {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : undefined;
+  if (!Number.isFinite(start) || start < 0) return null;
+  if (end !== undefined && (!Number.isFinite(end) || end < start)) return null;
+  return { start, end };
+}
+
+function vodRangeForUpstream(requestedRange: string | null): string {
+  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
+  const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
+  return `bytes=${parsed.start}-${cappedEnd}`;
+}
+
+function limitBody(body: ReadableStream<Uint8Array> | null, bytes: number) {
+  if (!body) return body;
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      let sent = 0;
+      try {
+        while (sent < bytes) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const remaining = bytes - sent;
+          if (value.byteLength <= remaining) {
+            controller.enqueue(value);
+            sent += value.byteLength;
+          } else {
+            controller.enqueue(value.slice(0, remaining));
+            sent += remaining;
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
 }
 
 function rewritePlaylist(text: string, baseUrl: string): string {
