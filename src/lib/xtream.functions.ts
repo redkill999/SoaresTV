@@ -177,24 +177,142 @@ function isExplicitM3UInput(raw: string): boolean {
   }
 }
 
-function mapXtreamLiveStreams(data: unknown, access: NonNullable<ReturnType<typeof getXtreamAccess>>): M3UEntryDTO[] {
+type CategoryMap = Map<string, string>;
+
+async function fetchJson(url: string): Promise<unknown> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function loadCategories(
+  access: NonNullable<ReturnType<typeof getXtreamAccess>>,
+  action: "get_live_categories" | "get_vod_categories" | "get_series_categories",
+): Promise<CategoryMap> {
+  const u = new URL(`${access.origin}/player_api.php`);
+  u.searchParams.set("username", access.username);
+  u.searchParams.set("password", access.password);
+  u.searchParams.set("action", action);
+  const data = await fetchJson(u.toString());
+  const m: CategoryMap = new Map();
+  if (Array.isArray(data)) {
+    for (const c of data) {
+      const id = (c as Record<string, unknown>).category_id;
+      const name = (c as Record<string, unknown>).category_name;
+      if (id != null && typeof name === "string") m.set(String(id), name);
+    }
+  }
+  return m;
+}
+
+function mapXtreamLiveStreams(
+  data: unknown,
+  access: NonNullable<ReturnType<typeof getXtreamAccess>>,
+  cats: CategoryMap,
+): M3UEntryDTO[] {
   if (!Array.isArray(data)) return [];
   const entries: M3UEntryDTO[] = [];
   data.forEach((item, i) => {
     if (entries.length >= MAX_SERVER_ENTRIES) return;
-    const stream = item as Record<string, unknown>;
-    const id = stream.stream_id;
-    const name = typeof stream.name === "string" ? stream.name : `Canal ${i + 1}`;
-    if (id !== undefined && id !== null) {
-      entries.push({
-        id: `xtream-live-${String(id)}`,
-        name: decodeEntities(name),
-        url: `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`,
-        logo: typeof stream.stream_icon === "string" ? stream.stream_icon : undefined,
-        group: typeof stream.category_name === "string" ? stream.category_name : undefined,
-      });
-    }
+    const s = item as Record<string, unknown>;
+    const id = s.stream_id;
+    const name = typeof s.name === "string" ? s.name : `Canal ${i + 1}`;
+    if (id == null) return;
+    const catId = s.category_id != null ? String(s.category_id) : "";
+    const group = cats.get(catId) ?? (typeof s.category_name === "string" ? s.category_name : undefined);
+    entries.push({
+      id: `xtream-live-${String(id)}`,
+      name: decodeEntities(name),
+      url: `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`,
+      logo: typeof s.stream_icon === "string" ? s.stream_icon : undefined,
+      group: group ? `Canais | ${group}` : "Canais",
+    });
   });
+  return entries;
+}
+
+function mapXtreamVodStreams(
+  data: unknown,
+  access: NonNullable<ReturnType<typeof getXtreamAccess>>,
+  cats: CategoryMap,
+): M3UEntryDTO[] {
+  if (!Array.isArray(data)) return [];
+  const entries: M3UEntryDTO[] = [];
+  data.forEach((item, i) => {
+    if (entries.length >= MAX_SERVER_ENTRIES) return;
+    const s = item as Record<string, unknown>;
+    const id = s.stream_id;
+    const name = typeof s.name === "string" ? s.name : `Filme ${i + 1}`;
+    if (id == null) return;
+    const ext = typeof s.container_extension === "string" && s.container_extension ? s.container_extension : "mp4";
+    const catId = s.category_id != null ? String(s.category_id) : "";
+    const group = cats.get(catId);
+    entries.push({
+      id: `xtream-vod-${String(id)}`,
+      name: decodeEntities(name),
+      url: `${access.origin}/movie/${access.username}/${access.password}/${String(id)}.${ext}`,
+      logo: typeof s.stream_icon === "string" ? s.stream_icon : undefined,
+      group: group ? `Filmes | ${group}` : "Filmes",
+    });
+  });
+  return entries;
+}
+
+async function mapXtreamSeries(
+  data: unknown,
+  access: NonNullable<ReturnType<typeof getXtreamAccess>>,
+  cats: CategoryMap,
+): Promise<M3UEntryDTO[]> {
+  if (!Array.isArray(data)) return [];
+  const entries: M3UEntryDTO[] = [];
+  // To keep this fast and within Worker limits, we only fetch the first
+  // episode per series in parallel batches. The /playlist UI plays one
+  // entry at a time so this gives users access to series content without
+  // exploding into thousands of HTTP calls.
+  const items = data.slice(0, 800) as Record<string, unknown>[];
+  const CONCURRENCY = 8;
+  let idx = 0;
+  async function worker() {
+    while (idx < items.length && entries.length < MAX_SERVER_ENTRIES) {
+      const i = idx++;
+      const s = items[i];
+      const sid = s.series_id;
+      if (sid == null) continue;
+      const name = typeof s.name === "string" ? s.name : `Série ${i + 1}`;
+      const catId = s.category_id != null ? String(s.category_id) : "";
+      const group = cats.get(catId);
+      const u = new URL(`${access.origin}/player_api.php`);
+      u.searchParams.set("username", access.username);
+      u.searchParams.set("password", access.password);
+      u.searchParams.set("action", "get_series_info");
+      u.searchParams.set("series_id", String(sid));
+      const info = (await fetchJson(u.toString())) as
+        | { episodes?: Record<string, Array<{ id?: string | number; container_extension?: string }>> }
+        | null;
+      const seasons = info?.episodes ? Object.keys(info.episodes).sort() : [];
+      const firstSeason = seasons[0];
+      const firstEp = firstSeason ? info?.episodes?.[firstSeason]?.[0] : undefined;
+      if (firstEp?.id != null) {
+        const ext = firstEp.container_extension || "mp4";
+        entries.push({
+          id: `xtream-series-${String(sid)}`,
+          name: decodeEntities(name),
+          url: `${access.origin}/series/${access.username}/${access.password}/${String(firstEp.id)}.${ext}`,
+          logo: typeof s.cover === "string" ? s.cover : undefined,
+          group: group ? `Séries | ${group}` : "Séries",
+        });
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   return entries;
 }
 
@@ -245,21 +363,31 @@ export const fetchM3U = createServerFn({ method: "POST" })
 
       // For bare Xtream credentials, prefer player_api.php (compact JSON) over
       // get.php (huge M3U dump that can exceed Worker memory/time limits).
+      // Pull live + VOD + series in parallel so the playlist UI sees all three.
       if (access && !explicitM3U) {
-        const liveUrl = new URL(`${access.origin}/player_api.php`);
-        liveUrl.searchParams.set("username", access.username);
-        liveUrl.searchParams.set("password", access.password);
-        liveUrl.searchParams.set("action", "get_live_streams");
+        const apiUrl = (action: string) => {
+          const u = new URL(`${access.origin}/player_api.php`);
+          u.searchParams.set("username", access.username);
+          u.searchParams.set("password", access.password);
+          u.searchParams.set("action", action);
+          return u.toString();
+        };
 
-        const live = await fetchText(liveUrl.toString());
-        if (live.text) {
-          try {
-            const entries = mapXtreamLiveStreams(JSON.parse(live.text), access);
-            if (entries.length) return { entries };
-          } catch {
-            // fall through to M3U attempt
-          }
-        }
+        const [liveCats, vodCats, seriesCats, liveData, vodData, seriesData] = await Promise.all([
+          loadCategories(access, "get_live_categories"),
+          loadCategories(access, "get_vod_categories"),
+          loadCategories(access, "get_series_categories"),
+          fetchJson(apiUrl("get_live_streams")),
+          fetchJson(apiUrl("get_vod_streams")),
+          fetchJson(apiUrl("get_series")),
+        ]);
+
+        const liveEntries = mapXtreamLiveStreams(liveData, access, liveCats);
+        const vodEntries = mapXtreamVodStreams(vodData, access, vodCats);
+        const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
+
+        const entries = [...liveEntries, ...vodEntries, ...seriesEntries];
+        if (entries.length) return { entries };
       }
 
       const first = await fetchText(target);
