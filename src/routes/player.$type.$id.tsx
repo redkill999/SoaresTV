@@ -1,18 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
-import { store, type XtreamCreds } from "@/lib/storage";
+import { store, type XtreamCreds, type FavItem } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, type EpgListing } from "@/lib/xtream";
+import { useIsFavorite } from "@/hooks/use-favorites";
 import { ArrowLeft, Heart, Clock } from "lucide-react";
+
+const VALID_TYPES = ["live", "movie", "series"] as const;
+type PlayerType = (typeof VALID_TYPES)[number];
+const isPlayerType = (t: string): t is PlayerType =>
+  (VALID_TYPES as readonly string[]).includes(t);
 
 export const Route = createFileRoute("/player/$type/$id")({
   validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
   head: ({ params }) => ({ meta: [{ title: `Player — ${params.id}` }] }),
   component: PlayerPage,
 });
+
 
 type SeriesInfo = {
   seasons?: Array<{ season_number: number; name?: string }>;
