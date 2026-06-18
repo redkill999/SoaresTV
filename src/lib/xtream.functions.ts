@@ -316,6 +316,19 @@ async function mapXtreamSeries(
   return entries;
 }
 
+function mergeEntries(primary: M3UEntryDTO[], extra: M3UEntryDTO[]): M3UEntryDTO[] {
+  const seen = new Set(primary.map((e) => `${e.url}|${e.name}`));
+  const merged = [...primary];
+  for (const entry of extra) {
+    const key = `${entry.url}|${entry.name}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(entry);
+    }
+  }
+  return merged.slice(0, MAX_SERVER_ENTRIES);
+}
+
 export const fetchM3U = createServerFn({ method: "POST" })
   .inputValidator(
     (d: { url: string; username?: string; password?: string }) => d,
@@ -357,7 +370,17 @@ export const fetchM3U = createServerFn({ method: "POST" })
         const first = await fetchText(target);
         if (first.text.includes("#EXTINF")) {
           const entries = parseM3UText(first.text);
-          if (entries.length) return { entries };
+          if (entries.length) {
+            if (access) {
+              const [seriesCats, seriesData] = await Promise.all([
+                loadCategories(access, "get_series_categories"),
+                fetchJson(`${access.origin}/player_api.php?username=${encodeURIComponent(access.username)}&password=${encodeURIComponent(access.password)}&action=get_series`),
+              ]);
+              const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
+              return { entries: mergeEntries(entries, seriesEntries) };
+            }
+            return { entries };
+          }
         }
       }
 
