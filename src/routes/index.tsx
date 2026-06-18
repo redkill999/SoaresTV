@@ -98,14 +98,14 @@ function LoginPage() {
     const name = m3uName.trim() || "Lista M3U";
     const user = m3uUser.trim() || undefined;
     const pass = m3uPass.trim() || undefined;
+    const savedList = { name, url, username: user, password: pass };
+    const lists = store.getM3U();
+    const exists = lists.some((l) => l.url === url);
+    store.setM3U(exists ? lists.map((l) => (l.url === url ? { ...l, ...savedList } : l)) : [...lists, savedList]);
     setM3uLoading(true);
     try {
       const entries = await loadM3U(url, user, pass);
       if (!entries.length) throw new Error("Lista vazia");
-      const lists = store.getM3U();
-      const savedList = { name, url, username: user, password: pass };
-      const exists = lists.some((l) => l.url === url);
-      store.setM3U(exists ? lists.map((l) => (l.url === url ? { ...l, ...savedList } : l)) : [...lists, savedList]);
       m3uCache.set(url, name, entries);
       toast.success(`${entries.length} canais carregados`);
       navigate({ to: "/home" });
