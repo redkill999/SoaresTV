@@ -38,6 +38,8 @@ function LoginPage() {
   // M3U state
   const [m3uName, setM3uName] = useState("");
   const [m3uUrl, setM3uUrl] = useState("");
+  const [m3uUser, setM3uUser] = useState("");
+  const [m3uPass, setM3uPass] = useState("");
   const [m3uLoading, setM3uLoading] = useState(false);
 
   useEffect(() => {
@@ -94,9 +96,11 @@ function LoginPage() {
     const raw = m3uUrl.trim();
     const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
     const name = m3uName.trim() || "Lista M3U";
+    const user = m3uUser.trim() || undefined;
+    const pass = m3uPass.trim() || undefined;
     setM3uLoading(true);
     try {
-      const entries = await loadM3U(url);
+      const entries = await loadM3U(url, user, pass);
       if (!entries.length) throw new Error("Lista vazia");
       const lists = store.getM3U();
       const exists = lists.find((l) => l.url === url);
