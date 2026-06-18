@@ -270,7 +270,7 @@ function PlaylistSwitcher({
   currentUrl: string;
   onPick: (p: { url: string; name: string }) => void;
 }) {
-  const [lists, setLists] = useState(() => store.getM3U());
+  const [lists, setLists] = useState<M3UPlaylist[]>([]);
   useEffect(() => setLists(store.getM3U()), []);
   if (lists.length <= 1) return null;
   return (
