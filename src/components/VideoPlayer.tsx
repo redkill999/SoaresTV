@@ -55,6 +55,32 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
     let cancelled = false;
     let vodIdx = 0;
     let triedDirect = false;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+
+    const clearWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = null;
+    };
+
+    const tryNextVod = () => {
+      clearWatchdog();
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      vodIdx += 1;
+      if (vodIdx < vodCandidates.length) playDirect();
+      else setError("Não foi possível reproduzir esta mídia.");
+    };
+
+    const armVodWatchdog = () => {
+      if (!isVod) return;
+      clearWatchdog();
+      watchdog = setTimeout(() => {
+        if (cancelled) return;
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) tryNextVod();
+      }, 12_000);
+    };
 
     const playDirect = () => {
       if (hls) {
@@ -69,19 +95,19 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
       }
       video.src = proxied(url);
       video.load();
+      armVodWatchdog();
       video.play().catch(() => {});
     };
 
     const onVideoError = () => {
       if (cancelled || hls) return;
-      vodIdx += 1;
-      if (vodIdx < vodCandidates.length) {
-        playDirect();
-      } else {
-        setError("Não foi possível reproduzir esta mídia.");
-      }
+      tryNextVod();
     };
+    const onVideoReady = () => clearWatchdog();
     video.addEventListener("error", onVideoError);
+    video.addEventListener("loadeddata", onVideoReady);
+    video.addEventListener("canplay", onVideoReady);
+    video.addEventListener("playing", onVideoReady);
 
     const attachHls = (url: string) => {
       if (Hls.isSupported()) {
@@ -112,14 +138,11 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) hls?.startLoad();
-              else {
-                hls?.destroy();
-                hls = null;
-                playDirect();
-              }
+              else tryNextVod();
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              hls?.recoverMediaError();
+              if (isLive) hls?.recoverMediaError();
+              else tryNextVod();
               return;
             default:
               hls?.destroy();
@@ -141,7 +164,11 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
     return () => {
       cancelled = true;
+      clearWatchdog();
       video.removeEventListener("error", onVideoError);
+      video.removeEventListener("loadeddata", onVideoReady);
+      video.removeEventListener("canplay", onVideoReady);
+      video.removeEventListener("playing", onVideoReady);
       if (hls) hls.destroy();
       video.removeAttribute("src");
       video.load();
