@@ -42,12 +42,58 @@ export const xtreamApi = createServerFn({ method: "POST" })
     }
   });
 
+type M3UEntryDTO = {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  group?: string;
+};
+
+function parseM3UText(text: string): M3UEntryDTO[] {
+  const out: M3UEntryDTO[] = [];
+  let cur: { name: string; logo?: string; group?: string } | null = null;
+  let i = 0;
+  // Iterate without splitting the whole string (saves memory on big lists)
+  let start = 0;
+  for (let j = 0; j <= text.length; j++) {
+    if (j === text.length || text.charCodeAt(j) === 10 /* \n */) {
+      let line = text.slice(start, j);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      start = j + 1;
+      const t = line.trim();
+      if (!t) continue;
+      if (t.startsWith("#EXTINF")) {
+        const name = t.split(",").slice(1).join(",").trim();
+        const logo = /tvg-logo="([^"]+)"/.exec(t)?.[1];
+        const group = /group-title="([^"]+)"/.exec(t)?.[1];
+        cur = { name, logo, group };
+      } else if (t.startsWith("#")) {
+        // skip other directives
+      } else if (cur) {
+        out.push({
+          id: `m3u-${i++}`,
+          url: t,
+          name: cur.name || "Sem nome",
+          logo: cur.logo,
+          group: cur.group,
+        });
+        cur = null;
+      }
+    }
+  }
+  return out;
+}
+
 export const fetchM3U = createServerFn({ method: "POST" })
   .inputValidator((d: { url: string }) => d)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<{ entries: M3UEntryDTO[] }> => {
     let target = (data.url || "").trim();
     if (!target) throw new Error("URL vazia");
     if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
     let res: Response;
     try {
       res = await fetch(target, {
@@ -56,14 +102,19 @@ export const fetchM3U = createServerFn({ method: "POST" })
           Accept: "*/*",
         },
         redirect: "follow",
+        signal: controller.signal,
       });
     } catch (e) {
+      clearTimeout(timer);
       throw new Error(`Falha de rede: ${e instanceof Error ? e.message : "desconhecida"}`);
     }
+    clearTimeout(timer);
     if (!res.ok) throw new Error(`Servidor M3U respondeu ${res.status}`);
     const text = await res.text();
     if (!text.includes("#EXTM3U") && !text.includes("#EXTINF")) {
       throw new Error("Conteúdo não parece ser uma lista M3U válida");
     }
-    return { text };
+    const entries = parseM3UText(text);
+    if (!entries.length) throw new Error("Nenhum canal encontrado na lista");
+    return { entries };
   });
