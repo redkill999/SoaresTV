@@ -188,6 +188,9 @@ function RootComponent() {
     } catch {}
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
+    // Hidrata o cache persistente (IndexedDB) o quanto antes para que
+    // Filmes/Séries abram instantaneamente em reloads.
+    void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
   }, []);
 
   return (

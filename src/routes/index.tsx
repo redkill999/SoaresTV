@@ -46,9 +46,17 @@ function LoginPage() {
   const [m3uLoading, setM3uLoading] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setSplash(false), 800);
+    // Auto-login: if creds (or a saved playlist) already exist, skip the
+    // login screen entirely and go straight to /home — same as XCIPTV.
+    const hasCreds = !!store.getCreds();
+    const hasList = (store.getM3U() ?? []).length > 0;
+    if (hasCreds || hasList) {
+      navigate({ to: "/home", replace: true });
+      return;
+    }
+    const t = setTimeout(() => setSplash(false), 600);
     return () => clearTimeout(t);
-  }, []);
+  }, [navigate]);
 
   const onXtream = async (e: React.FormEvent) => {
     e.preventDefault();
