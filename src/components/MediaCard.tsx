@@ -86,7 +86,6 @@ export function MediaCard({
         onClick={(e) => {
           e.preventDefault();
           store.toggleFav({ type, id: idStr, name, logo: image });
-          setFav((f) => !f);
         }}
         className="absolute top-2 right-2 size-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
         aria-label="Favoritar"
