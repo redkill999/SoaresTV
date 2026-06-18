@@ -93,15 +93,17 @@ function LoginPage() {
     e.preventDefault();
     const raw = m3uUrl.trim();
     const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    const name = m3uName.trim() || "Lista M3U";
     setM3uLoading(true);
     try {
       const entries = await loadM3U(url);
       if (!entries.length) throw new Error("Lista vazia");
       const lists = store.getM3U();
       const exists = lists.find((l) => l.url === url);
-      if (!exists) store.setM3U([...lists, { name: m3uName || "Lista M3U", url }]);
+      if (!exists) store.setM3U([...lists, { name, url }]);
+      m3uCache.set(url, name, entries);
       toast.success(`${entries.length} canais carregados`);
-      navigate({ to: "/playlist", search: { url, name: m3uName || "Lista M3U" } });
+      navigate({ to: "/playlist", search: { name } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao carregar M3U");
     } finally {
