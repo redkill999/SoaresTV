@@ -114,19 +114,25 @@ const TV_MODE_SCRIPT = `(function(){
     function apply(){
       var sw = (window.screen && window.screen.width) || window.innerWidth;
       var sh = (window.screen && window.screen.height) || window.innerHeight;
-      var smallScreen = Math.min(sw, sh) <= 820;
+      var maxDim = Math.max(sw, sh);
+      var minDim = Math.min(sw, sh);
+      var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      var ua = (navigator.userAgent || '').toLowerCase();
+      var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
+      // TV mode: large landscape screen WITHOUT touch (smart TVs, set-top boxes).
+      // Phones/tablets (even big ones) get natural responsive layout.
+      var isTV = !isPhoneOrTablet && maxDim >= 1280 && minDim >= 720;
       var metas = document.querySelectorAll('meta[name="viewport"]');
       for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
       var m = document.createElement('meta');
       m.setAttribute('name','viewport');
-      m.setAttribute('content', smallScreen
+      m.setAttribute('content', isTV
         ? 'width=1280, initial-scale=1, user-scalable=no'
-        : 'width=device-width, initial-scale=1');
+        : 'width=device-width, initial-scale=1, viewport-fit=cover');
       document.head.appendChild(m);
       var html = document.documentElement;
-      if (smallScreen) {
+      if (isTV) {
         html.setAttribute('data-tv-mode','');
-        // Wait a tick so the new viewport meta takes effect, then compute scale from CSS viewport
         setTimeout(function(){
           var vw = window.innerWidth;
           var vh = window.innerHeight;
@@ -142,6 +148,9 @@ const TV_MODE_SCRIPT = `(function(){
       } else {
         html.removeAttribute('data-tv-mode');
         html.removeAttribute('data-tv-orientation');
+        html.style.removeProperty('--tv-scale');
+        html.style.removeProperty('--tv-vw');
+        html.style.removeProperty('--tv-vh');
       }
     }
     apply();
