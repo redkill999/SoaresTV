@@ -23,11 +23,13 @@ function proxied(url: string, kind?: "live" | "vod"): string {
 export function VideoPlayer({ src, poster, kind }: { src: string; poster?: string; kind?: "live" | "vod" }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [canManualPlay, setCanManualPlay] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
+    setCanManualPlay(false);
 
     const hlsCandidate = toHlsCandidate(src, kind);
     const hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
@@ -106,7 +108,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       video.src = url;
       video.load();
       armVodWatchdog();
-      video.play().catch(() => {});
+      video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
 
     const onVideoError = () => {
@@ -114,10 +116,14 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       tryNextVod();
     };
     const onVideoReady = () => clearWatchdog();
+    const onPlaying = () => {
+      clearWatchdog();
+      setCanManualPlay(false);
+    };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
-    video.addEventListener("playing", onVideoReady);
+    video.addEventListener("playing", onPlaying);
 
     const attachHls = (url: string) => {
       if (Hls.isSupported()) {
@@ -163,7 +169,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
-        video.play().catch(() => {});
+        video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
         playDirect();
       }
@@ -178,7 +184,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
-      video.removeEventListener("playing", onVideoReady);
+      video.removeEventListener("playing", onPlaying);
       if (hls) hls.destroy();
       video.removeAttribute("src");
       video.load();
@@ -200,6 +206,16 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2 rounded-b-xl">
           {error}
         </div>
+      )}
+      {canManualPlay && !error && (
+        <button
+          type="button"
+          onClick={() => videoRef.current?.play().then(() => setCanManualPlay(false)).catch(() => undefined)}
+          className="absolute inset-0 m-auto h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-glow flex items-center justify-center text-2xl"
+          aria-label="Reproduzir"
+        >
+          ▶
+        </button>
       )}
     </div>
   );
