@@ -66,16 +66,33 @@ function SeriesPage() {
   }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
+  const catsCacheKey = `series-cats:${acct}`;
+  const listCacheKey = `series-list:${acct}:${cat}`;
+  const catsPersisted = useMemo(
+    () => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null),
+    [catsCacheKey, acct],
+  );
+  const listPersisted = useMemo(
+    () => (acct ? loadPersisted<Series[]>(listCacheKey) : null),
+    [listCacheKey, acct],
+  );
   const catsQ = useQuery({
     queryKey: ["series-cats", acct],
     enabled: !!creds,
-    queryFn: () => api<LiveCategory[]>(creds!, "get_series_categories"),
+    queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_series_categories")),
+    initialData: catsPersisted?.data,
+    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
   const listQ = useQuery({
     queryKey: ["series-list", acct, cat],
     enabled: !!creds,
-    queryFn: () =>
+    queryFn: withPersist(listCacheKey, () =>
       api<Series[]>(creds!, "get_series", cat !== "all" ? { category_id: cat } : undefined),
+    ),
+    initialData: listPersisted?.data,
+    initialDataUpdatedAt: listPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
