@@ -6,7 +6,12 @@ import { createServerFn } from "@tanstack/react-start";
 function normalizeServer(s: string) {
   let v = s.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(v)) v = `http://${v}`;
-  return v;
+  try {
+    const u = new URL(v);
+    return u.origin;
+  } catch {
+    return v;
+  }
 }
 
 export const xtreamApi = createServerFn({ method: "POST" })
@@ -87,6 +92,9 @@ export const xtreamApi = createServerFn({ method: "POST" })
     }
     if (lastStatus === 401 || lastStatus === 403) {
       throw new Error("Credenciais inválidas ou conta bloqueada pelo painel.");
+    }
+    if (lastStatus === 404) {
+      throw new Error("Esse endereço não parece ser o DNS Xtream: player_api.php/get.php não existe nele. Link /dashboard é só o painel web; use o DNS/porta da lista IPTV usada no XCIPTV.");
     }
     if (lastStatus === 429) {
       throw new Error("Muitas requisições ao painel Xtream. Aguarde alguns segundos e tente novamente.");
