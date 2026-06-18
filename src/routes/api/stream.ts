@@ -126,10 +126,9 @@ async function handle(request: Request) {
   headers.set("Accept", "*/*");
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
-  if (range) headers.set("Range", range);
-  else if (/\/movie\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname) || /\/series\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname)) {
-    headers.set("Range", "bytes=0-");
-  }
+  const isVod = isVodPath(upstreamUrl.pathname);
+  if (isVod) headers.set("Range", vodRangeForUpstream(range));
+  else if (range) headers.set("Range", range);
 
   let upstream: Response;
   try {
@@ -153,6 +152,12 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
+    if (isVod) {
+      return Response.json(
+        { error: `UPSTREAM_${upstream.status}`, fallback: true },
+        { status: 200, headers: respHeaders },
+      );
+    }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
@@ -183,6 +188,15 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
+  if (isVod && status === 200) {
+    const parsed = parseByteRange(vodRangeForUpstream(range)) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
+    const bodyLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
+    const total = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
+    respHeaders.set("Content-Length", String(bodyLength));
+    respHeaders.set("Content-Range", `bytes ${parsed.start}-${parsed.start + bodyLength - 1}/${total ?? "*"}`);
+    status = 206;
+    return new Response(limitBody(upstream.body, bodyLength), { status, headers: respHeaders });
+  }
   if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
