@@ -50,6 +50,8 @@ type M3UEntryDTO = {
   group?: string;
 };
 
+type M3UResultDTO = { entries: M3UEntryDTO[]; error?: string };
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -143,40 +145,104 @@ function buildM3UUrl(raw: string, username?: string, password?: string): string 
   return target;
 }
 
+function getXtreamAccess(raw: string, username?: string, password?: string) {
+  let target = (raw || "").trim();
+  if (!target) return null;
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+  try {
+    const u = new URL(target);
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (!user || !pass) return null;
+    return { origin: u.origin, username: user, password: pass };
+  } catch {
+    return null;
+  }
+}
+
+function mapXtreamLiveStreams(data: unknown, access: NonNullable<ReturnType<typeof getXtreamAccess>>): M3UEntryDTO[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item, i) => {
+      const stream = item as Record<string, unknown>;
+      const id = stream.stream_id;
+      const name = typeof stream.name === "string" ? stream.name : `Canal ${i + 1}`;
+      if (id === undefined || id === null) return null;
+      return {
+        id: `xtream-live-${String(id)}`,
+        name: decodeEntities(name),
+        url: `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`,
+        logo: typeof stream.stream_icon === "string" ? stream.stream_icon : undefined,
+        group: typeof stream.category_name === "string" ? stream.category_name : undefined,
+      } satisfies M3UEntryDTO;
+    })
+    .filter((entry): entry is M3UEntryDTO => Boolean(entry));
+}
+
 export const fetchM3U = createServerFn({ method: "POST" })
   .inputValidator(
     (d: { url: string; username?: string; password?: string }) => d,
   )
-  .handler(async ({ data }): Promise<{ entries: M3UEntryDTO[] }> => {
-    const target = buildM3UUrl(data.url, data.username, data.password);
+  .handler(async ({ data }): Promise<M3UResultDTO> => {
+    const access = getXtreamAccess(data.url, data.username, data.password);
+    const tried: string[] = [];
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
-    let res: Response;
+    async function fetchText(target: string) {
+      tried.push(target);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch(target, {
+          headers: {
+            "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+            Accept: "*/*",
+          },
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        const text = await res.text();
+        if (!res.ok) return { text, error: `Servidor respondeu ${res.status}` };
+        return { text };
+      } catch (e) {
+        return { text: "", error: e instanceof Error ? e.message : "falha de rede" };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     try {
-      res = await fetch(target, {
-        headers: {
-          "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
-          Accept: "*/*",
-        },
-        redirect: "follow",
-        signal: controller.signal,
-      });
+      const target = buildM3UUrl(data.url, data.username, data.password);
+      const first = await fetchText(target);
+      if (first.text.includes("#EXTINF")) {
+        const entries = parseM3UText(first.text);
+        if (entries.length) return { entries };
+      }
+
+      if (access) {
+        const liveUrl = new URL(`${access.origin}/player_api.php`);
+        liveUrl.searchParams.set("username", access.username);
+        liveUrl.searchParams.set("password", access.password);
+        liveUrl.searchParams.set("action", "get_live_streams");
+
+        const live = await fetchText(liveUrl.toString());
+        try {
+          const entries = mapXtreamLiveStreams(JSON.parse(live.text), access);
+          if (entries.length) return { entries };
+        } catch {
+          // keep controlled error below
+        }
+      }
+
+      const snippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
+      return {
+        entries: [],
+        error: `${first.error || "Conteúdo não parece M3U válido"}. Verifique URL/usuário/senha.${snippet ? ` Resposta: ${snippet}` : ""}`,
+      };
     } catch (e) {
-      clearTimeout(timer);
-      throw new Error(`Falha de rede: ${e instanceof Error ? e.message : "desconhecida"}`);
+      return {
+        entries: [],
+        error: e instanceof Error ? e.message : "Falha ao carregar a lista M3U",
+      };
     }
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`Servidor M3U respondeu ${res.status}`);
-    const text = await res.text();
-    if (!text.includes("#EXTINF")) {
-      const snippet = text.slice(0, 120).replace(/\s+/g, " ").trim();
-      throw new Error(
-        `Conteúdo não parece M3U válido. Verifique URL/usuário/senha. Resposta: ${snippet || "(vazia)"}`,
-      );
-    }
-    const entries = parseM3UText(text);
-    if (!entries.length) throw new Error("Nenhum canal encontrado na lista");
-    return { entries };
   });
 
