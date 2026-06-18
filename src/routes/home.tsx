@@ -84,7 +84,17 @@ function HomePage() {
 
       {/* Top bar */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4">
-        <div className="w-32" />
+        <div className="flex w-32 items-center gap-2.5">
+          <div className="grid size-10 place-items-center rounded-xl bg-brand-gradient shadow-glow">
+            <Tv className="size-5 text-primary-foreground" strokeWidth={2.25} />
+          </div>
+          <div className="leading-none">
+            <div className="font-display text-base font-bold tracking-tight">SoaresTV</div>
+            <div className="mt-1 text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+              IPTV Player
+            </div>
+          </div>
+        </div>
         <h1 className="text-2xl font-bold tracking-[0.3em] text-primary">
           SOARES <span className="text-foreground">TV</span>
         </h1>

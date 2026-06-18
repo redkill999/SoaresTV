@@ -99,7 +99,9 @@ export function AppShell({
         <div className="sticky top-0 z-20 glass border-b border-border/50">
           <div className="flex items-center gap-3 px-4 sm:px-6 py-3">
             <Link to="/live" className="lg:hidden flex items-center gap-2 shrink-0">
-              <div className="size-8 rounded-lg bg-brand-gradient shadow-glow" />
+              <div className="size-8 rounded-lg bg-brand-gradient shadow-glow grid place-items-center">
+                <Tv className="size-4 text-primary-foreground" strokeWidth={2.25} />
+              </div>
               <span className="font-display font-bold tracking-tight">SoaresTV</span>
             </Link>
             {onSearch && (
