@@ -152,11 +152,15 @@ function PlayerPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => store.toggleFav({ type: type as never, id, name: activeTitle || name })}
+              onClick={() => {
+                if (!type) return;
+                store.toggleFav({ type, id, name: activeTitle || name });
+              }}
             >
               <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
               Favorito
             </Button>
+
           </div>
         </div>
 
