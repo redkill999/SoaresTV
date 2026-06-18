@@ -98,8 +98,12 @@ export function parseM3U(text: string): M3UEntry[] {
   return out;
 }
 
-export async function loadM3U(url: string): Promise<M3UEntry[]> {
-  const r = await fetchM3U({ data: { url } });
+export async function loadM3U(
+  url: string,
+  username?: string,
+  password?: string,
+): Promise<M3UEntry[]> {
+  const r = await fetchM3U({ data: { url, username, password } });
   return r.entries as M3UEntry[];
 }
 

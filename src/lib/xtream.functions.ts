@@ -95,12 +95,60 @@ function parseM3UText(text: string): M3UEntryDTO[] {
   return out;
 }
 
+function buildM3UUrl(raw: string, username?: string, password?: string): string {
+  let target = (raw || "").trim();
+  if (!target) throw new Error("URL vazia");
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+
+  let u: URL;
+  try {
+    u = new URL(target);
+  } catch {
+    throw new Error("URL inválida");
+  }
+
+  const path = u.pathname.toLowerCase();
+  const looksXtream =
+    path.endsWith("/player_api.php") ||
+    path === "/" ||
+    path === "" ||
+    (!path.endsWith(".m3u") && !path.endsWith(".m3u8") && !path.endsWith("/get.php"));
+
+  if (looksXtream) {
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (!user || !pass) {
+      // bare DNS with no credentials — likely not an m3u file
+      if (path === "/" || path === "") {
+        throw new Error("Para URLs Xtream informe usuário e senha");
+      }
+    }
+    const out = new URL(`${u.origin}/get.php`);
+    if (user) out.searchParams.set("username", user);
+    if (pass) out.searchParams.set("password", pass);
+    out.searchParams.set("type", "m3u_plus");
+    out.searchParams.set("output", "ts");
+    return out.toString();
+  }
+
+  // explicit get.php — make sure m3u_plus params are set
+  if (path.endsWith("/get.php")) {
+    if (username && !u.searchParams.get("username")) u.searchParams.set("username", username);
+    if (password && !u.searchParams.get("password")) u.searchParams.set("password", password);
+    if (!u.searchParams.get("type")) u.searchParams.set("type", "m3u_plus");
+    if (!u.searchParams.get("output")) u.searchParams.set("output", "ts");
+    return u.toString();
+  }
+
+  return target;
+}
+
 export const fetchM3U = createServerFn({ method: "POST" })
-  .inputValidator((d: { url: string }) => d)
+  .inputValidator(
+    (d: { url: string; username?: string; password?: string }) => d,
+  )
   .handler(async ({ data }): Promise<{ entries: M3UEntryDTO[] }> => {
-    let target = (data.url || "").trim();
-    if (!target) throw new Error("URL vazia");
-    if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+    const target = buildM3UUrl(data.url, data.username, data.password);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 60_000);
@@ -121,10 +169,14 @@ export const fetchM3U = createServerFn({ method: "POST" })
     clearTimeout(timer);
     if (!res.ok) throw new Error(`Servidor M3U respondeu ${res.status}`);
     const text = await res.text();
-    if (!text.includes("#EXTM3U") && !text.includes("#EXTINF")) {
-      throw new Error("Conteúdo não parece ser uma lista M3U válida");
+    if (!text.includes("#EXTINF")) {
+      const snippet = text.slice(0, 120).replace(/\s+/g, " ").trim();
+      throw new Error(
+        `Conteúdo não parece M3U válido. Verifique URL/usuário/senha. Resposta: ${snippet || "(vazia)"}`,
+      );
     }
     const entries = parseM3UText(text);
     if (!entries.length) throw new Error("Nenhum canal encontrado na lista");
     return { entries };
   });
+
