@@ -20,7 +20,7 @@ function proxied(url: string): string {
   return `/api/stream?u=${encodeURIComponent(url)}`;
 }
 
-export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
+export function VideoPlayer({ src, poster, kind }: { src: string; poster?: string; kind?: "live" | "vod" }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +29,12 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
     if (!video || !src) return;
     setError(null);
 
-    const hlsCandidate = toHlsCandidate(src);
+    const hlsCandidate = toHlsCandidate(src, kind);
     const hlsProxied = hlsCandidate ? proxied(hlsCandidate) : null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
-    const isVod = /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src);
+    const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src);
     const isLive = /\/live\/[^/]+\/[^/]+\//i.test(src);
     const vodCandidates: string[] = [];
     const vodMatch = src.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
@@ -50,6 +50,9 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
       }
     }
     if (!vodCandidates.length) vodCandidates.push(src);
+    const playbackCandidates = isVod
+      ? vodCandidates.flatMap((url) => (/^https:\/\//i.test(url) ? [url, proxied(url)] : [proxied(url)]))
+      : vodCandidates.map((url) => proxied(url));
 
     let hls: Hls | null = null;
     let cancelled = false;
@@ -69,7 +72,7 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
         hls = null;
       }
       vodIdx += 1;
-      if (vodIdx < vodCandidates.length) playDirect();
+      if (vodIdx < playbackCandidates.length) playDirect();
       else setError("Não foi possível reproduzir esta mídia.");
     };
 
@@ -88,12 +91,12 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
         hls = null;
       }
       triedDirect = true;
-      const url = vodCandidates[vodIdx] ?? src;
+      const url = playbackCandidates[vodIdx] ?? proxied(src);
       if (/\.m3u8(\?|$)/i.test(url)) {
-        attachHls(proxied(url));
+        attachHls(url);
         return;
       }
-      video.src = proxied(url);
+      video.src = url;
       video.load();
       armVodWatchdog();
       video.play().catch(() => {});
@@ -173,7 +176,7 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
       video.removeAttribute("src");
       video.load();
     };
-  }, [src]);
+  }, [src, kind]);
 
 
   return (
