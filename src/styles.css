@@ -130,9 +130,9 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border-radius: var(--radius-md);
 }
 
-/* TV-mode: on touch phones we set <meta viewport width=1280> via JS so
-   Tailwind md/lg/xl breakpoints kick in (layout viewport = 1280 CSS px),
-   then we rotate + scale the 1280x720 canvas to fit the physical screen. */
+/* TV-mode: on small screens, JS sets <meta viewport width=1280> + computes
+   --tv-scale, --tv-vw, --tv-vh, and data-tv-orientation. We then rotate/scale
+   the 1280x720 canvas to fit the viewport. */
 html[data-tv-mode],
 html[data-tv-mode] body {
   margin: 0;
@@ -146,56 +146,42 @@ html[data-tv-mode] {
   height: 100vh;
 }
 
-/* Portrait phone: rotate 90deg and fit 16:9 canvas */
-@media (orientation: portrait) {
-  html[data-tv-mode] body {
-    --design-w: 1280px;
-    --design-h: 720px;
-    --scale: min(calc(100vw / 720px), calc(100vh / 1280px));
-    width: var(--design-w);
-    height: var(--design-h);
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-    transform:
-      translate(
-        calc((100vw + var(--design-h) * var(--scale)) / 2),
-        calc((100vh - var(--design-w) * var(--scale)) / 2)
-      )
-      rotate(90deg)
-      scale(var(--scale));
-    overflow: hidden;
-  }
-  html[data-tv-mode] body .min-h-screen { min-height: 720px !important; }
-  html[data-tv-mode] body .h-screen { height: 720px !important; }
-  html[data-tv-mode] body .max-h-screen { max-height: 720px !important; }
+html[data-tv-mode] body {
+  width: 1280px;
+  height: 720px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  overflow: hidden;
 }
 
-/* Landscape phone: no rotation, just scale-to-fit centered */
-@media (orientation: landscape) {
-  html[data-tv-mode] body {
-    --design-w: 1280px;
-    --design-h: 720px;
-    --scale: min(calc(100vw / 1280px), calc(100vh / 720px));
-    width: var(--design-w);
-    height: var(--design-h);
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-    transform:
-      translate(
-        calc((100vw - var(--design-w) * var(--scale)) / 2),
-        calc((100vh - var(--design-h) * var(--scale)) / 2)
-      )
-      scale(var(--scale));
-    overflow: hidden;
-  }
-  html[data-tv-mode] body .min-h-screen { min-height: 720px !important; }
-  html[data-tv-mode] body .h-screen { height: 720px !important; }
-  html[data-tv-mode] body .max-h-screen { max-height: 720px !important; }
+/* Portrait: rotate 90deg, scale-to-fit, centered */
+html[data-tv-mode][data-tv-orientation="portrait"] body {
+  transform:
+    translate(
+      calc((var(--tv-vw) + 720px * var(--tv-scale)) / 2),
+      calc((var(--tv-vh) - 1280px * var(--tv-scale)) / 2)
+    )
+    rotate(90deg)
+    scale(var(--tv-scale));
 }
+
+/* Landscape: no rotation, scale-to-fit, centered */
+html[data-tv-mode][data-tv-orientation="landscape"] body {
+  transform:
+    translate(
+      calc((var(--tv-vw) - 1280px * var(--tv-scale)) / 2),
+      calc((var(--tv-vh) - 720px * var(--tv-scale)) / 2)
+    )
+    scale(var(--tv-scale));
+}
+
+/* Tailwind's *-screen utilities use 100vh which now equals the inflated
+   layout-viewport height (e.g. 2770px). Pin to the canvas. */
+html[data-tv-mode] body .min-h-screen { min-height: 720px !important; }
+html[data-tv-mode] body .h-screen { height: 720px !important; }
+html[data-tv-mode] body .max-h-screen { max-height: 720px !important; }
 
 
 
