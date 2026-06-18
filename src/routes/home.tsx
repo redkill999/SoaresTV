@@ -48,7 +48,7 @@ function HomePage() {
     if (!store.getCreds()) navigate({ to: "/" });
   }, [navigate]);
 
-  if (!mounted) return null;
+  if (!mounted) return <HomeSkeleton />;
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
