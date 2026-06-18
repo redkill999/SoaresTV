@@ -96,7 +96,7 @@ function PlayerPage() {
       <div className="grid lg:grid-cols-[1fr_320px] gap-6">
         <div>
           {url ? (
-            <VideoPlayer src={url} />
+            <VideoPlayer src={url} kind={type === "live" ? "live" : "vod"} />
           ) : (
             <div className="aspect-video bg-card rounded-xl flex items-center justify-center text-muted-foreground">
               {type === "series" ? "Selecione um episódio" : "Carregando…"}
