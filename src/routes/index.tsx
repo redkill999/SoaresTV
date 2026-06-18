@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
+import { api, discoverPanelServer, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -54,13 +54,8 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setResult("");
-    const normalizedServer = normalizeServer(server);
-    const creds = { server: normalizedServer, username, password };
-    const playlistUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
-      username,
-    )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
-    const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
-    const savedList = { name: listName, url: playlistUrl, username, password };
+    let normalizedServer = normalizeServer(server);
+    let creds = { server: normalizedServer, username, password };
 
     try {
       let info: unknown = null;
@@ -69,21 +64,33 @@ function LoginPage() {
       try {
         info = await login(creds);
       } catch (loginErr) {
+        if (/dashboard|painel/i.test(server) || /não parece ser o DNS Xtream|player_api\.php\/get\.php/i.test(loginErr instanceof Error ? loginErr.message : "")) {
+          const discovered = await discoverPanelServer(creds);
+          normalizedServer = discovered.server;
+          creds = { server: normalizedServer, username, password };
+          info = await login(creds);
+        } else {
+          throw loginErr;
+        }
+      }
+
+      const playlistUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
+        username,
+      )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+      const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
+      const savedList = { name: listName, url: playlistUrl, username, password };
+
+      if (!entries.length) {
+        try {
         entries = await loadM3U(playlistUrl, username, password);
-        if (!entries.length) throw loginErr;
+        } catch {
+          entries = [];
+        }
       }
 
       store.setCreds(creds);
       const others = store.getM3U().filter((l) => l.url !== playlistUrl);
       store.setM3U([savedList, ...others]);
-
-      if (!entries.length) {
-        try {
-          entries = await loadM3U(playlistUrl, username, password);
-        } catch {
-          entries = [];
-        }
-      }
 
       if (entries.length) {
         m3uCache.set(playlistUrl, listName, entries);
