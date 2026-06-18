@@ -45,7 +45,9 @@ function HomePage() {
 
   useEffect(() => {
     setMounted(true);
-    if (!store.getCreds()) navigate({ to: "/" });
+    const hasCreds = !!store.getCreds();
+    const hasM3U = store.getM3U().length > 0;
+    if (!hasCreds && !hasM3U) navigate({ to: "/" });
   }, [navigate]);
 
   if (!mounted) return <HomeSkeleton />;
