@@ -130,11 +130,18 @@ function PlayerPage() {
   return (
     <AppShell>
       <button
-        onClick={() => history.back()}
+        onClick={() => {
+          if (typeof window !== "undefined" && window.history.length > 1) {
+            window.history.back();
+          } else {
+            navigate({ to: "/home" });
+          }
+        }}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft className="size-4" /> Voltar
       </button>
+
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-6">
         <div>
