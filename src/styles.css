@@ -130,10 +130,10 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border-radius: var(--radius-md);
 }
 
-/* Force landscape (TV-like) layout on portrait phones/tablets.
-   The app is rendered onto a fixed 1280x720 canvas and then rotated
-   90deg + scaled to fit the screen, so the WHOLE page is always
-   visible (proper proportion) regardless of device size. */
+/* Force a fixed 16:9 (1280x720) TV-like canvas on phones/small tablets.
+   - Portrait: rotate 90deg + scale-to-fit, perfectly centered.
+   - Landscape: scale-to-fit (no rotation), perfectly centered.
+   The WHOLE page is always visible with correct 16:9 proportion. */
 @media (max-width: 820px) and (orientation: portrait) {
   html {
     overflow: hidden;
@@ -146,7 +146,41 @@ h1, h2, h3, h4, h5, h6, .font-display {
   body {
     --design-w: 1280px;
     --design-h: 720px;
-    --scale: min(calc(100vh / 1280), calc(100vw / 720));
+    /* Fit rotated canvas (720 wide x 1280 tall) into viewport */
+    --scale: min(calc(100vw / 720), calc(100vh / 1280));
+    margin: 0;
+    width: var(--design-w);
+    height: var(--design-h);
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    /* After rotate(90), body occupies x:[-720*s,0], y:[0,1280*s].
+       Center: tx = (100vw + 720*s)/2, ty = (100vh - 1280*s)/2. */
+    transform:
+      translate(
+        calc((100vw + var(--design-h) * var(--scale)) / 2),
+        calc((100vh - var(--design-w) * var(--scale)) / 2)
+      )
+      rotate(90deg)
+      scale(var(--scale));
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 950px) and (orientation: landscape) and (max-height: 500px) {
+  html {
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    background: var(--background);
+  }
+  body {
+    --design-w: 1280px;
+    --design-h: 720px;
+    --scale: min(calc(100vw / 1280), calc(100vh / 720));
     margin: 0;
     width: var(--design-w);
     height: var(--design-h);
@@ -156,10 +190,9 @@ h1, h2, h3, h4, h5, h6, .font-display {
     transform-origin: 0 0;
     transform:
       translate(
-        calc((100vw + var(--design-h) * var(--scale)) / 2),
-        calc((100vh - var(--design-w) * var(--scale)) / 2)
+        calc((100vw - var(--design-w) * var(--scale)) / 2),
+        calc((100vh - var(--design-h) * var(--scale)) / 2)
       )
-      rotate(90deg)
       scale(var(--scale));
     overflow: hidden;
   }
