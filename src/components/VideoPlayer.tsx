@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
 
+async function lockLandscape() {
+  try {
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    await ScreenOrientation.lock({ orientation: "landscape" });
+  } catch {
+    // not native or plugin unavailable
+  }
+}
+
+async function unlockOrientation() {
+  try {
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    await ScreenOrientation.unlock();
+  } catch {
+    // ignore
+  }
+}
+
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
@@ -226,6 +244,28 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       video.load();
     };
   }, [src, kind]);
+
+  // No APK Android, força paisagem ao entrar em tela cheia e libera ao sair.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onFsChange = () => {
+      const isFs = !!(document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement);
+      if (isFs) void lockLandscape();
+      else void unlockOrientation();
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange);
+    video.addEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
+    video.addEventListener("webkitendfullscreen", unlockOrientation as EventListener);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange);
+      video.removeEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
+      video.removeEventListener("webkitendfullscreen", unlockOrientation as EventListener);
+      void unlockOrientation();
+    };
+  }, []);
 
 
   return (
