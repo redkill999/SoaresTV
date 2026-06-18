@@ -1,4 +1,4 @@
-import { xtreamApi, fetchM3U } from "./xtream.functions";
+import { discoverPanelXtreamServer, xtreamApi, fetchM3U } from "./xtream.functions";
 import type { XtreamCreds } from "./storage";
 
 export type LiveCategory = { category_id: string; category_name: string };
@@ -106,6 +106,10 @@ export async function login(c: XtreamCreds) {
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
   return r;
+}
+
+export async function discoverPanelServer(c: XtreamCreds) {
+  return discoverPanelXtreamServer({ data: c });
 }
 
 export const normalizeServer = (s: string) => {
