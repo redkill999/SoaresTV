@@ -60,6 +60,23 @@ export const normalizeServer = (s: string) => {
   return v;
 };
 
+export function xtreamCredsFromUrl(
+  raw: string,
+  username?: string,
+  password?: string,
+): XtreamCreds | null {
+  const normalized = normalizeServer(raw || "");
+  try {
+    const u = new URL(normalized);
+    const user = u.searchParams.get("username") || username || "";
+    const pass = u.searchParams.get("password") || password || "";
+    if (!user || !pass) return null;
+    return { server: u.origin, username: user, password: pass };
+  } catch {
+    return null;
+  }
+}
+
 export const streamUrl = {
   live: (c: XtreamCreds, id: number | string) =>
     `${normalizeServer(c.server)}/live/${c.username}/${c.password}/${id}.m3u8`,
