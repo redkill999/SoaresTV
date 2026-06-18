@@ -56,7 +56,8 @@ function HomePage() {
   if (!mounted) return <HomeSkeleton />;
 
   const openTile = (to: string) => {
-    if (m3uList && !store.getCreds()) {
+    const usesPlaylistContent = to === "/live" || to === "/movies" || to === "/series";
+    if (m3uList && !store.getCreds() && usesPlaylistContent) {
       navigate({ to: "/playlist", search: { url: m3uList.url, name: m3uList.name } });
       return;
     }
@@ -101,12 +102,12 @@ function HomePage() {
       <footer className="relative z-10 mx-auto mt-8 grid max-w-6xl grid-cols-2 gap-5 px-6 pb-8">
         <div className="grid grid-cols-3 gap-3">
           {BOTTOM_LEFT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => navigate({ to: t.to })} />
+            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
           ))}
         </div>
         <div className="grid grid-cols-3 gap-3">
           {BOTTOM_RIGHT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => navigate({ to: t.to })} />
+            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
           ))}
         </div>
       </footer>
