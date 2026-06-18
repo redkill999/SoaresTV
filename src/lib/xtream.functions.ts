@@ -76,13 +76,13 @@ export const xtreamApi = createServerFn({ method: "POST" })
       } finally {
         clearTimeout(timer);
       }
-      // backoff: 400ms, 1200ms
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
+      // Short backoff between UA attempts (200ms) — total ~1.4s for 7 tries
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     if (lastStatus === 503 || lastStatus === 502 || lastStatus === 504) {
       throw new Error(
-        `Servidor Xtream indisponível no momento (HTTP ${lastStatus}). Tente novamente em alguns segundos ou verifique se o painel está fora do ar.`,
+        `Painel Xtream rejeitou o acesso (HTTP ${lastStatus}) mesmo após tentar vários User-Agents. Pode ser bloqueio de IP do servidor (datacenter). Tente novamente em alguns segundos.`,
       );
     }
     if (lastStatus === 401 || lastStatus === 403) {
