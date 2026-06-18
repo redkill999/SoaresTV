@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // viewport is set dynamically by TV_MODE_SCRIPT (mobile -> width=1280, else width=device-width)
       { title: "SoaresTV — IPTV Player" },
       { name: "description", content: "Player IPTV web com Xtream Codes, M3U, EPG, filmes e séries." },
       { name: "author", content: "SoaresTV" },
