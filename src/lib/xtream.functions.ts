@@ -45,7 +45,25 @@ export const xtreamApi = createServerFn({ method: "POST" })
 export const fetchM3U = createServerFn({ method: "POST" })
   .inputValidator((d: { url: string }) => d)
   .handler(async ({ data }) => {
-    const res = await fetch(data.url, { headers: { "User-Agent": "Mozilla/5.0 SoaresTV" } });
-    if (!res.ok) throw new Error(`M3U ${res.status}`);
-    return { text: await res.text() };
+    let target = (data.url || "").trim();
+    if (!target) throw new Error("URL vazia");
+    if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
+    let res: Response;
+    try {
+      res = await fetch(target, {
+        headers: {
+          "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+          Accept: "*/*",
+        },
+        redirect: "follow",
+      });
+    } catch (e) {
+      throw new Error(`Falha de rede: ${e instanceof Error ? e.message : "desconhecida"}`);
+    }
+    if (!res.ok) throw new Error(`Servidor M3U respondeu ${res.status}`);
+    const text = await res.text();
+    if (!text.includes("#EXTM3U") && !text.includes("#EXTINF")) {
+      throw new Error("Conteúdo não parece ser uma lista M3U válida");
+    }
+    return { text };
   });
