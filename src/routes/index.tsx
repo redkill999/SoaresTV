@@ -98,14 +98,6 @@ function LoginPage() {
       const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
       const savedList = { name: listName, url: playlistUrl, username, password, mode: "xtream" as const };
 
-      if (!entries.length) {
-        try {
-          entries = await loadM3U(playlistUrl, username, password);
-        } catch {
-          entries = [];
-        }
-      }
-
       store.setCreds(creds);
       const others = store.getM3U().filter((l) => l.url !== playlistUrl);
       store.setM3U([savedList, ...others]);
