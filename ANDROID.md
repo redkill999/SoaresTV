@@ -42,6 +42,7 @@ bunx cap open android
 
 - **Mudou só o site (frontend/backend no Lovable)?** Não precisa gerar APK de novo — o APK já abre o site atualizado automaticamente.
 - **Mudou ícone, nome do app ou configuração nativa?** Rode `bunx cap sync android` e gere novo APK.
+- **Mudou conexão HTTP/IPTV?** Rode `bunx cap sync android`, gere um APK novo e desinstale o APK antigo do celular antes de instalar de novo. A configuração atual libera HTTP puro e ativa o HTTP nativo do Android para servidores Xtream que bloqueiam navegador/proxy.
 
 ## Ícone e Splash Screen
 

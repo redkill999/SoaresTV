@@ -9,11 +9,16 @@ const config: CapacitorConfig = {
   // Se um dia quiser empacotar offline, remova o bloco `server` e rode `bun run build` antes de `cap sync`.
   server: {
     url: 'https://tv-magica-brasa-soarestv.lovable.app',
-    cleartext: false,
+    cleartext: true,
     androidScheme: 'https',
   },
   android: {
     allowMixedContent: true,
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 };
 
