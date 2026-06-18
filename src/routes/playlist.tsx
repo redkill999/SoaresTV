@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Search, Heart, ListVideo } from "lucide-react";
+import { ArrowLeft, Search, Heart, ListVideo, Trash2 } from "lucide-react";
 import { loadM3U, type M3UEntry } from "@/lib/xtream";
 import { store } from "@/lib/storage";
 import { m3uCache } from "@/lib/m3u-cache";
+import { toast } from "sonner";
 
 const MAX_RENDER = 500;
 
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/playlist")({
 function PlaylistPage() {
   const { url: urlParam, name } = Route.useSearch();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<M3UEntry | null>(null);
   const [group, setGroup] = useState<string>("all");
@@ -97,14 +99,14 @@ function PlaylistPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/" })}>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/home" })}>
           <ArrowLeft className="size-4" /> Voltar
         </Button>
         <div className="size-9 rounded-xl bg-brand-gradient shadow-glow" />
-        <div>
-          <h1 className="font-bold flex items-center gap-2">
-            <ListVideo className="size-4" /> {displayName}
+        <div className="flex-1 min-w-0">
+          <h1 className="font-bold flex items-center gap-2 truncate">
+            <ListVideo className="size-4 shrink-0" /> {displayName}
           </h1>
           <p className="text-xs text-muted-foreground">
             {q.isLoading
@@ -115,6 +117,26 @@ function PlaylistPage() {
                   : "")}
           </p>
         </div>
+        <PlaylistSwitcher
+          currentUrl={fallbackUrl}
+          onPick={(p) => {
+            m3uCache.clear();
+            setActive(null);
+            navigate({ to: "/playlist", search: { url: p.url, name: p.name } });
+          }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            m3uCache.clear();
+            qc.invalidateQueries({ queryKey: ["m3u"] });
+            setActive(null);
+            toast.success("Cache da lista limpo");
+          }}
+        >
+          <Trash2 className="size-4" /> Limpar cache
+        </Button>
       </div>
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
@@ -223,5 +245,32 @@ function PlaylistPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function PlaylistSwitcher({
+  currentUrl,
+  onPick,
+}: {
+  currentUrl: string;
+  onPick: (p: { url: string; name: string }) => void;
+}) {
+  const lists = typeof window !== "undefined" ? store.getM3U() : [];
+  if (lists.length <= 1) return null;
+  return (
+    <select
+      value={currentUrl}
+      onChange={(e) => {
+        const found = lists.find((l) => l.url === e.target.value);
+        if (found) onPick({ url: found.url, name: found.name });
+      }}
+      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs max-w-[200px]"
+    >
+      {lists.map((l) => (
+        <option key={l.url} value={l.url} className="bg-background">
+          {l.name}
+        </option>
+      ))}
+    </select>
   );
 }
