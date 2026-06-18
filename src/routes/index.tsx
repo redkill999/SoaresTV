@@ -55,7 +55,7 @@ function LoginPage() {
       store.setCreds(creds);
       setResult(JSON.stringify(info, null, 2));
       toast.success("Conectado ao Xtream!");
-      setTimeout(() => navigate({ to: "/live" }), 600);
+      setTimeout(() => navigate({ to: "/home" }), 600);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro";
       setResult(msg);
@@ -103,7 +103,7 @@ function LoginPage() {
       if (!exists) store.setM3U([...lists, { name, url }]);
       m3uCache.set(url, name, entries);
       toast.success(`${entries.length} canais carregados`);
-      navigate({ to: "/playlist", search: { name } });
+      navigate({ to: "/home" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao carregar M3U");
     } finally {
