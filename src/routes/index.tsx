@@ -206,7 +206,7 @@ function LoginPage() {
               <TabsTrigger value="xtream" className="data-[state=active]:bg-brand-gradient data-[state=active]:text-white">
                 Xtream Codes
               </TabsTrigger>
-              <TabsTrigger value="m3u">
+              <TabsTrigger value="m3u" className="data-[state=active]:bg-brand-gradient data-[state=active]:text-white">
                 Lista M3U
               </TabsTrigger>
             </TabsList>
