@@ -90,20 +90,27 @@ function LoginPage() {
 
   const onM3U = async (e: React.FormEvent) => {
     e.preventDefault();
+    const raw = m3uUrl.trim();
+    const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
     setM3uLoading(true);
     try {
-      const entries = await loadM3U(m3uUrl);
+      const entries = await loadM3U(url);
       if (!entries.length) throw new Error("Lista vazia");
       const lists = store.getM3U();
-      const exists = lists.find((l) => l.url === m3uUrl);
-      if (!exists) store.setM3U([...lists, { name: m3uName || "Lista M3U", url: m3uUrl }]);
+      const exists = lists.find((l) => l.url === url);
+      if (!exists) store.setM3U([...lists, { name: m3uName || "Lista M3U", url }]);
       toast.success(`${entries.length} canais carregados`);
-      navigate({ to: "/playlist", search: { url: m3uUrl, name: m3uName || "Lista M3U" } });
+      navigate({ to: "/playlist", search: { url, name: m3uName || "Lista M3U" } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao carregar M3U");
     } finally {
       setM3uLoading(false);
     }
+  };
+
+  const loadSample = () => {
+    setM3uName("IPTV-Org (teste)");
+    setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
 
   if (splash) {
