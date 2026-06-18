@@ -103,6 +103,9 @@ export function AppShell({
                 />
               </div>
             )}
+            <div className="ml-auto">
+              <ThemeSwitcher />
+            </div>
           </div>
           {/* Mobile nav */}
           <div className="md:hidden flex gap-1 overflow-x-auto px-3 pb-3">
