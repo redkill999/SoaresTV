@@ -38,6 +38,8 @@ function LoginPage() {
   // M3U state
   const [m3uName, setM3uName] = useState("");
   const [m3uUrl, setM3uUrl] = useState("");
+  const [m3uUser, setM3uUser] = useState("");
+  const [m3uPass, setM3uPass] = useState("");
   const [m3uLoading, setM3uLoading] = useState(false);
 
   useEffect(() => {
@@ -94,9 +96,11 @@ function LoginPage() {
     const raw = m3uUrl.trim();
     const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
     const name = m3uName.trim() || "Lista M3U";
+    const user = m3uUser.trim() || undefined;
+    const pass = m3uPass.trim() || undefined;
     setM3uLoading(true);
     try {
-      const entries = await loadM3U(url);
+      const entries = await loadM3U(url, user, pass);
       if (!entries.length) throw new Error("Lista vazia");
       const lists = store.getM3U();
       const exists = lists.find((l) => l.url === url);
@@ -255,15 +259,41 @@ function LoginPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="m3u-url" className="text-xs tracking-wider text-muted-foreground">URL .M3U / .M3U8</Label>
+                  <Label htmlFor="m3u-url" className="text-xs tracking-wider text-muted-foreground">URL .M3U / DNS XTREAM</Label>
                   <Input
                     id="m3u-url"
                     required
-                    placeholder="https://exemplo.com/lista.m3u"
+                    placeholder="http://seudns.com:8080 ou https://exemplo.com/lista.m3u"
                     value={m3uUrl}
                     onChange={(e) => setM3uUrl(e.target.value)}
                     className="bg-white/5 border-white/10 h-11"
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    Aceita URL Xtream (DNS + usuário/senha abaixo) ou link direto .m3u/.m3u8.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="m3u-user" className="text-xs tracking-wider text-muted-foreground">USUÁRIO (XTREAM)</Label>
+                    <Input
+                      id="m3u-user"
+                      placeholder="opcional"
+                      value={m3uUser}
+                      onChange={(e) => setM3uUser(e.target.value)}
+                      className="bg-white/5 border-white/10 h-11"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="m3u-pass" className="text-xs tracking-wider text-muted-foreground">SENHA (XTREAM)</Label>
+                    <Input
+                      id="m3u-pass"
+                      type="password"
+                      placeholder="opcional"
+                      value={m3uPass}
+                      onChange={(e) => setM3uPass(e.target.value)}
+                      className="bg-white/5 border-white/10 h-11"
+                    />
+                  </div>
                 </div>
                 <Button
                   type="submit"
