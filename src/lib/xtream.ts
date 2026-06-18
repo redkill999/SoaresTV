@@ -102,3 +102,36 @@ export async function loadM3U(url: string) {
   const r = await fetchM3U({ data: { url } });
   return parseM3U(r.text);
 }
+
+// --- EPG ---
+export type EpgListing = {
+  id: string;
+  title: string;
+  description?: string;
+  start_timestamp: string;
+  stop_timestamp: string;
+};
+
+function b64decode(s: string): string {
+  try {
+    if (typeof atob !== "undefined") return decodeURIComponent(escape(atob(s)));
+    // node fallback
+    return Buffer.from(s, "base64").toString("utf-8");
+  } catch {
+    return s;
+  }
+}
+
+export async function getShortEpg(c: XtreamCreds, streamId: number | string, limit = 4) {
+  const r = await api<{ epg_listings?: Array<{ id: string; title: string; description?: string; start_timestamp: string; stop_timestamp: string }> }>(
+    c,
+    "get_short_epg",
+    { stream_id: streamId, limit },
+  );
+  const list = r?.epg_listings ?? [];
+  return list.map((e) => ({
+    ...e,
+    title: b64decode(e.title),
+    description: e.description ? b64decode(e.description) : undefined,
+  }));
+}
