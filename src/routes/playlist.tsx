@@ -5,7 +5,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Search, Heart, ListVideo, Trash2 } from "lucide-react";
-import { loadM3U, type M3UEntry } from "@/lib/xtream";
+import { loadM3U, type M3UEntry, xtreamCredsFromUrl } from "@/lib/xtream";
 import { store } from "@/lib/storage";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
@@ -51,6 +51,12 @@ function PlaylistPage() {
   const savedList = savedLists.find((l) => l.url === (urlParam || cached?.url)) ?? savedLists[0];
   const fallbackUrl = urlParam || cached?.url || savedList?.url || "";
   const displayName = name || cached?.name || savedList?.name || "Lista M3U";
+
+  useEffect(() => {
+    if (!fallbackUrl) return;
+    const xtreamCreds = xtreamCredsFromUrl(fallbackUrl, savedList?.username, savedList?.password);
+    if (xtreamCreds && !store.getCreds()) store.setCreds(xtreamCreds);
+  }, [fallbackUrl, savedList?.username, savedList?.password]);
 
   const q = useQuery({
     queryKey: ["m3u", fallbackUrl, savedList?.username, savedList?.password],
