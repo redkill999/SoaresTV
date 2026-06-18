@@ -8,6 +8,8 @@ import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type Ta
 import { ParentalGate } from "@/components/ParentalGate";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Tv } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
