@@ -184,8 +184,8 @@ function PlaylistPage() {
               <p className="text-xs text-muted-foreground text-center py-4">Carregando…</p>
             )}
             {q.isError && (
-              <p className="text-xs text-destructive text-center py-4">
-                Falha ao carregar a lista
+              <p className="text-xs text-destructive text-center py-4 px-2 break-words">
+                {q.error instanceof Error ? q.error.message : "Falha ao carregar a lista"}
               </p>
             )}
           </div>
