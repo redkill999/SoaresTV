@@ -131,7 +131,7 @@ function MoviesPage() {
         empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Film className="size-7" />}
-        emptyTitle={emptyTitle(tab, "filme")}
+        emptyTitle={emptyTitle(tab, "movie")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((m) => (
