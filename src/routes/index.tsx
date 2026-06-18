@@ -99,9 +99,9 @@ function LoginPage() {
     const user = m3uUser.trim() || undefined;
     const pass = m3uPass.trim() || undefined;
     const savedList = { name, url, username: user, password: pass };
-    const lists = store.getM3U();
-    const exists = lists.some((l) => l.url === url);
-    store.setM3U(exists ? lists.map((l) => (l.url === url ? { ...l, ...savedList } : l)) : [...lists, savedList]);
+    const others = store.getM3U().filter((l) => l.url !== url);
+    // Always put the just-saved playlist FIRST so the home launcher opens it.
+    store.setM3U([savedList, ...others]);
     setM3uLoading(true);
     try {
       const entries = await loadM3U(url, user, pass);
