@@ -515,7 +515,8 @@ export const fetchM3U = createServerFn({ method: "POST" })
     }
 
     try {
-      const target = buildM3UUrl(data.url, data.username, data.password);
+      const candidates = buildM3UCandidateUrls(data.url, data.username, data.password);
+      const target = candidates[0];
       const explicitM3U = isExplicitM3UInput(data.url);
 
       // If the user pasted a concrete M3U/get.php URL, parse that playlist first:
@@ -569,16 +570,21 @@ export const fetchM3U = createServerFn({ method: "POST" })
         if (entries.length) return { entries };
       }
 
-      const first = await fetchText(target);
-      if (first.text.includes("#EXTINF")) {
-        const entries = parseM3UText(first.text);
-        if (entries.length) return { entries };
+      let lastError = "";
+      let lastSnippet = "";
+      for (const candidate of candidates) {
+        const first = await fetchText(candidate);
+        if (first.text.includes("#EXTINF")) {
+          const entries = parseM3UText(first.text);
+          if (entries.length) return { entries };
+        }
+        lastError = first.error || "Conteúdo não parece M3U válido";
+        lastSnippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
       }
 
-      const snippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
       return {
         entries: [],
-        error: `${first.error || "Conteúdo não parece M3U válido"}. Verifique URL/usuário/senha.${snippet ? ` Resposta: ${snippet}` : ""}`,
+        error: `${lastError || "Conteúdo não parece M3U válido"}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${lastSnippet ? ` Resposta: ${lastSnippet}` : ""}`,
       };
     } catch (e) {
       return {
