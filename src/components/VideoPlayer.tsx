@@ -3,13 +3,18 @@ import Hls from "hls.js";
 
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
-// `.m3u8`. We try HLS first and fall back to the original on error.
+// `.m3u8`. We try HLS first and fall back to the original on error. Everything
+// flows through our /api/stream proxy to dodge CORS / mixed-content.
 function toHlsCandidate(src: string): string | null {
   if (/\.m3u8(\?|$)/i.test(src)) return src;
-  if (/\/live\/[^/]+\/[^/]+\/\d+\.ts(\?|$)/i.test(src)) {
-    return src.replace(/\.ts(\?|$)/i, ".m3u8$1");
+  if (/\/(live|movie|series)\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(src)) {
+    return src.replace(/\.[a-z0-9]+(\?|$)/i, ".m3u8$1");
   }
   return null;
+}
+
+function proxied(url: string): string {
+  return `/api/stream?u=${encodeURIComponent(url)}`;
 }
 
 export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
@@ -21,12 +26,17 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
     if (!video || !src) return;
     setError(null);
 
-    const hlsUrl = toHlsCandidate(src);
+    const hlsCandidate = toHlsCandidate(src);
+    const hlsProxied = hlsCandidate ? proxied(hlsCandidate) : null;
+    const directProxied = proxied(src);
+
     let hls: Hls | null = null;
     let cancelled = false;
+    let triedDirect = false;
 
-    const playNative = (url: string) => {
-      video.src = url;
+    const playDirect = () => {
+      triedDirect = true;
+      video.src = directProxied;
       video.play().catch(() => {});
     };
 
@@ -40,22 +50,20 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
           if (data.fatal) {
             hls?.destroy();
             hls = null;
-            // fall back to direct playback
-            if (url !== src) playNative(src);
-            else setError("Não foi possível reproduzir este canal (CORS/codec).");
+            if (!triedDirect) playDirect();
+            else setError("Não foi possível reproduzir este canal.");
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        playNative(url);
+        video.src = url;
+        video.play().catch(() => {});
       } else {
-        playNative(src);
+        playDirect();
       }
     };
 
-    if (hlsUrl) attachHls(hlsUrl);
-    else playNative(src);
-
-    video.play().catch(() => {});
+    if (hlsProxied) attachHls(hlsProxied);
+    else playDirect();
 
     return () => {
       cancelled = true;
