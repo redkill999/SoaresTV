@@ -111,13 +111,11 @@ const TV_MODE_SCRIPT = `(function(){
   try {
     if (typeof window === 'undefined') return;
     function apply(){
-      var sw = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
-      var sh = window.screen && window.screen.height ? window.screen.height : window.innerHeight;
+      var sw = (window.screen && window.screen.width) || window.innerWidth;
+      var sh = (window.screen && window.screen.height) || window.innerHeight;
       var smallScreen = Math.min(sw, sh) <= 820;
-      // Remove any existing viewport meta tags
       var metas = document.querySelectorAll('meta[name="viewport"]');
       for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
-      // Add a fresh one (forces browser to re-parse layout viewport)
       var m = document.createElement('meta');
       m.setAttribute('name','viewport');
       m.setAttribute('content', smallScreen
@@ -125,7 +123,25 @@ const TV_MODE_SCRIPT = `(function(){
         : 'width=device-width, initial-scale=1');
       document.head.appendChild(m);
       var html = document.documentElement;
-      if (smallScreen) html.setAttribute('data-tv-mode',''); else html.removeAttribute('data-tv-mode');
+      if (smallScreen) {
+        html.setAttribute('data-tv-mode','');
+        // Wait a tick so the new viewport meta takes effect, then compute scale from CSS viewport
+        setTimeout(function(){
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var portrait = vh > vw;
+          var scale = portrait
+            ? Math.min(vw / 720, vh / 1280)
+            : Math.min(vw / 1280, vh / 720);
+          html.style.setProperty('--tv-scale', String(scale));
+          html.style.setProperty('--tv-vw', vw + 'px');
+          html.style.setProperty('--tv-vh', vh + 'px');
+          html.setAttribute('data-tv-orientation', portrait ? 'portrait' : 'landscape');
+        }, 30);
+      } else {
+        html.removeAttribute('data-tv-mode');
+        html.removeAttribute('data-tv-orientation');
+      }
     }
     apply();
     window.addEventListener('resize', apply);
