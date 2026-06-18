@@ -16,7 +16,15 @@ export const Route = createFileRoute("/player/$type/$id")({
 
 type SeriesInfo = {
   seasons?: Array<{ season_number: number; name?: string }>;
-  episodes?: Record<string, Array<{ id: string; title: string; container_extension: string; episode_num: number }>>;
+  episodes?: Record<string, Array<{ id: string; title: string; container_extension: string; episode_num: number; direct_source?: string }>>;
+};
+
+type MovieInfo = {
+  movie_data?: {
+    stream_id?: string | number;
+    container_extension?: string;
+    direct_source?: string;
+  };
 };
 
 function PlayerPage() {
@@ -37,6 +45,15 @@ function PlayerPage() {
     queryFn: () => api<SeriesInfo>(creds!, "get_series_info", { series_id: id }),
   });
 
+  const movieQ = useQuery({
+    queryKey: ["movie-info", id],
+    enabled: !!creds && type === "movie",
+    queryFn: () => {
+      const [sid] = id.split(".");
+      return api<MovieInfo>(creds!, "get_vod_info", { vod_id: sid });
+    },
+  });
+
   const epgQ = useQuery({
     queryKey: ["epg", id],
     enabled: !!creds && type === "live",
@@ -50,11 +67,15 @@ function PlayerPage() {
     if (type === "movie") {
       // id may include ".ext"
       const [sid, ext] = id.split(".");
-      return streamUrl.movie(creds, sid, ext || "mp4");
+      const direct = movieQ.data?.movie_data?.direct_source;
+      if (direct && /^https?:\/\//i.test(direct)) return direct;
+      const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
+      const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
+      return streamUrl.movie(creds, movieId, movieExt);
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
-  }, [creds, type, id, episodeUrl]);
+  }, [creds, type, id, episodeUrl, movieQ.data]);
 
   useEffect(() => {
     if (!url || !creds) return;
@@ -112,7 +133,11 @@ function PlayerPage() {
                         key={ep.id}
                         onClick={() => {
                           if (!creds) return;
-                          setEpisodeUrl(streamUrl.episode(creds, ep.id, ep.container_extension));
+                          setEpisodeUrl(
+                            ep.direct_source && /^https?:\/\//i.test(ep.direct_source)
+                              ? ep.direct_source
+                              : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
+                          );
                           setActiveTitle(`${name} — ${ep.title}`);
                         }}
                         className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/5 transition"
