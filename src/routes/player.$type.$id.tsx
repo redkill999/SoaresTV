@@ -5,8 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store } from "@/lib/storage";
-import { api, streamUrl } from "@/lib/xtream";
-import { ArrowLeft, Heart } from "lucide-react";
+import { api, streamUrl, getShortEpg, type EpgListing } from "@/lib/xtream";
+import { ArrowLeft, Heart, Clock } from "lucide-react";
 
 export const Route = createFileRoute("/player/$type/$id")({
   validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
