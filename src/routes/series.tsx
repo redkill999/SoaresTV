@@ -3,9 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
+import { MediaGrid } from "@/components/MediaGrid";
+import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
-import { Loader2 } from "lucide-react";
+import { Clapperboard } from "lucide-react";
+import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
@@ -15,9 +18,13 @@ export const Route = createFileRoute("/series")({
 function SeriesPage() {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
+  const [tab, setTab] = useState<TabKey>("all");
+  const [sort, setSort] = useState<SortKey>("default");
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const savedCreds = store.getCreds();
     if (savedCreds) {
       setCreds(savedCreds);
@@ -45,60 +52,87 @@ function SeriesPage() {
       api<Series[]>(creds!, "get_series", cat !== "all" ? { category_id: cat } : undefined),
   });
 
+  const favIds = useMemo(
+    () => new Set(store.getFavs().filter((f) => f.type === "series").map((f) => f.id)),
+    [mounted, tab],
+  );
+  const recentIds = useMemo(
+    () => store.getHistory().filter((h) => h.type === "series").map((h) => h.id),
+    [mounted, tab],
+  );
+
   const filtered = useMemo(() => {
-    const list = listQ.data ?? [];
-    if (!search) return list;
-    const s = search.toLowerCase();
-    return list.filter((x) => x.name.toLowerCase().includes(s));
-  }, [listQ.data, search]);
+    let list = listQ.data ?? [];
+    if (tab === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
+    if (tab === "recent") {
+      const order = new Map(recentIds.map((id, i) => [id, i]));
+      list = list
+        .filter((s) => order.has(String(s.series_id)))
+        .sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter((x) => x.name.toLowerCase().includes(s));
+    }
+    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    return list;
+  }, [listQ.data, search, sort, tab, favIds, recentIds]);
 
   return (
     <AppShell search={search} onSearch={setSearch}>
-      <h1 className="text-2xl font-bold mb-4">Séries</h1>
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
-        <Chip active={cat === "all"} onClick={() => setCat("all")}>
-          Todos
-        </Chip>
+      <div className="mb-5">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 mb-4">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
+              Séries
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Temporadas e episódios
+            </p>
+          </div>
+          <div className="shrink-0">
+            <SortMenu value={sort} onChange={setSort} />
+          </div>
+        </div>
+        <SectionTabs
+          value={tab}
+          onChange={setTab}
+          counts={{ favorites: favIds.size, recent: recentIds.length }}
+        />
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1">
+        <CatChip active={cat === "all"} onClick={() => setCat("all")}>
+          Todas categorias
+        </CatChip>
         {(catsQ.data ?? []).map((c) => (
-          <Chip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
+          <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
             {c.category_name}
-          </Chip>
+          </CatChip>
         ))}
       </div>
-      {listQ.isLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filtered.map((s) => (
-            <Link
-              key={s.series_id}
-              to="/player/$type/$id"
-              params={{ type: "series", id: String(s.series_id) }}
-              search={{ name: s.name }}
-              className="contents"
-            >
-              <MediaCard type="series" id={s.series_id} name={s.name} image={s.cover} />
-            </Link>
-          ))}
-        </div>
-      )}
-    </AppShell>
-  );
-}
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
-        active
-          ? "bg-brand-gradient text-primary-foreground border-transparent shadow-glow"
-          : "border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
-      }`}
-    >
-      {children}
-    </button>
+      <MediaGrid
+        loading={listQ.isLoading}
+        empty={!listQ.isLoading && filtered.length === 0}
+        aspect="poster"
+        emptyIcon={<Clapperboard className="size-7" />}
+        emptyTitle={emptyTitle(tab, "série")}
+        emptyHint={emptyHint(tab, search)}
+      >
+        {filtered.map((s) => (
+          <Link
+            key={s.series_id}
+            to="/player/$type/$id"
+            params={{ type: "series", id: String(s.series_id) }}
+            search={{ name: s.name }}
+            className="contents"
+          >
+            <MediaCard type="series" id={s.series_id} name={s.name} image={s.cover} aspect="poster" />
+          </Link>
+        ))}
+      </MediaGrid>
+    </AppShell>
   );
 }

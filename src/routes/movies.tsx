@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
+import { MediaGrid } from "@/components/MediaGrid";
+import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
-import { Loader2 } from "lucide-react";
+import { Film } from "lucide-react";
+import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
@@ -15,7 +18,12 @@ export const Route = createFileRoute("/movies")({
 function MoviesPage() {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
-  const creds = typeof window !== "undefined" ? store.getCreds() : null;
+  const [tab, setTab] = useState<TabKey>("all");
+  const [sort, setSort] = useState<SortKey>("default");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const creds = mounted ? store.getCreds() : null;
 
   const catsQ = useQuery({
     queryKey: ["vod-cats"],
@@ -29,59 +37,88 @@ function MoviesPage() {
       api<VodStream[]>(creds!, "get_vod_streams", cat !== "all" ? { category_id: cat } : undefined),
   });
 
+  const favIds = useMemo(
+    () => new Set(store.getFavs().filter((f) => f.type === "movie").map((f) => f.id)),
+    [mounted, tab],
+  );
+  const recentIds = useMemo(
+    () => store.getHistory().filter((h) => h.type === "movie").map((h) => h.id),
+    [mounted, tab],
+  );
+
   const filtered = useMemo(() => {
-    const list = listQ.data ?? [];
-    if (!search) return list;
-    const s = search.toLowerCase();
-    return list.filter((x) => x.name.toLowerCase().includes(s));
-  }, [listQ.data, search]);
+    let list = listQ.data ?? [];
+    const idOf = (m: VodStream) => `${m.stream_id}.${m.container_extension || "mp4"}`;
+    if (tab === "favorites") list = list.filter((m) => favIds.has(idOf(m)));
+    if (tab === "recent") {
+      const order = new Map(recentIds.map((id, i) => [id, i]));
+      list = list
+        .filter((m) => order.has(idOf(m)))
+        .sort((a, b) => order.get(idOf(a))! - order.get(idOf(b))!);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter((x) => x.name.toLowerCase().includes(s));
+    }
+    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    return list;
+  }, [listQ.data, search, sort, tab, favIds, recentIds]);
 
   return (
     <AppShell search={search} onSearch={setSearch}>
-      <h1 className="text-2xl font-bold mb-4">Filmes</h1>
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
-        <Chip active={cat === "all"} onClick={() => setCat("all")}>
-          Todos
-        </Chip>
+      <div className="mb-5">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 mb-4">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
+              Filmes
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Catálogo sob demanda
+            </p>
+          </div>
+          <div className="shrink-0">
+            <SortMenu value={sort} onChange={setSort} />
+          </div>
+        </div>
+        <SectionTabs
+          value={tab}
+          onChange={setTab}
+          counts={{ favorites: favIds.size, recent: recentIds.length }}
+        />
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1">
+        <CatChip active={cat === "all"} onClick={() => setCat("all")}>
+          Todas categorias
+        </CatChip>
         {(catsQ.data ?? []).map((c) => (
-          <Chip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
+          <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
             {c.category_name}
-          </Chip>
+          </CatChip>
         ))}
       </div>
-      {listQ.isLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filtered.map((m) => (
-            <MediaCard
-              key={m.stream_id}
-              type="movie"
-              id={`${m.stream_id}.${m.container_extension || "mp4"}`}
-              name={m.name}
-              image={m.stream_icon}
-              badge={m.rating || undefined}
-            />
-          ))}
-        </div>
-      )}
-    </AppShell>
-  );
-}
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
-        active
-          ? "bg-brand-gradient text-primary-foreground border-transparent shadow-glow"
-          : "border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
-      }`}
-    >
-      {children}
-    </button>
+      <MediaGrid
+        loading={listQ.isLoading}
+        empty={!listQ.isLoading && filtered.length === 0}
+        aspect="poster"
+        emptyIcon={<Film className="size-7" />}
+        emptyTitle={emptyTitle(tab, "filme")}
+        emptyHint={emptyHint(tab, search)}
+      >
+        {filtered.map((m) => (
+          <MediaCard
+            key={m.stream_id}
+            type="movie"
+            id={`${m.stream_id}.${m.container_extension || "mp4"}`}
+            name={m.name}
+            image={m.stream_icon}
+            badge={m.rating || undefined}
+            aspect="poster"
+          />
+        ))}
+      </MediaGrid>
+    </AppShell>
   );
 }

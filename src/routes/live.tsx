@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
+import { MediaGrid } from "@/components/MediaGrid";
+import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { ParentalGate } from "@/components/ParentalGate";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
-import { Loader2 } from "lucide-react";
+import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
   head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
@@ -16,9 +18,14 @@ export const Route = createFileRoute("/live")({
 function LivePage() {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState<string>("all");
+  const [tab, setTab] = useState<TabKey>("all");
+  const [sort, setSort] = useState<SortKey>("default");
   const [unlocked, setUnlocked] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const creds = typeof window !== "undefined" ? store.getCreds() : null;
+  useEffect(() => setMounted(true), []);
+
+  const creds = mounted ? store.getCreds() : null;
 
   const categoriesQ = useQuery({
     queryKey: ["live-cats"],
@@ -36,12 +43,32 @@ function LivePage() {
       ),
   });
 
+  const favIds = useMemo(
+    () => new Set(store.getFavs().filter((f) => f.type === "live").map((f) => f.id)),
+    [mounted, tab],
+  );
+  const recentIds = useMemo(
+    () => store.getHistory().filter((h) => h.type === "live").map((h) => h.id),
+    [mounted, tab],
+  );
+
   const filtered = useMemo(() => {
-    const list = streamsQ.data ?? [];
-    if (!search) return list;
-    const s = search.toLowerCase();
-    return list.filter((x) => x.name.toLowerCase().includes(s));
-  }, [streamsQ.data, search]);
+    let list = streamsQ.data ?? [];
+    if (tab === "favorites") list = list.filter((x) => favIds.has(String(x.stream_id)));
+    if (tab === "recent") {
+      const order = new Map(recentIds.map((id, i) => [id, i]));
+      list = list
+        .filter((x) => order.has(String(x.stream_id)))
+        .sort((a, b) => (order.get(String(a.stream_id))! - order.get(String(b.stream_id))!));
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter((x) => x.name.toLowerCase().includes(s));
+    }
+    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    return list;
+  }, [streamsQ.data, search, sort, tab, favIds, recentIds]);
 
   const needGate = cat !== "all";
   if (needGate && !unlocked) {
@@ -54,11 +81,19 @@ function LivePage() {
 
   return (
     <AppShell search={search} onSearch={setSearch}>
-      <h1 className="text-2xl font-bold mb-4">Canais ao Vivo</h1>
+      <Header
+        title="Canais ao Vivo"
+        subtitle="Transmissão em tempo real"
+        tab={tab}
+        setTab={setTab}
+        sort={sort}
+        setSort={setSort}
+        counts={{ favorites: favIds.size, recent: recentIds.length }}
+      />
 
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1 scrollbar-thin">
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-          Todos
+          Todas categorias
         </CatChip>
         {(categoriesQ.data ?? []).map((c) => (
           <CatChip
@@ -74,47 +109,73 @@ function LivePage() {
         ))}
       </div>
 
-      {streamsQ.isLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filtered.map((s) => (
-            <MediaCard
-              key={s.stream_id}
-              type="live"
-              id={s.stream_id}
-              name={s.name}
-              image={s.stream_icon}
-              badge="LIVE"
-            />
-          ))}
-        </div>
-      )}
+      <MediaGrid
+        loading={streamsQ.isLoading}
+        empty={!streamsQ.isLoading && filtered.length === 0}
+        aspect="wide"
+        emptyIcon={<Tv className="size-7" />}
+        emptyTitle={emptyTitle(tab, "canal")}
+        emptyHint={emptyHint(tab, search)}
+      >
+        {filtered.map((s) => (
+          <MediaCard
+            key={s.stream_id}
+            type="live"
+            id={s.stream_id}
+            name={s.name}
+            image={s.stream_icon}
+            badge="LIVE"
+            aspect="wide"
+          />
+        ))}
+      </MediaGrid>
     </AppShell>
   );
 }
 
-function CatChip({
-  active,
-  onClick,
-  children,
+function Header({
+  title,
+  subtitle,
+  tab,
+  setTab,
+  sort,
+  setSort,
+  counts,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  title: string;
+  subtitle: string;
+  tab: TabKey;
+  setTab: (v: TabKey) => void;
+  sort: SortKey;
+  setSort: (v: SortKey) => void;
+  counts: Partial<Record<TabKey, number>>;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
-        active
-          ? "bg-brand-gradient text-primary-foreground border-transparent shadow-glow"
-          : "border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="mb-5">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 mb-4">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
+            {title}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+        </div>
+        <div className="shrink-0">
+          <SortMenu value={sort} onChange={setSort} />
+        </div>
+      </div>
+      <SectionTabs value={tab} onChange={setTab} counts={counts} />
+    </div>
   );
+}
+
+export function emptyTitle(tab: TabKey, item: string) {
+  if (tab === "favorites") return `Nenhum ${item} favorito`;
+  if (tab === "recent") return `Nenhum ${item} recente`;
+  return "Nada encontrado";
+}
+export function emptyHint(tab: TabKey, search: string) {
+  if (search) return `Sem resultados para "${search}".`;
+  if (tab === "favorites") return "Toque no coração nos cards para favoritar.";
+  if (tab === "recent") return "O que você assistir aparece aqui.";
+  return "Tente ajustar a busca ou trocar a categoria.";
 }
