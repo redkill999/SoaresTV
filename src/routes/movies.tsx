@@ -11,6 +11,7 @@ import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
 import { useTranslation } from "react-i18next";
+import { loadPersisted, withPersist } from "@/lib/query-persist";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
