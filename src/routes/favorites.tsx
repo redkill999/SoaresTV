@@ -6,20 +6,21 @@ import { MediaGrid } from "@/components/MediaGrid";
 import { SectionTabs, type TabKey } from "@/components/SectionTabs";
 import { useFavorites } from "@/hooks/use-favorites";
 import { Heart } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/favorites")({
   head: () => ({ meta: [{ title: "Favoritos — SoaresTV" }] }),
   component: FavoritesPage,
 });
 
-const TABS: { key: TabKey | "live" | "movie" | "series"; label: string }[] = [
-  { key: "all", label: "Todos" },
-  { key: "live", label: "Canais" },
-  { key: "movie", label: "Filmes" },
-  { key: "series", label: "Séries" },
-];
-
 function FavoritesPage() {
+  const { t } = useTranslation();
+  const TABS: { key: TabKey | "live" | "movie" | "series"; label: string }[] = [
+    { key: "all", label: t("tabs.all") },
+    { key: "live", label: t("nav.channels") },
+    { key: "movie", label: t("nav.movies") },
+    { key: "series", label: t("nav.series") },
+  ];
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"all" | "live" | "movie" | "series">("all");
   const favs = useFavorites();
