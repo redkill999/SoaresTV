@@ -64,13 +64,26 @@ function LoginPage() {
       try {
         info = await login(creds);
       } catch (loginErr) {
-        if (/dashboard|painel/i.test(server) || /não parece ser o DNS Xtream|player_api\.php\/get\.php/i.test(loginErr instanceof Error ? loginErr.message : "")) {
-          const discovered = await discoverPanelServer(creds);
-          normalizedServer = discovered.server;
-          creds = { server: normalizedServer, username, password };
-          info = await login(creds);
+        const playlistProbeUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
+          username,
+        )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+        try {
+          entries = await loadM3U(playlistProbeUrl, username, password);
+        } catch {
+          entries = [];
+        }
+
+        if (!entries.length && (/dashboard|painel/i.test(server) || /não parece ser o DNS Xtream|player_api\.php\/get\.php/i.test(loginErr instanceof Error ? loginErr.message : ""))) {
+          try {
+            const discovered = await discoverPanelServer(creds);
+            normalizedServer = discovered.server;
+            creds = { server: normalizedServer, username, password };
+            info = await login(creds);
+          } catch {
+            throw loginErr;
+          }
         } else {
-          throw loginErr;
+          if (!entries.length) throw loginErr;
         }
       }
 
