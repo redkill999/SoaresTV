@@ -13,6 +13,20 @@ import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
+  // Prefetch ao passar o mouse / focar no link do menu (defaultPreload: "intent").
+  loader: ({ context }) => {
+    const creds = store.getCreds();
+    if (!creds) return;
+    const acct = `${creds.server}|${creds.username}`;
+    void context.queryClient.prefetchQuery({
+      queryKey: ["vod-cats", acct],
+      queryFn: () => api<LiveCategory[]>(creds, "get_vod_categories"),
+    });
+    void context.queryClient.prefetchQuery({
+      queryKey: ["vod-list", acct, "all"],
+      queryFn: () => api<VodStream[]>(creds, "get_vod_streams"),
+    });
+  },
   component: MoviesPage,
 });
 

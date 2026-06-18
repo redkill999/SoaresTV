@@ -13,6 +13,30 @@ import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
+  // Prefetch ao passar o mouse / focar no link do menu (defaultPreload: "intent").
+  loader: ({ context }) => {
+    let creds = store.getCreds();
+    if (!creds) {
+      const firstList = store.getM3U()[0];
+      const recovered = firstList
+        ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
+        : null;
+      if (recovered) {
+        store.setCreds(recovered);
+        creds = recovered;
+      }
+    }
+    if (!creds) return;
+    const acct = `${creds.server}|${creds.username}`;
+    void context.queryClient.prefetchQuery({
+      queryKey: ["series-cats", acct],
+      queryFn: () => api<LiveCategory[]>(creds!, "get_series_categories"),
+    });
+    void context.queryClient.prefetchQuery({
+      queryKey: ["series-list", acct, "all"],
+      queryFn: () => api<Series[]>(creds!, "get_series"),
+    });
+  },
   component: SeriesPage,
 });
 
