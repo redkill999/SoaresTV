@@ -8,6 +8,7 @@ import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/com
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { Film } from "lucide-react";
+import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/movies")({
@@ -37,13 +38,15 @@ function MoviesPage() {
       api<VodStream[]>(creds!, "get_vod_streams", cat !== "all" ? { category_id: cat } : undefined),
   });
 
+  const favs = useFavorites();
+  const history = useHistory();
   const favIds = useMemo(
-    () => new Set(store.getFavs().filter((f) => f.type === "movie").map((f) => f.id)),
-    [mounted, tab],
+    () => new Set(favs.filter((f) => f.type === "movie").map((f) => f.id)),
+    [favs],
   );
   const recentIds = useMemo(
-    () => store.getHistory().filter((h) => h.type === "movie").map((h) => h.id),
-    [mounted, tab],
+    () => history.filter((h) => h.type === "movie").map((h) => h.id),
+    [history],
   );
 
   const filtered = useMemo(() => {

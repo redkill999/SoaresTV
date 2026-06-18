@@ -9,6 +9,7 @@ import { ParentalGate } from "@/components/ParentalGate";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
 import { Tv } from "lucide-react";
+import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
 export const Route = createFileRoute("/live")({
   head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
@@ -43,13 +44,15 @@ function LivePage() {
       ),
   });
 
+  const favs = useFavorites();
+  const history = useHistory();
   const favIds = useMemo(
-    () => new Set(store.getFavs().filter((f) => f.type === "live").map((f) => f.id)),
-    [mounted, tab],
+    () => new Set(favs.filter((f) => f.type === "live").map((f) => f.id)),
+    [favs],
   );
   const recentIds = useMemo(
-    () => store.getHistory().filter((h) => h.type === "live").map((h) => h.id),
-    [mounted, tab],
+    () => history.filter((h) => h.type === "live").map((h) => h.id),
+    [history],
   );
 
   const filtered = useMemo(() => {
