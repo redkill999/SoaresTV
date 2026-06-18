@@ -17,7 +17,19 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=3`;
+}
+
+function httpsVariant(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
+    parsed.protocol = "https:";
+    if (parsed.port === "80") parsed.port = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function VideoPlayer({ src, poster, kind }: { src: string; poster?: string; kind?: "live" | "vod" }) {
@@ -53,7 +65,11 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     }
     if (!vodCandidates.length) vodCandidates.push(src);
     const playbackCandidates = isVod
-      ? vodCandidates.flatMap((url) => (/^https:\/\//i.test(url) ? [url, proxied(url, "vod")] : [proxied(url, "vod")]))
+      ? vodCandidates.flatMap((url) => {
+          const secure = httpsVariant(url);
+          const candidates = [secure, proxied(url, "vod"), secure ? proxied(secure, "vod") : null].filter(Boolean) as string[];
+          return Array.from(new Set(candidates));
+        })
       : vodCandidates.map((url) => proxied(url, kind));
 
     let hls: Hls | null = null;
@@ -105,6 +121,8 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         attachHls(url);
         return;
       }
+      video.pause();
+      video.currentTime = 0;
       video.src = url;
       video.load();
       armVodWatchdog();
