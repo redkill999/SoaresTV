@@ -74,9 +74,6 @@ async function handle(request: Request) {
   headers.set("User-Agent", "VLC/3.0.20 LibVLC/3.0.20");
   headers.set("Accept", "*/*");
   headers.set("Icy-MetaData", "0");
-  headers.set("Connection", "keep-alive");
-  headers.set("Referer", upstreamUrl.origin + "/");
-  headers.set("Origin", upstreamUrl.origin);
   const range = request.headers.get("range");
   if (range) headers.set("Range", range);
   else if (/\/movie\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname) || /\/series\/[^/]+\/[^/]+\//i.test(upstreamUrl.pathname)) {
