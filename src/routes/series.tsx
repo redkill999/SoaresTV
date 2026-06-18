@@ -32,11 +32,11 @@ export const Route = createFileRoute("/series")({
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
       queryKey: ["series-cats", acct],
-      queryFn: () => api<LiveCategory[]>(creds!, "get_series_categories"),
+      queryFn: withPersist(`series-cats:${acct}`, () => api<LiveCategory[]>(creds!, "get_series_categories")),
     });
     void context.queryClient.prefetchQuery({
       queryKey: ["series-list", acct, "all"],
-      queryFn: () => api<Series[]>(creds!, "get_series"),
+      queryFn: withPersist(`series-list:${acct}:all`, () => api<Series[]>(creds!, "get_series")),
     });
   },
   component: SeriesPage,
