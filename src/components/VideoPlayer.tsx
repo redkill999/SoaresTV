@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
 
+async function lockLandscape() {
+  try {
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    await ScreenOrientation.lock({ orientation: "landscape" });
+  } catch {
+    // not native or plugin unavailable
+  }
+}
+
+async function unlockOrientation() {
+  try {
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    await ScreenOrientation.unlock();
+  } catch {
+    // ignore
+  }
+}
+
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
