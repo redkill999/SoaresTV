@@ -9,6 +9,7 @@ import { store } from "@/lib/storage";
 import { api, login, streamUrl, loadM3U } from "@/lib/xtream";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export const Route = createFileRoute("/")({
   head: () => ({
