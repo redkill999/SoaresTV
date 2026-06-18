@@ -151,6 +151,14 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Re-apply TV mode after React hydration in case hydration cleared the attribute / meta
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(TV_MODE_SCRIPT)();
+    } catch {}
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
