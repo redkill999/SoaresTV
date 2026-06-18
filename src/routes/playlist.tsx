@@ -10,11 +10,25 @@ import { store } from "@/lib/storage";
 
 export const Route = createFileRoute("/playlist")({
   validateSearch: (s: Record<string, unknown>) => ({
-    url: (s.url as string) ?? "",
-    name: (s.name as string) ?? "Lista M3U",
+    url: typeof s.url === "string" ? s.url : "",
+    name: typeof s.name === "string" ? s.name : "Lista M3U",
   }),
   head: () => ({ meta: [{ title: "Lista M3U — SoaresTV" }] }),
   component: PlaylistPage,
+  errorComponent: ({ error }) => (
+    <div className="min-h-screen flex items-center justify-center p-6 text-center">
+      <div>
+        <h2 className="text-lg font-semibold mb-2">Erro ao carregar a lista</h2>
+        <p className="text-sm text-muted-foreground mb-4">{error.message}</p>
+        <a href="/" className="text-primary underline">Voltar para o login</a>
+      </div>
+    </div>
+  ),
+  notFoundComponent: () => (
+    <div className="min-h-screen flex items-center justify-center p-6 text-center">
+      <a href="/" className="text-primary underline">Voltar para o login</a>
+    </div>
+  ),
 });
 
 function PlaylistPage() {
