@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tv, Loader2, ListVideo, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
+import { Tv, Loader2, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, login, streamUrl, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
@@ -151,8 +151,8 @@ function LoginPage() {
         <div className="relative overflow-hidden rounded-3xl p-8 md:p-10 bg-brand-gradient shadow-glow min-h-[520px] flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-3 mb-12">
-              <div className="size-11 rounded-xl bg-black/30 backdrop-blur flex items-center justify-center font-bold text-lg">
-                S
+              <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center">
+                <Tv className="size-5 text-white" strokeWidth={2.25} />
               </div>
               <span className="font-semibold text-lg">SoaresTV</span>
             </div>
