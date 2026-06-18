@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { store } from "@/lib/storage";
 import { useHistory } from "@/hooks/use-favorites";
 import { History as HistoryIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "Histórico — SoaresTV" }] }),
