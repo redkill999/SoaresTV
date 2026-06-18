@@ -22,11 +22,11 @@ export const Route = createFileRoute("/movies")({
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
       queryKey: ["vod-cats", acct],
-      queryFn: () => api<LiveCategory[]>(creds, "get_vod_categories"),
+      queryFn: withPersist(`vod-cats:${acct}`, () => api<LiveCategory[]>(creds, "get_vod_categories")),
     });
     void context.queryClient.prefetchQuery({
       queryKey: ["vod-list", acct, "all"],
-      queryFn: () => api<VodStream[]>(creds, "get_vod_streams"),
+      queryFn: withPersist(`vod-list:${acct}:all`, () => api<VodStream[]>(creds, "get_vod_streams")),
     });
   },
   component: MoviesPage,
@@ -42,16 +42,33 @@ function MoviesPage() {
   useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
+  const catsCacheKey = `vod-cats:${acct}`;
+  const listCacheKey = `vod-list:${acct}:${cat}`;
+  const catsPersisted = useMemo(
+    () => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null),
+    [catsCacheKey, acct],
+  );
+  const listPersisted = useMemo(
+    () => (acct ? loadPersisted<VodStream[]>(listCacheKey) : null),
+    [listCacheKey, acct],
+  );
   const catsQ = useQuery({
     queryKey: ["vod-cats", acct],
     enabled: !!creds,
-    queryFn: () => api<LiveCategory[]>(creds!, "get_vod_categories"),
+    queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_vod_categories")),
+    initialData: catsPersisted?.data,
+    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
   const listQ = useQuery({
     queryKey: ["vod-list", acct, cat],
     enabled: !!creds,
-    queryFn: () =>
+    queryFn: withPersist(listCacheKey, () =>
       api<VodStream[]>(creds!, "get_vod_streams", cat !== "all" ? { category_id: cat } : undefined),
+    ),
+    initialData: listPersisted?.data,
+    initialDataUpdatedAt: listPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
