@@ -30,16 +30,12 @@ export function AppShell({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const hasCreds = !!store.getCreds();
     const hasM3U = store.getM3U().length > 0;
     if (!hasCreds && !hasM3U) navigate({ to: "/" });
   }, [navigate]);
-
-  if (!mounted) return null;
 
   const logout = () => {
     store.setCreds(null);
