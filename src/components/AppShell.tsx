@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search } from "lucide-react";
+import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search, Home } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { store } from "@/lib/storage";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,7 @@ export function AppShell({
     <div className="min-h-dvh flex">
       {/* Sidebar — desktop */}
       <aside className="w-64 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-5 sticky top-0 h-dvh">
-        <Link to="/live" className="flex items-center gap-3 mb-10">
+        <Link to="/home" className="flex items-center gap-3 mb-10">
           <div className="size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center">
             <span className="font-display font-bold text-primary-foreground">S</span>
           </div>
@@ -113,7 +113,16 @@ export function AppShell({
                 />
               </div>
             )}
-            <div className="ml-auto shrink-0">
+            <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              <Link
+                to="/home"
+                title="Ir para o Launcher"
+                aria-label="Ir para o Launcher"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
+              >
+                <Home className="size-4" />
+                <span className="hidden sm:inline">Início</span>
+              </Link>
               <ThemeSwitcher />
             </div>
           </div>
