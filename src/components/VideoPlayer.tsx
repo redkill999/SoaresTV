@@ -30,24 +30,47 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
     const hlsCandidate = toHlsCandidate(src);
     const hlsProxied = hlsCandidate ? proxied(hlsCandidate) : null;
-    const directProxied = proxied(src);
+
+    // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
+    // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
+    const vodCandidates: string[] = [src];
+    const vodMatch = src.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
+    if (vodMatch && !hlsCandidate) {
+      const [, base, ext, qs = ""] = vodMatch;
+      for (const alt of ["mp4", "mkv", "m4v"]) {
+        if (alt !== ext.toLowerCase()) vodCandidates.push(`${base}.${alt}${qs}`);
+      }
+    }
 
     let hls: Hls | null = null;
     let cancelled = false;
+    let vodIdx = 0;
     let triedDirect = false;
 
     const playDirect = () => {
       triedDirect = true;
-      video.src = directProxied;
+      const url = vodCandidates[vodIdx] ?? src;
+      video.src = proxied(url);
       video.play().catch(() => {});
     };
+
+    const onVideoError = () => {
+      if (cancelled || hls) return;
+      vodIdx += 1;
+      if (vodIdx < vodCandidates.length) {
+        video.src = proxied(vodCandidates[vodIdx]);
+        video.play().catch(() => {});
+      } else {
+        setError("Não foi possível reproduzir esta mídia.");
+      }
+    };
+    video.addEventListener("error", onVideoError);
 
     const attachHls = (url: string) => {
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Buffer bem maior reduz travamentos em IPTV ao vivo
           backBufferLength: 30,
           maxBufferLength: 60,
           maxMaxBufferLength: 120,
@@ -55,15 +78,12 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
           maxBufferHole: 1.0,
           highBufferWatchdogPeriod: 3,
           nudgeMaxRetry: 10,
-          // Recuperação automática de falhas de rede/fragmento
           fragLoadingMaxRetry: 8,
           manifestLoadingMaxRetry: 6,
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
-          // Live tuning: ficar um pouco atrás da borda evita stalls
           liveSyncDurationCount: 4,
           liveMaxLatencyDurationCount: 10,
-          // Inicia em qualidade mais baixa e sobe conforme banda
           startLevel: -1,
           abrEwmaDefaultEstimate: 1_000_000,
         });
@@ -99,11 +119,13 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
 
     return () => {
       cancelled = true;
+      video.removeEventListener("error", onVideoError);
       if (hls) hls.destroy();
       video.removeAttribute("src");
       video.load();
     };
   }, [src]);
+
 
   return (
     <div className="relative">
