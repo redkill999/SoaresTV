@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { store } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +12,18 @@ export function ParentalGate({
   onUnlock: () => void;
 }) {
   const p = store.getParental();
-  const locked = p.pin && p.lockedCategories.includes(categoryId);
+  const locked = !!(p.pin && p.lockedCategories.includes(categoryId));
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
 
-  if (!locked) {
-    onUnlock();
-    return null;
-  }
+  // Auto-desbloqueia em efeito (evita setState durante render do pai).
+  useEffect(() => {
+    if (!locked) onUnlock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
+
+  if (!locked) return null;
+
 
   return (
     <div className="flex items-center justify-center py-20">
