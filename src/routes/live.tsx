@@ -33,6 +33,7 @@ export const Route = createFileRoute("/live")({
 });
 
 function LivePage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState<string>("all");
   const [tab, setTab] = useState<TabKey>("all");
