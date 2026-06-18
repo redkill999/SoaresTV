@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Search, Heart, ListVideo } from "lucide-react";
+import { ArrowLeft, Search, Heart, ListVideo, Trash2 } from "lucide-react";
 import { loadM3U, type M3UEntry } from "@/lib/xtream";
 import { store } from "@/lib/storage";
 import { m3uCache } from "@/lib/m3u-cache";
+import { toast } from "sonner";
 
 const MAX_RENDER = 500;
 
