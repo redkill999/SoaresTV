@@ -32,6 +32,7 @@ export const Route = createFileRoute("/movies")({
 });
 
 function MoviesPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
