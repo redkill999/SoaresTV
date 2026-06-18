@@ -129,3 +129,23 @@ h1, h2, h3, h4, h5, h6, .font-display {
   outline-offset: 2px;
   border-radius: var(--radius-md);
 }
+
+/* Force landscape (TV/desktop-like) layout on portrait phones.
+   Rotates the whole app 90deg and swaps width/height so the UI
+   renders as if the device were turned sideways. */
+@media (max-width: 820px) and (orientation: portrait) {
+  html, body {
+    overflow: hidden;
+  }
+  body {
+    width: 100vh;
+    height: 100vw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100vw);
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: auto;
+  }
+}
+
