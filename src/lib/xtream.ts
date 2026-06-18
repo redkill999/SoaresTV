@@ -98,9 +98,9 @@ export function parseM3U(text: string): M3UEntry[] {
   return out;
 }
 
-export async function loadM3U(url: string) {
+export async function loadM3U(url: string): Promise<M3UEntry[]> {
   const r = await fetchM3U({ data: { url } });
-  return parseM3U(r.text);
+  return r.entries as M3UEntry[];
 }
 
 // --- EPG ---

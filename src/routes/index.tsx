@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, ListVideo, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, login, streamUrl, loadM3U } from "@/lib/xtream";
+import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -90,20 +91,29 @@ function LoginPage() {
 
   const onM3U = async (e: React.FormEvent) => {
     e.preventDefault();
+    const raw = m3uUrl.trim();
+    const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    const name = m3uName.trim() || "Lista M3U";
     setM3uLoading(true);
     try {
-      const entries = await loadM3U(m3uUrl);
+      const entries = await loadM3U(url);
       if (!entries.length) throw new Error("Lista vazia");
       const lists = store.getM3U();
-      const exists = lists.find((l) => l.url === m3uUrl);
-      if (!exists) store.setM3U([...lists, { name: m3uName || "Lista M3U", url: m3uUrl }]);
+      const exists = lists.find((l) => l.url === url);
+      if (!exists) store.setM3U([...lists, { name, url }]);
+      m3uCache.set(url, name, entries);
       toast.success(`${entries.length} canais carregados`);
-      navigate({ to: "/playlist", search: { url: m3uUrl, name: m3uName || "Lista M3U" } });
+      navigate({ to: "/playlist", search: { name } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao carregar M3U");
     } finally {
       setM3uLoading(false);
     }
+  };
+
+  const loadSample = () => {
+    setM3uName("IPTV-Org (teste)");
+    setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
 
   if (splash) {
@@ -261,6 +271,15 @@ function LoginPage() {
                   className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
                 >
                   {m3uLoading ? <Loader2 className="size-4 animate-spin" /> : "Carregar Lista M3U"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground hover:text-foreground"
+                  onClick={loadSample}
+                >
+                  Usar lista de teste (IPTV-Org)
                 </Button>
               </form>
             </TabsContent>
