@@ -17,6 +17,7 @@ import {
   RefreshCw,
   PlayCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export const Route = createFileRoute("/home")({
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/home")({
 
 type Tile = {
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   to?: string;
   onClick?: () => void;
 };
