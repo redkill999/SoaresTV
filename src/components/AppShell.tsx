@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { store } from "@/lib/storage";
 import { useNavigate } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 const NAV = [
   { to: "/live", label: "Ao Vivo", icon: Tv },
