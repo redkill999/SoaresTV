@@ -144,8 +144,11 @@ const TV_MODE_SCRIPT = `(function(){
       }
     }
     apply();
-    window.addEventListener('resize', apply);
-    window.addEventListener('orientationchange', apply);
+    if (!window.__tvModeBound) {
+      window.__tvModeBound = true;
+      window.addEventListener('resize', apply);
+      window.addEventListener('orientationchange', apply);
+    }
   } catch(e) {}
 })();`;
 
