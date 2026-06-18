@@ -6,6 +6,7 @@ import {
   Circle, ShieldCheck, Lock, MessageSquare, RefreshCw,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { Skeleton } from "@/components/ui/skeleton";
 import { store } from "@/lib/storage";
 
 export const Route = createFileRoute("/home")({
@@ -47,7 +48,7 @@ function HomePage() {
     if (!store.getCreds()) navigate({ to: "/" });
   }, [navigate]);
 
-  if (!mounted) return null;
+  if (!mounted) return <HomeSkeleton />;
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
@@ -136,6 +137,35 @@ function StatusIcon({ icon: Icon, label }: { icon: ComponentType<{ className?: s
       className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card/40 text-muted-foreground"
     >
       <Icon className="h-4 w-4" />
+    </div>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="relative min-h-dvh overflow-hidden bg-background p-6">
+      <div className="mb-8 flex items-center justify-between">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-8 w-40" />
+      </div>
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-40 rounded-2xl" />
+        ))}
+      </div>
+      <div className="mx-auto mt-8 grid max-w-6xl grid-cols-2 gap-5">
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
