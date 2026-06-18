@@ -147,7 +147,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
     --design-w: 1280px;
     --design-h: 720px;
     /* Fit rotated canvas (720 wide x 1280 tall) into viewport */
-    --scale: min(calc(100vw / 720), calc(100vh / 1280));
+    --scale: min(calc(100vw / 720px), calc(100vh / 1280px));
     margin: 0;
     width: var(--design-w);
     height: var(--design-h);
@@ -180,7 +180,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
   body {
     --design-w: 1280px;
     --design-h: 720px;
-    --scale: min(calc(100vw / 1280), calc(100vh / 720));
+    --scale: min(calc(100vw / 1280px), calc(100vh / 720px));
     margin: 0;
     width: var(--design-w);
     height: var(--design-h);
