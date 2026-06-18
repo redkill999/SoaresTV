@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { isNativeApp } from "@/lib/xtream";
 
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
@@ -43,8 +44,8 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     setError(null);
     setCanManualPlay(false);
 
-    const hlsCandidate = toHlsCandidate(src, kind);
-    const hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
+    let hlsCandidate = toHlsCandidate(src, kind);
+    let hlsProxied: string | null = null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
@@ -77,6 +78,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
     let vodIdx = 0;
     let triedDirect = false;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let nativeDirect = false;
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
@@ -109,7 +111,7 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
         hls = null;
       }
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? proxied(src, kind);
+      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? src : proxied(src, kind));
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
@@ -193,8 +195,19 @@ export function VideoPlayer({ src, poster, kind }: { src: string; poster?: strin
       }
     };
 
-    if (hlsProxied) attachHls(hlsProxied);
-    else playDirect();
+    void isNativeApp().then((native) => {
+      if (cancelled) return;
+      nativeDirect = native;
+      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
+      if (native) {
+        playbackCandidates.splice(0, playbackCandidates.length, ...vodCandidates.flatMap((url) => {
+          const secure = httpsVariant(url);
+          return Array.from(new Set([url, secure].filter(Boolean) as string[]));
+        }));
+      }
+      if (hlsProxied) attachHls(hlsProxied);
+      else playDirect();
+    });
 
     return () => {
       cancelled = true;
