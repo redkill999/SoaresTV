@@ -31,22 +31,32 @@ export const xtreamApi = createServerFn({ method: "POST" })
       }
     }
 
-    // Some Xtream panels respond 502/503/504 transiently when overloaded.
-    // Retry a couple of times with backoff before surfacing a friendly error,
-    // and rotate User-Agent on the last try (a few panels block default UAs).
+    // Some Xtream panels respond 502/503/504 transiently when overloaded,
+    // OR permanently reject requests whose User-Agent isn't on their allow-list.
+    // We try the most common IPTV-app UAs in order — if the panel works in
+    // Xciptv/Smarters/TiviMate, one of these will match.
     const UAS = [
+      "Xciptv/6.0",
+      "IPTVSmartersPro/3.1.5",
+      "TiviMate/4.7.0",
+      "okhttp/4.9.3",
+      "Lavf/58.76.100",
       "VLC/3.0.20 LibVLC/3.0.20",
-      "Mozilla/5.0 SoaresTV",
-      "IPTVSmarters/1.0",
+      "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
     ];
     let lastStatus = 0;
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < UAS.length; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20_000);
       try {
         const res = await fetch(url.toString(), {
-          headers: { "User-Agent": UAS[attempt] ?? UAS[0], Accept: "*/*" },
+          headers: {
+            "User-Agent": UAS[attempt],
+            Accept: "*/*",
+            "Accept-Encoding": "identity",
+            Connection: "keep-alive",
+          },
           redirect: "follow",
           signal: controller.signal,
         });
@@ -66,13 +76,13 @@ export const xtreamApi = createServerFn({ method: "POST" })
       } finally {
         clearTimeout(timer);
       }
-      // backoff: 400ms, 1200ms
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
+      // Short backoff between UA attempts (200ms) — total ~1.4s for 7 tries
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     if (lastStatus === 503 || lastStatus === 502 || lastStatus === 504) {
       throw new Error(
-        `Servidor Xtream indisponível no momento (HTTP ${lastStatus}). Tente novamente em alguns segundos ou verifique se o painel está fora do ar.`,
+        `Painel Xtream rejeitou o acesso (HTTP ${lastStatus}) mesmo após tentar vários User-Agents. Pode ser bloqueio de IP do servidor (datacenter). Tente novamente em alguns segundos.`,
       );
     }
     if (lastStatus === 401 || lastStatus === 403) {
