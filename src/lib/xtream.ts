@@ -111,7 +111,12 @@ export async function login(c: XtreamCreds) {
 export const normalizeServer = (s: string) => {
   let v = s.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(v)) v = `http://${v}`;
-  return v;
+  try {
+    const u = new URL(v);
+    return u.origin;
+  } catch {
+    return v;
+  }
 };
 
 export function xtreamCredsFromUrl(
