@@ -112,17 +112,17 @@ function SeriesPage() {
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
           <Link
             to="/home"
-            aria-label="Voltar ao menu"
+            aria-label={t("common.back")}
             className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
           >
             <ArrowLeft className="size-5" />
           </Link>
           <div className="min-w-0">
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-              Séries
+              {t("pages.series.title")}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Temporadas e episódios
+              {t("pages.series.subtitle")}
             </p>
           </div>
           <div className="shrink-0">
