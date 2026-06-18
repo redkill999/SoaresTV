@@ -143,9 +143,20 @@ function PlayerPage() {
                         key={ep.id}
                         onClick={() => {
                           if (!creds) return;
+                          const directPath = (() => {
+                            try {
+                              return ep.direct_source ? new URL(ep.direct_source).pathname.toLowerCase() : "";
+                            } catch {
+                              return "";
+                            }
+                          })();
+                          const usableDirect =
+                            ep.direct_source &&
+                            /^https?:\/\//i.test(ep.direct_source) &&
+                            /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
                           setEpisodeUrl(
-                            ep.direct_source && /^https?:\/\//i.test(ep.direct_source)
-                              ? ep.direct_source
+                            usableDirect
+                              ? ep.direct_source!
                               : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
                           );
                           setActiveTitle(`${name} — ${ep.title}`);
