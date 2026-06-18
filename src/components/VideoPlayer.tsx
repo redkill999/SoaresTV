@@ -73,7 +73,6 @@ export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
         controls
         autoPlay
         playsInline
-        crossOrigin="anonymous"
         className="w-full aspect-video bg-black rounded-xl shadow-card"
       />
       {error && (
