@@ -38,6 +38,7 @@ export const Route = createFileRoute("/playlist")({
 function PlaylistPage() {
   const { url: urlParam, name } = Route.useSearch();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<M3UEntry | null>(null);
   const [group, setGroup] = useState<string>("all");
