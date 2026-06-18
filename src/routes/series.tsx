@@ -41,13 +41,14 @@ function SeriesPage() {
     }
   }, []);
 
+  const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
-    queryKey: ["series-cats"],
+    queryKey: ["series-cats", acct],
     enabled: !!creds,
     queryFn: () => api<LiveCategory[]>(creds!, "get_series_categories"),
   });
   const listQ = useQuery({
-    queryKey: ["series-list", cat],
+    queryKey: ["series-list", acct, cat],
     enabled: !!creds,
     queryFn: () =>
       api<Series[]>(creds!, "get_series", cat !== "all" ? { category_id: cat } : undefined),
