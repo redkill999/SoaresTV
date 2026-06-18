@@ -269,6 +269,15 @@ function LoginPage() {
                 >
                   {m3uLoading ? <Loader2 className="size-4 animate-spin" /> : "Carregar Lista M3U"}
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground hover:text-foreground"
+                  onClick={loadSample}
+                >
+                  Usar lista de teste (IPTV-Org)
+                </Button>
               </form>
             </TabsContent>
           </Tabs>
