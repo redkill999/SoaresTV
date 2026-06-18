@@ -124,86 +124,103 @@ function LoginPage() {
         <div className="absolute bottom-1/4 right-1/4 size-96 rounded-full bg-accent/20 blur-3xl" />
       </div>
 
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="size-16 rounded-2xl bg-brand-gradient shadow-glow mx-auto mb-4 flex items-center justify-center">
-            <Tv className="size-8 text-primary-foreground" />
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6">
+        {/* Left — brand panel with gradient */}
+        <div className="relative overflow-hidden rounded-3xl p-8 md:p-10 bg-brand-gradient shadow-glow min-h-[520px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-12">
+              <div className="size-11 rounded-xl bg-black/30 backdrop-blur flex items-center justify-center font-bold text-lg">
+                S
+              </div>
+              <span className="font-semibold text-lg">SoaresTV</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+              Seu IPTV, em<br />qualquer tela.
+            </h1>
+            <p className="mt-5 text-white/85 max-w-sm leading-relaxed">
+              Canais ao vivo, filmes, séries, EPG, favoritos e controle parental — tudo num só app.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">
-            <span className="text-brand-gradient">SoaresTV</span>
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Entre com Xtream Codes ou uma lista M3U
-          </p>
+          <ul className="space-y-2.5 text-sm text-white/95">
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> Player HLS otimizado</li>
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> Suporte Xtream Codes e M3U</li>
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> EPG XMLTV + favoritos</li>
+          </ul>
         </div>
 
-        <div className="glass rounded-2xl p-6 shadow-card border border-white/10">
+        {/* Right — login card */}
+        <div className="glass rounded-3xl p-6 md:p-8 shadow-card border border-white/10">
+          <h2 className="text-2xl font-bold">Entrar</h2>
+          <p className="text-sm text-muted-foreground mt-1 mb-5">
+            Escolha como deseja acessar seu conteúdo.
+          </p>
+
           <Tabs defaultValue="xtream">
-            <TabsList className="grid grid-cols-2 w-full bg-white/5 mb-4">
-              <TabsTrigger value="xtream">
-                <Tv className="size-4 mr-1.5" /> Xtream
+            <TabsList className="grid grid-cols-2 w-full bg-white/5 mb-5">
+              <TabsTrigger value="xtream" className="data-[state=active]:bg-brand-gradient data-[state=active]:text-white">
+                Xtream Codes
               </TabsTrigger>
               <TabsTrigger value="m3u">
-                <ListVideo className="size-4 mr-1.5" /> M3U
+                Lista M3U
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="xtream">
               <form onSubmit={onXtream} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="server">DNS</Label>
+                  <Label htmlFor="server" className="text-xs tracking-wider text-muted-foreground">DNS / SERVIDOR</Label>
                   <Input
                     id="server"
                     required
-                    placeholder="http://meu-servidor.com:8080"
+                    placeholder="http://meuservidor.com:8080"
                     value={server}
                     onChange={(e) => setServer(e.target.value)}
-                    className="bg-white/5 border-white/10"
+                    className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="user">Usuário</Label>
+                  <Label htmlFor="user" className="text-xs tracking-wider text-muted-foreground">USUÁRIO</Label>
                   <Input
                     id="user"
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="bg-white/5 border-white/10"
+                    className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pass">Senha</Label>
+                  <Label htmlFor="pass" className="text-xs tracking-wider text-muted-foreground">SENHA</Label>
                   <Input
                     id="pass"
                     required
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="bg-white/5 border-white/10"
+                    className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="bg-brand-gradient shadow-glow font-semibold h-11"
-                  >
-                    {loading ? <Loader2 className="size-4 animate-spin" /> : "Entrar Xtream"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11"
-                    onClick={playFirstChannel}
-                  >
-                    <PlayCircle className="size-4 mr-1.5" />
-                    Reproduzir
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
+                >
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : "Entrar Xtream"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground hover:text-foreground"
+                  onClick={playFirstChannel}
+                >
+                  <PlayCircle className="size-4 mr-1.5" />
+                  Reproduzir primeiro canal
+                </Button>
 
                 {result && (
-                  <pre className="mt-3 max-h-48 overflow-auto text-[10px] bg-black/40 border border-white/10 rounded-lg p-3 text-muted-foreground whitespace-pre-wrap break-all">
+                  <pre className="mt-3 max-h-40 overflow-auto text-[10px] bg-black/40 border border-white/10 rounded-lg p-3 text-muted-foreground whitespace-pre-wrap break-all">
                     {result}
                   </pre>
                 )}
@@ -213,24 +230,24 @@ function LoginPage() {
             <TabsContent value="m3u">
               <form onSubmit={onM3U} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="m3u-name">Nome da lista</Label>
+                  <Label htmlFor="m3u-name" className="text-xs tracking-wider text-muted-foreground">NOME DA LISTA</Label>
                   <Input
                     id="m3u-name"
                     placeholder="Minha lista"
                     value={m3uName}
                     onChange={(e) => setM3uName(e.target.value)}
-                    className="bg-white/5 border-white/10"
+                    className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="m3u-url">URL .m3u / .m3u8</Label>
+                  <Label htmlFor="m3u-url" className="text-xs tracking-wider text-muted-foreground">URL .M3U / .M3U8</Label>
                   <Input
                     id="m3u-url"
                     required
                     placeholder="https://exemplo.com/lista.m3u"
                     value={m3uUrl}
                     onChange={(e) => setM3uUrl(e.target.value)}
-                    className="bg-white/5 border-white/10"
+                    className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
                 <Button
@@ -244,8 +261,8 @@ function LoginPage() {
             </TabsContent>
           </Tabs>
 
-          <p className="text-[11px] text-muted-foreground text-center mt-4">
-            Suas credenciais e listas ficam salvas apenas neste dispositivo.
+          <p className="text-[11px] text-muted-foreground text-center mt-5">
+            Suas credenciais ficam salvas apenas neste navegador.
           </p>
         </div>
       </div>
