@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, login, streamUrl, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
+import { api, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
