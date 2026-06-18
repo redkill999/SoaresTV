@@ -42,13 +42,22 @@ function PlaylistPage() {
     queryKey: ["m3u", url],
     enabled: !!url,
     queryFn: () => loadM3U(url),
+    retry: 1,
   });
 
-  const groups = useMemo(() => {
-    const set = new Set<string>();
-    (q.data ?? []).forEach((e) => e.group && set.add(e.group));
-    return ["all", ...Array.from(set)];
-  }, [q.data]);
+  if (!url) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 text-center">
+        <div>
+          <h2 className="text-lg font-semibold mb-2">Nenhuma lista selecionada</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Volte para o login e carregue uma lista M3U.
+          </p>
+          <Button onClick={() => navigate({ to: "/" })}>Voltar</Button>
+        </div>
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
     let list = q.data ?? [];
