@@ -9,6 +9,7 @@ import { store } from "@/lib/storage";
 import { api, login, streamUrl, loadM3U } from "@/lib/xtream";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -117,11 +118,15 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 relative">
       <Toaster theme="dark" />
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 size-96 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 size-96 rounded-full bg-accent/20 blur-3xl" />
+      </div>
+
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeSwitcher />
       </div>
 
       <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6">
