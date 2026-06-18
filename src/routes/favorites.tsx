@@ -39,10 +39,10 @@ function FavoritesPage() {
     <AppShell search={search} onSearch={setSearch}>
       <div className="mb-5">
         <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight">
-          Favoritos
+          {t("pages.favorites.title")}
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {favs.length} {favs.length === 1 ? "item salvo" : "itens salvos"}
+          {favs.length}
         </p>
       </div>
 
