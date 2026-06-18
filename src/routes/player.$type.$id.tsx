@@ -106,12 +106,26 @@ function PlayerPage() {
     return "";
   }, [creds, type, id, episodeUrl, movieQ.data]);
 
+  // Mantém o título atual em ref para evitar duplicar histórico quando
+  // só `activeTitle` muda (mas a URL não).
+  const activeTitleRef = useRef(activeTitle);
   useEffect(() => {
-    if (!url || !creds) return;
-    store.pushHistory({ type: type as never, id, name: activeTitle || id, at: Date.now() });
-  }, [url, type, id, activeTitle, creds]);
+    activeTitleRef.current = activeTitle;
+  }, [activeTitle]);
 
-  const fav = creds ? store.isFav(type as never, id) : false;
+  useEffect(() => {
+    if (!url || !creds || !type) return;
+    store.pushHistory({
+      type,
+      id,
+      name: activeTitleRef.current || id,
+      at: Date.now(),
+    });
+  }, [url, type, id, creds]);
+
+  const favType: FavItem["type"] = type ?? "movie";
+  const fav = useIsFavorite(favType, id) && !!type;
+
 
   return (
     <AppShell>
