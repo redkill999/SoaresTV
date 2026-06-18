@@ -75,6 +75,21 @@ export function CatChip({
   );
 }
 
+export function CatChipsSkeleton({ count = 8 }: { count?: number }) {
+  const widths = ["w-20", "w-28", "w-24", "w-32", "w-20", "w-28", "w-24", "w-28"];
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden
+          className={`h-7 ${widths[i % widths.length]} rounded-full bg-white/[0.04] animate-pulse shrink-0`}
+        />
+      ))}
+    </>
+  );
+}
+
 export type SortKey = "default" | "az" | "za";
 
 export function SortMenu({
