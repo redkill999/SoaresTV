@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search } from "lucide-react";
+import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search, Home } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { store } from "@/lib/storage";
 import { Input } from "@/components/ui/input";
@@ -113,7 +113,16 @@ export function AppShell({
                 />
               </div>
             )}
-            <div className="ml-auto shrink-0">
+            <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              <Link
+                to="/home"
+                title="Ir para o Launcher"
+                aria-label="Ir para o Launcher"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
+              >
+                <Home className="size-4" />
+                <span className="hidden sm:inline">Início</span>
+              </Link>
               <ThemeSwitcher />
             </div>
           </div>
