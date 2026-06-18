@@ -110,18 +110,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 const TV_MODE_SCRIPT = `(function(){
   try {
     if (typeof window === 'undefined') return;
-    var w = window.innerWidth || window.screen.width;
-    var h = window.innerHeight || window.screen.height;
-    var smallScreen = Math.min(w, h) <= 820;
-    var meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name','viewport'); document.head.appendChild(meta); }
-    if (smallScreen) {
-      meta.setAttribute('content','width=1280, initial-scale=1, user-scalable=no');
-      document.documentElement.classList.add('tv-mode');
-    } else {
-      meta.setAttribute('content','width=device-width, initial-scale=1');
-      document.documentElement.classList.remove('tv-mode');
+    function apply(){
+      var sw = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
+      var sh = window.screen && window.screen.height ? window.screen.height : window.innerHeight;
+      var smallScreen = Math.min(sw, sh) <= 820;
+      // Remove any existing viewport meta tags
+      var metas = document.querySelectorAll('meta[name="viewport"]');
+      for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
+      // Add a fresh one (forces browser to re-parse layout viewport)
+      var m = document.createElement('meta');
+      m.setAttribute('name','viewport');
+      m.setAttribute('content', smallScreen
+        ? 'width=1280, initial-scale=1, user-scalable=no'
+        : 'width=device-width, initial-scale=1');
+      document.head.appendChild(m);
+      var html = document.documentElement;
+      if (smallScreen) html.classList.add('tv-mode'); else html.classList.remove('tv-mode');
     }
+    apply();
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
   } catch(e) {}
 })();`;
 
