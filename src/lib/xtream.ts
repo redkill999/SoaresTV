@@ -168,9 +168,10 @@ export function xtreamCredsFromUrl(
   username?: string,
   password?: string,
 ): XtreamCreds | null {
-  const normalized = normalizeServer(raw || "");
+  let target = (raw || "").trim();
+  if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
   try {
-    const u = new URL(normalized);
+    const u = new URL(target);
     const user = u.searchParams.get("username") || username || "";
     const pass = u.searchParams.get("password") || password || "";
     if (!user || !pass) return null;
