@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
-import { store } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, type EpgListing } from "@/lib/xtream";
 import { ArrowLeft, Heart, Clock } from "lucide-react";
 
@@ -31,13 +31,18 @@ function PlayerPage() {
   const { type, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
-  const creds = typeof window !== "undefined" ? store.getCreds() : null;
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+    setCreds(store.getCreds());
+  }, []);
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
   useEffect(() => {
-    if (!creds) navigate({ to: "/" });
-  }, [creds, navigate]);
+    if (hydrated && !creds) navigate({ to: "/" });
+  }, [hydrated, creds, navigate]);
 
   const seriesQ = useQuery({
     queryKey: ["series-info", id],

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
@@ -10,6 +10,7 @@ import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/x
 import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
@@ -41,20 +42,27 @@ export const Route = createFileRoute("/series")({
 });
 
 function SeriesPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [creds] = useState<XtreamCreds | null>(() => {
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => {
     const saved = store.getCreds();
-    if (saved) return saved;
+    if (saved) {
+      setCreds(saved);
+      return;
+    }
     const firstList = store.getM3U()[0];
     const recovered = firstList
       ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
       : null;
-    if (recovered) store.setCreds(recovered);
-    return recovered;
-  });
+    if (recovered) {
+      store.setCreds(recovered);
+      setCreds(recovered);
+    }
+  }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
@@ -104,17 +112,17 @@ function SeriesPage() {
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
           <Link
             to="/home"
-            aria-label="Voltar ao menu"
+            aria-label={t("common.back")}
             className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
           >
             <ArrowLeft className="size-5" />
           </Link>
           <div className="min-w-0">
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-              Séries
+              {t("pages.series.title")}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Temporadas e episódios
+              {t("pages.series.subtitle")}
             </p>
           </div>
           <div className="shrink-0">
@@ -130,9 +138,9 @@ function SeriesPage() {
 
       <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1">
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-          Todas categorias
+          {t("pages.allCategories")}
         </CatChip>
-        {catsQ.isLoading && !catsQ.data ? (
+        {!creds || (catsQ.isLoading && !catsQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (catsQ.data ?? []).map((c) => (
@@ -144,11 +152,11 @@ function SeriesPage() {
       </div>
 
       <MediaGrid
-        loading={listQ.isLoading}
-        empty={!listQ.isLoading && filtered.length === 0}
+        loading={!creds || listQ.isLoading}
+        empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Clapperboard className="size-7" />}
-        emptyTitle={emptyTitle(tab, "série")}
+        emptyTitle={emptyTitle(tab, "series")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (

@@ -11,6 +11,8 @@ import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,6 +28,7 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [splash, setSplash] = useState(true);
 
   // Xtream state
@@ -152,7 +155,7 @@ function LoginPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="size-20 rounded-3xl bg-brand-gradient shadow-glow mx-auto mb-4 animate-pulse" />
-          <h1 className="text-3xl font-bold text-brand-gradient">SoaresTV</h1>
+          <h1 className="text-3xl font-bold text-brand-gradient">{t("auth.appName")}</h1>
         </div>
       </div>
     );
@@ -166,7 +169,8 @@ function LoginPage() {
         <div className="absolute bottom-1/4 right-1/4 size-96 rounded-full bg-accent/20 blur-3xl" />
       </div>
 
-      <div className="absolute top-4 right-4 z-10">
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+        <LanguageSwitcher />
         <ThemeSwitcher />
       </div>
 
@@ -178,43 +182,43 @@ function LoginPage() {
               <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center">
                 <Tv className="size-5 text-white" strokeWidth={2.25} />
               </div>
-              <span className="font-semibold text-lg">SoaresTV</span>
+              <span className="font-semibold text-lg">{t("auth.appName")}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
-              Seu IPTV, em<br />qualquer tela.
+              {t("auth.heroTitle")}
             </h1>
             <p className="mt-5 text-white/85 max-w-sm leading-relaxed">
-              Canais ao vivo, filmes, séries, EPG, favoritos e controle parental — tudo num só app.
+              {t("auth.heroDesc")}
             </p>
           </div>
           <ul className="space-y-2.5 text-sm text-white/95">
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> Player HLS otimizado</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> Suporte Xtream Codes e M3U</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> EPG XMLTV + favoritos</li>
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat1")}</li>
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat2")}</li>
+            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat3")}</li>
           </ul>
         </div>
 
         {/* Right — login card */}
         <div className="glass rounded-3xl p-6 md:p-8 shadow-card border border-white/10 min-h-[520px] flex flex-col">
-          <h2 className="text-2xl font-bold">Entrar</h2>
+          <h2 className="text-2xl font-bold">{t("auth.signIn")}</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
-            Escolha como deseja acessar seu conteúdo.
+            {t("auth.signInSub")}
           </p>
 
           <Tabs defaultValue="xtream">
             <TabsList className="grid grid-cols-2 w-full bg-white/5 mb-5">
               <TabsTrigger value="xtream" className="data-[state=active]:bg-brand-gradient data-[state=active]:text-white">
-                Xtream Codes
+                {t("auth.tabXtream")}
               </TabsTrigger>
               <TabsTrigger value="m3u" className="data-[state=active]:bg-brand-gradient data-[state=active]:text-white">
-                Lista M3U
+                {t("auth.tabM3U")}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="xtream">
               <form onSubmit={onXtream} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="server" className="text-xs tracking-wider text-muted-foreground">DNS / SERVIDOR</Label>
+                  <Label htmlFor="server" className="text-xs tracking-wider text-muted-foreground">{t("auth.server")}</Label>
                   <Input
                     id="server"
                     required
@@ -225,7 +229,7 @@ function LoginPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="user" className="text-xs tracking-wider text-muted-foreground">USUÁRIO</Label>
+                  <Label htmlFor="user" className="text-xs tracking-wider text-muted-foreground">{t("auth.user")}</Label>
                   <Input
                     id="user"
                     required
@@ -235,7 +239,7 @@ function LoginPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pass" className="text-xs tracking-wider text-muted-foreground">SENHA</Label>
+                  <Label htmlFor="pass" className="text-xs tracking-wider text-muted-foreground">{t("auth.password")}</Label>
                   <Input
                     id="pass"
                     required
@@ -251,7 +255,7 @@ function LoginPage() {
                   disabled={loading}
                   className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
                 >
-                  {loading ? <Loader2 className="size-4 animate-spin" /> : "Entrar Xtream"}
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : t("auth.signInXtream")}
                 </Button>
 
                 <Button
@@ -262,7 +266,7 @@ function LoginPage() {
                   onClick={playFirstChannel}
                 >
                   <PlayCircle className="size-4 mr-1.5" />
-                  Reproduzir primeiro canal
+                  {t("auth.playFirst")}
                 </Button>
 
                 {result && (
@@ -276,17 +280,17 @@ function LoginPage() {
             <TabsContent value="m3u">
               <form onSubmit={onM3U} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="m3u-name" className="text-xs tracking-wider text-muted-foreground">NOME DA LISTA</Label>
+                  <Label htmlFor="m3u-name" className="text-xs tracking-wider text-muted-foreground">{t("auth.listName")}</Label>
                   <Input
                     id="m3u-name"
-                    placeholder="Minha lista"
+                    placeholder={t("auth.listNamePh")}
                     value={m3uName}
                     onChange={(e) => setM3uName(e.target.value)}
                     className="bg-white/5 border-white/10 h-11"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="m3u-url" className="text-xs tracking-wider text-muted-foreground">URL .M3U / DNS XTREAM</Label>
+                  <Label htmlFor="m3u-url" className="text-xs tracking-wider text-muted-foreground">{t("auth.m3uUrl")}</Label>
                   <Input
                     id="m3u-url"
                     required
@@ -296,7 +300,7 @@ function LoginPage() {
                     className="bg-white/5 border-white/10 h-11"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Aceita URL Xtream (DNS + usuário/senha abaixo) ou link direto .m3u/.m3u8.
+                    {t("auth.m3uHint")}
                   </p>
                 </div>
                 <Button
@@ -304,7 +308,7 @@ function LoginPage() {
                   disabled={m3uLoading}
                   className="w-full bg-brand-gradient shadow-glow font-semibold h-11"
                 >
-                  {m3uLoading ? <Loader2 className="size-4 animate-spin" /> : "Carregar Lista M3U"}
+                  {m3uLoading ? <Loader2 className="size-4 animate-spin" /> : t("auth.loadM3U")}
                 </Button>
                 <Button
                   type="button"
@@ -313,14 +317,14 @@ function LoginPage() {
                   className="w-full text-muted-foreground hover:text-foreground"
                   onClick={loadSample}
                 >
-                  Usar lista de teste (IPTV-Org)
+                  {t("auth.useSample")}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
 
           <p className="text-[11px] text-muted-foreground text-center mt-5">
-            Suas credenciais ficam salvas apenas neste navegador.
+            {t("auth.credsLocal")}
           </p>
         </div>
       </div>

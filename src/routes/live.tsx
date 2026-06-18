@@ -1,13 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { ParentalGate } from "@/components/ParentalGate";
-import { store } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Tv } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
@@ -31,12 +33,15 @@ export const Route = createFileRoute("/live")({
 });
 
 function LivePage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState<string>("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
   const [unlocked, setUnlocked] = useState(false);
-  const [creds] = useState(() => store.getCreds());
+  // Lê creds só depois da hidratação para evitar mismatch SSR/CSR.
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const categoriesQ = useQuery({
@@ -96,8 +101,8 @@ function LivePage() {
   return (
     <AppShell search={search} onSearch={setSearch}>
       <Header
-        title="Canais ao Vivo"
-        subtitle="Transmissão em tempo real"
+        title={t("pages.live.title")}
+        subtitle={t("pages.live.subtitle")}
         tab={tab}
         setTab={setTab}
         sort={sort}
@@ -107,9 +112,9 @@ function LivePage() {
 
       <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1 scrollbar-thin">
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-          Todas categorias
+          {t("pages.allCategories")}
         </CatChip>
-        {categoriesQ.isLoading && !categoriesQ.data ? (
+        {!creds || (categoriesQ.isLoading && !categoriesQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (categoriesQ.data ?? []).map((c) => (
@@ -128,11 +133,11 @@ function LivePage() {
       </div>
 
       <MediaGrid
-        loading={streamsQ.isLoading}
-        empty={!streamsQ.isLoading && filtered.length === 0}
+        loading={!creds || streamsQ.isLoading}
+        empty={!!creds && !streamsQ.isLoading && filtered.length === 0}
         aspect="wide"
         emptyIcon={<Tv className="size-7" />}
-        emptyTitle={emptyTitle(tab, "canal")}
+        emptyTitle={emptyTitle(tab, "channel")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((s) => (
@@ -168,12 +173,13 @@ function Header({
   setSort: (v: SortKey) => void;
   counts: Partial<Record<TabKey, number>>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-5">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
         <Link
           to="/home"
-          aria-label="Voltar ao menu"
+          aria-label={t("common.back")}
           className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
         >
           <ArrowLeft className="size-5" />
@@ -193,14 +199,15 @@ function Header({
   );
 }
 
-export function emptyTitle(tab: TabKey, item: string) {
-  if (tab === "favorites") return `Nenhum ${item} favorito`;
-  if (tab === "recent") return `Nenhum ${item} recente`;
-  return "Nada encontrado";
+export function emptyTitle(tab: TabKey, itemKey: "channel" | "movie" | "series") {
+  const item = i18n.t(`empty.${itemKey}`);
+  if (tab === "favorites") return i18n.t("empty.noFav", { item });
+  if (tab === "recent") return i18n.t("empty.noRecent", { item });
+  return i18n.t("empty.noResults");
 }
 export function emptyHint(tab: TabKey, search: string) {
-  if (search) return `Sem resultados para "${search}".`;
-  if (tab === "favorites") return "Toque no coração nos cards para favoritar.";
-  if (tab === "recent") return "O que você assistir aparece aqui.";
-  return "Tente ajustar a busca ou trocar a categoria.";
+  if (search) return i18n.t("empty.searchHint", { q: search });
+  if (tab === "favorites") return i18n.t("empty.favHint");
+  if (tab === "recent") return i18n.t("empty.recentHint");
+  return i18n.t("empty.defaultHint");
 }

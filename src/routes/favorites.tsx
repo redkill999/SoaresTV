@@ -6,20 +6,21 @@ import { MediaGrid } from "@/components/MediaGrid";
 import { SectionTabs, type TabKey } from "@/components/SectionTabs";
 import { useFavorites } from "@/hooks/use-favorites";
 import { Heart } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/favorites")({
   head: () => ({ meta: [{ title: "Favoritos — SoaresTV" }] }),
   component: FavoritesPage,
 });
 
-const TABS: { key: TabKey | "live" | "movie" | "series"; label: string }[] = [
-  { key: "all", label: "Todos" },
-  { key: "live", label: "Canais" },
-  { key: "movie", label: "Filmes" },
-  { key: "series", label: "Séries" },
-];
-
 function FavoritesPage() {
+  const { t } = useTranslation();
+  const TABS: { key: TabKey | "live" | "movie" | "series"; label: string }[] = [
+    { key: "all", label: t("tabs.all") },
+    { key: "live", label: t("nav.channels") },
+    { key: "movie", label: t("nav.movies") },
+    { key: "series", label: t("nav.series") },
+  ];
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"all" | "live" | "movie" | "series">("all");
   const favs = useFavorites();
@@ -38,10 +39,10 @@ function FavoritesPage() {
     <AppShell search={search} onSearch={setSearch}>
       <div className="mb-5">
         <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight">
-          Favoritos
+          {t("pages.favorites.title")}
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {favs.length} {favs.length === 1 ? "item salvo" : "itens salvos"}
+          {favs.length}
         </p>
       </div>
 
@@ -76,8 +77,8 @@ function FavoritesPage() {
         empty={filtered.length === 0}
         aspect={tab === "live" ? "wide" : "poster"}
         emptyIcon={<Heart className="size-7" />}
-        emptyTitle="Nenhum favorito ainda"
-        emptyHint="Toque no coração nos cards para salvar aqui."
+        emptyTitle={t("empty.noResults")}
+        emptyHint={t("empty.favHint")}
       >
         {filtered.map((f) => (
           <MediaCard

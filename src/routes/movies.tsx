@@ -1,15 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
-import { store } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
@@ -31,11 +32,13 @@ export const Route = createFileRoute("/movies")({
 });
 
 function MoviesPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [creds] = useState(() => store.getCreds());
+  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
@@ -86,17 +89,17 @@ function MoviesPage() {
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
           <Link
             to="/home"
-            aria-label="Voltar ao menu"
+            aria-label={t("common.back")}
             className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
           >
             <ArrowLeft className="size-5" />
           </Link>
           <div className="min-w-0">
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-              Filmes
+              {t("pages.movies.title")}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Catálogo sob demanda
+              {t("pages.movies.subtitle")}
             </p>
           </div>
           <div className="shrink-0">
@@ -112,9 +115,9 @@ function MoviesPage() {
 
       <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1">
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-          Todas categorias
+          {t("pages.allCategories")}
         </CatChip>
-        {catsQ.isLoading && !catsQ.data ? (
+        {!creds || (catsQ.isLoading && !catsQ.data) ? (
           <CatChipsSkeleton />
         ) : (
           (catsQ.data ?? []).map((c) => (
@@ -126,11 +129,11 @@ function MoviesPage() {
       </div>
 
       <MediaGrid
-        loading={listQ.isLoading}
-        empty={!listQ.isLoading && filtered.length === 0}
+        loading={!creds || listQ.isLoading}
+        empty={!!creds && !listQ.isLoading && filtered.length === 0}
         aspect="poster"
         emptyIcon={<Film className="size-7" />}
-        emptyTitle={emptyTitle(tab, "filme")}
+        emptyTitle={emptyTitle(tab, "movie")}
         emptyHint={emptyHint(tab, search)}
       >
         {filtered.map((m) => (

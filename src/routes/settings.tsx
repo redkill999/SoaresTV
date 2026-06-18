@@ -8,6 +8,7 @@ import { store, type M3UPlaylist, type ParentalConfig } from "@/lib/storage";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
+  const { t } = useTranslation();
   const [lists, setLists] = useState<M3UPlaylist[]>([]);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -53,7 +55,7 @@ function SettingsPage() {
   return (
     <AppShell>
       <Toaster theme="dark" />
-      <h1 className="text-2xl font-bold mb-6">Ajustes</h1>
+      <h1 className="text-2xl font-bold mb-6">{t("pages.settings.title")}</h1>
 
       <section className="glass rounded-2xl p-6 mb-6">
         <h2 className="font-semibold mb-1">Listas M3U</h2>
