@@ -29,44 +29,50 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
 }
 
-/* SoaresTV — Dark purple/blue IPTV theme */
+/* SoaresTV — Midnight Indigo theme */
 :root {
-  --radius: 0.75rem;
+  --radius: 0.875rem;
 
-  --background: oklch(0.15 0.04 280);
-  --foreground: oklch(0.97 0.01 270);
+  /* #0a0a1a #141432 #1e1e5a #4f46e5 */
+  --background: oklch(0.13 0.04 280);
+  --foreground: oklch(0.98 0.005 270);
 
-  --card: oklch(0.20 0.05 278);
-  --card-foreground: oklch(0.97 0.01 270);
+  --card: oklch(0.19 0.06 278);
+  --card-foreground: oklch(0.98 0.005 270);
 
-  --popover: oklch(0.18 0.05 278);
-  --popover-foreground: oklch(0.97 0.01 270);
+  --popover: oklch(0.17 0.06 278);
+  --popover-foreground: oklch(0.98 0.005 270);
 
-  --primary: oklch(0.65 0.22 285);
+  --primary: oklch(0.58 0.22 275);
   --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.28 0.07 275);
-  --secondary-foreground: oklch(0.97 0.01 270);
+  --secondary: oklch(0.26 0.08 278);
+  --secondary-foreground: oklch(0.98 0.005 270);
 
-  --muted: oklch(0.28 0.05 275);
-  --muted-foreground: oklch(0.80 0.03 270);
+  --muted: oklch(0.22 0.05 278);
+  --muted-foreground: oklch(0.74 0.03 275);
 
-  --accent: oklch(0.55 0.20 250);
+  --accent: oklch(0.62 0.20 270);
   --accent-foreground: oklch(0.99 0 0);
 
   --destructive: oklch(0.62 0.24 25);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.65 0.22 285);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.58 0.22 275);
 
-  --gradient-brand: linear-gradient(135deg, oklch(0.45 0.22 310) 0%, oklch(0.55 0.25 340) 55%, oklch(0.62 0.22 25) 100%);
-  --gradient-bg: radial-gradient(ellipse at top left, oklch(0.18 0.06 320) 0%, oklch(0.10 0.03 290) 60%);
-  --shadow-glow: 0 20px 60px -20px oklch(0.55 0.25 340 / 0.55);
-  --shadow-card: 0 10px 30px -10px oklch(0 0 0 / 0.6);
+  --gradient-brand: linear-gradient(135deg, oklch(0.30 0.14 280) 0%, oklch(0.45 0.22 275) 55%, oklch(0.62 0.22 270) 100%);
+  --gradient-bg:
+    radial-gradient(1000px 600px at 15% -10%, oklch(0.30 0.14 285 / 0.55) 0%, transparent 60%),
+    radial-gradient(900px 500px at 85% 110%, oklch(0.35 0.18 270 / 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, oklch(0.10 0.03 280) 0%, oklch(0.08 0.02 280) 100%);
+  --shadow-glow: 0 20px 60px -20px oklch(0.55 0.25 275 / 0.55);
+  --shadow-card: 0 10px 30px -12px oklch(0 0 0 / 0.7);
 }
 
 html,
@@ -74,11 +80,22 @@ body {
   background: var(--gradient-bg);
   color: var(--foreground);
   min-height: 100vh;
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
   background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+@utility font-display {
+  font-family: var(--font-display);
 }
 
 @utility bg-brand-gradient {
@@ -101,9 +118,9 @@ body {
 }
 
 @utility glass {
-  background: oklch(1 0 0 / 0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid oklch(1 0 0 / 0.08);
+  background: oklch(1 0 0 / 0.035);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid oklch(1 0 0 / 0.07);
 }
 
 /* Focus ring for TV/D-pad navigation */
