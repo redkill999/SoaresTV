@@ -173,6 +173,7 @@ function Header({
   setSort: (v: SortKey) => void;
   counts: Partial<Record<TabKey, number>>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-5">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3 mb-4">
