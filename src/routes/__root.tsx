@@ -125,7 +125,7 @@ const TV_MODE_SCRIPT = `(function(){
         : 'width=device-width, initial-scale=1');
       document.head.appendChild(m);
       var html = document.documentElement;
-      if (smallScreen) html.classList.add('tv-mode'); else html.classList.remove('tv-mode');
+      if (smallScreen) html.setAttribute('data-tv-mode',''); else html.removeAttribute('data-tv-mode');
     }
     apply();
     window.addEventListener('resize', apply);
