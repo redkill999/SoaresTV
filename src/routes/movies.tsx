@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
-import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
+import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { ArrowLeft, Film } from "lucide-react";
@@ -114,11 +114,15 @@ function MoviesPage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {(catsQ.data ?? []).map((c) => (
-          <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
-            {c.category_name}
-          </CatChip>
-        ))}
+        {catsQ.isLoading && !catsQ.data ? (
+          <CatChipsSkeleton />
+        ) : (
+          (catsQ.data ?? []).map((c) => (
+            <CatChip key={c.category_id} active={cat === c.category_id} onClick={() => setCat(c.category_id)}>
+              {c.category_name}
+            </CatChip>
+          ))
+        )}
       </div>
 
       <MediaGrid

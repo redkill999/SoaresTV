@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
-import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
+import { CatChip, CatChipsSkeleton, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/components/SectionTabs";
 import { ParentalGate } from "@/components/ParentalGate";
 import { store } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
@@ -109,18 +109,22 @@ function LivePage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {(categoriesQ.data ?? []).map((c) => (
-          <CatChip
-            key={c.category_id}
-            active={cat === c.category_id}
-            onClick={() => {
-              setCat(c.category_id);
-              setUnlocked(false);
-            }}
-          >
-            {c.category_name}
-          </CatChip>
-        ))}
+        {categoriesQ.isLoading && !categoriesQ.data ? (
+          <CatChipsSkeleton />
+        ) : (
+          (categoriesQ.data ?? []).map((c) => (
+            <CatChip
+              key={c.category_id}
+              active={cat === c.category_id}
+              onClick={() => {
+                setCat(c.category_id);
+                setUnlocked(false);
+              }}
+            >
+              {c.category_name}
+            </CatChip>
+          ))
+        )}
       </div>
 
       <MediaGrid
