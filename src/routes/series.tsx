@@ -21,25 +21,16 @@ function SeriesPage() {
   const [cat, setCat] = useState("all");
   const [tab, setTab] = useState<TabKey>("all");
   const [sort, setSort] = useState<SortKey>("default");
-  const [creds, setCreds] = useState<XtreamCreds | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const savedCreds = store.getCreds();
-    if (savedCreds) {
-      setCreds(savedCreds);
-      return;
-    }
+  const [creds] = useState<XtreamCreds | null>(() => {
+    const saved = store.getCreds();
+    if (saved) return saved;
     const firstList = store.getM3U()[0];
     const recovered = firstList
       ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
       : null;
-    if (recovered) {
-      store.setCreds(recovered);
-      setCreds(recovered);
-    }
-  }, []);
+    if (recovered) store.setCreds(recovered);
+    return recovered;
+  });
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsQ = useQuery({
