@@ -8,6 +8,7 @@ import { CatChip, SectionTabs, SortMenu, type SortKey, type TabKey } from "@/com
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { Clapperboard } from "lucide-react";
+import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { emptyHint, emptyTitle } from "./live";
 
 export const Route = createFileRoute("/series")({
@@ -52,13 +53,15 @@ function SeriesPage() {
       api<Series[]>(creds!, "get_series", cat !== "all" ? { category_id: cat } : undefined),
   });
 
+  const favs = useFavorites();
+  const history = useHistory();
   const favIds = useMemo(
-    () => new Set(store.getFavs().filter((f) => f.type === "series").map((f) => f.id)),
-    [mounted, tab],
+    () => new Set(favs.filter((f) => f.type === "series").map((f) => f.id)),
+    [favs],
   );
   const recentIds = useMemo(
-    () => store.getHistory().filter((h) => h.type === "series").map((h) => h.id),
-    [mounted, tab],
+    () => history.filter((h) => h.type === "series").map((h) => h.id),
+    [history],
   );
 
   const filtered = useMemo(() => {

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Heart, Play } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
+import { useIsFavorite } from "@/hooks/use-favorites";
 import { useState } from "react";
 
 type Aspect = "poster" | "wide" | "square";
@@ -27,7 +28,7 @@ export function MediaCard({
   aspect?: Aspect;
 }) {
   const idStr = String(id);
-  const [fav, setFav] = useState(() => store.isFav(type, idStr));
+  const fav = useIsFavorite(type, idStr);
   const [loaded, setLoaded] = useState(false);
 
   return (
@@ -85,7 +86,6 @@ export function MediaCard({
         onClick={(e) => {
           e.preventDefault();
           store.toggleFav({ type, id: idStr, name, logo: image });
-          setFav((f) => !f);
         }}
         className="absolute top-2 right-2 size-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
         aria-label="Favoritar"
