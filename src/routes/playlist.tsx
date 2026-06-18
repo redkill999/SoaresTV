@@ -247,3 +247,30 @@ function PlaylistPage() {
     </div>
   );
 }
+
+function PlaylistSwitcher({
+  currentUrl,
+  onPick,
+}: {
+  currentUrl: string;
+  onPick: (p: { url: string; name: string }) => void;
+}) {
+  const lists = typeof window !== "undefined" ? store.getM3U() : [];
+  if (lists.length <= 1) return null;
+  return (
+    <select
+      value={currentUrl}
+      onChange={(e) => {
+        const found = lists.find((l) => l.url === e.target.value);
+        if (found) onPick({ url: found.url, name: found.name });
+      }}
+      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs max-w-[200px]"
+    >
+      {lists.map((l) => (
+        <option key={l.url} value={l.url} className="bg-background">
+          {l.name}
+        </option>
+      ))}
+    </select>
+  );
+}
