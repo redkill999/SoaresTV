@@ -180,7 +180,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
   body {
     --design-w: 1280px;
     --design-h: 720px;
-    --scale: min(calc(100vw / 1280), calc(100vh / 720));
+    --scale: min(calc(100vw / 1280px), calc(100vh / 720px));
     margin: 0;
     width: var(--design-w);
     height: var(--design-h);
