@@ -109,18 +109,22 @@ function LivePage() {
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
           Todas categorias
         </CatChip>
-        {(categoriesQ.data ?? []).map((c) => (
-          <CatChip
-            key={c.category_id}
-            active={cat === c.category_id}
-            onClick={() => {
-              setCat(c.category_id);
-              setUnlocked(false);
-            }}
-          >
-            {c.category_name}
-          </CatChip>
-        ))}
+        {categoriesQ.isLoading && !categoriesQ.data ? (
+          <CatChipsSkeleton />
+        ) : (
+          (categoriesQ.data ?? []).map((c) => (
+            <CatChip
+              key={c.category_id}
+              active={cat === c.category_id}
+              onClick={() => {
+                setCat(c.category_id);
+                setUnlocked(false);
+              }}
+            >
+              {c.category_name}
+            </CatChip>
+          ))
+        )}
       </div>
 
       <MediaGrid
