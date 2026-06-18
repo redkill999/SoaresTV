@@ -85,8 +85,8 @@ function LoginPage() {
             throw loginErr;
           }
         } else {
-          if (!native && /HTTP 50[234]|datacenter|rejeitou o acesso/i.test(loginErr instanceof Error ? loginErr.message : "")) {
-            throw new Error("Esse painel está bloqueando requisições do servidor web. No APK atualizado o app usa a conexão direta do seu Android, igual ao XCIPTV.");
+          if (!native && /HTTP 50[1234]|datacenter|rejeitou o acesso/i.test(loginErr instanceof Error ? loginErr.message : "")) {
+            throw new Error("Esse servidor bloqueou a conexão da versão web antes de autenticar. Não salvei nada para não bagunçar as listas que já funcionam.");
           }
           if (!entries.length) throw loginErr;
         }
