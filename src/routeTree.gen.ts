@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SeriesRouteImport } from './routes/series'
+import { Route as PlaylistRouteImport } from './routes/playlist'
 import { Route as MoviesRouteImport } from './routes/movies'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as HistoryRouteImport } from './routes/history'
@@ -26,6 +27,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SeriesRoute = SeriesRouteImport.update({
   id: '/series',
   path: '/series',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaylistRoute = PlaylistRouteImport.update({
+  id: '/playlist',
+  path: '/playlist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MoviesRoute = MoviesRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/live': typeof LiveRoute
   '/movies': typeof MoviesRoute
+  '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/live': typeof LiveRoute
   '/movies': typeof MoviesRoute
+  '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/live': typeof LiveRoute
   '/movies': typeof MoviesRoute
+  '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/live'
     | '/movies'
+    | '/playlist'
     | '/series'
     | '/settings'
     | '/player/$type/$id'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/live'
     | '/movies'
+    | '/playlist'
     | '/series'
     | '/settings'
     | '/player/$type/$id'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/live'
     | '/movies'
+    | '/playlist'
     | '/series'
     | '/settings'
     | '/player/$type/$id'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   LiveRoute: typeof LiveRoute
   MoviesRoute: typeof MoviesRoute
+  PlaylistRoute: typeof PlaylistRoute
   SeriesRoute: typeof SeriesRoute
   SettingsRoute: typeof SettingsRoute
   PlayerTypeIdRoute: typeof PlayerTypeIdRoute
@@ -148,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/series'
       fullPath: '/series'
       preLoaderRoute: typeof SeriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playlist': {
+      id: '/playlist'
+      path: '/playlist'
+      fullPath: '/playlist'
+      preLoaderRoute: typeof PlaylistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/movies': {
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   LiveRoute: LiveRoute,
   MoviesRoute: MoviesRoute,
+  PlaylistRoute: PlaylistRoute,
   SeriesRoute: SeriesRoute,
   SettingsRoute: SettingsRoute,
   PlayerTypeIdRoute: PlayerTypeIdRoute,
