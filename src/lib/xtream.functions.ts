@@ -30,16 +30,61 @@ export const xtreamApi = createServerFn({ method: "POST" })
         url.searchParams.set(k, String(v));
       }
     }
-    const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "Mozilla/5.0 SoaresTV" },
-    });
-    if (!res.ok) throw new Error(`Xtream ${res.status}`);
-    const text = await res.text();
-    try {
-      return { ok: true as const, data: JSON.parse(text) };
-    } catch {
-      return { ok: false as const, raw: text };
+
+    // Some Xtream panels respond 502/503/504 transiently when overloaded.
+    // Retry a couple of times with backoff before surfacing a friendly error,
+    // and rotate User-Agent on the last try (a few panels block default UAs).
+    const UAS = [
+      "VLC/3.0.20 LibVLC/3.0.20",
+      "Mozilla/5.0 SoaresTV",
+      "IPTVSmarters/1.0",
+    ];
+    let lastStatus = 0;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20_000);
+      try {
+        const res = await fetch(url.toString(), {
+          headers: { "User-Agent": UAS[attempt] ?? UAS[0], Accept: "*/*" },
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const text = await res.text();
+          try {
+            return { ok: true as const, data: JSON.parse(text) };
+          } catch {
+            return { ok: false as const, raw: text };
+          }
+        }
+        lastStatus = res.status;
+        // Don't retry on auth/permanent errors
+        if (res.status < 500 && res.status !== 429) break;
+      } catch (e) {
+        lastErr = e;
+      } finally {
+        clearTimeout(timer);
+      }
+      // backoff: 400ms, 1200ms
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
     }
+
+    if (lastStatus === 503 || lastStatus === 502 || lastStatus === 504) {
+      throw new Error(
+        `Servidor Xtream indisponível no momento (HTTP ${lastStatus}). Tente novamente em alguns segundos ou verifique se o painel está fora do ar.`,
+      );
+    }
+    if (lastStatus === 401 || lastStatus === 403) {
+      throw new Error("Credenciais inválidas ou conta bloqueada pelo painel.");
+    }
+    if (lastStatus === 429) {
+      throw new Error("Muitas requisições ao painel Xtream. Aguarde alguns segundos e tente novamente.");
+    }
+    if (lastStatus) throw new Error(`Xtream respondeu HTTP ${lastStatus}`);
+    throw new Error(
+      lastErr instanceof Error ? `Falha de rede ao contatar o servidor: ${lastErr.message}` : "Falha de rede ao contatar o servidor Xtream.",
+    );
   });
 
 type M3UEntryDTO = {
