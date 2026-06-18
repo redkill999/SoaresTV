@@ -144,7 +144,7 @@ export async function login(c: XtreamCreds) {
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
-  if (native?.creds.server && native.creds.server !== normalizeServer(c.server)) storeServerOverride(c, native.creds.server);
+  if (native?.creds.server) c.server = native.creds.server;
   return r;
 }
 
