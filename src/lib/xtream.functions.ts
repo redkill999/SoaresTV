@@ -52,6 +52,8 @@ type M3UEntryDTO = {
 
 type M3UResultDTO = { entries: M3UEntryDTO[]; error?: string };
 
+const MAX_SERVER_ENTRIES = 10_000;
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -62,7 +64,7 @@ function decodeEntities(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-function parseM3UText(text: string): M3UEntryDTO[] {
+function parseM3UText(text: string, limit = MAX_SERVER_ENTRIES): M3UEntryDTO[] {
   const out: M3UEntryDTO[] = [];
   let cur: { name: string; logo?: string; group?: string } | null = null;
   let i = 0;
@@ -90,6 +92,7 @@ function parseM3UText(text: string): M3UEntryDTO[] {
           logo: cur.logo,
           group: cur.group,
         });
+        if (out.length >= limit) return out;
         cur = null;
       }
     }
@@ -164,6 +167,7 @@ function mapXtreamLiveStreams(data: unknown, access: NonNullable<ReturnType<type
   if (!Array.isArray(data)) return [];
   const entries: M3UEntryDTO[] = [];
   data.forEach((item, i) => {
+    if (entries.length >= MAX_SERVER_ENTRIES) return;
     const stream = item as Record<string, unknown>;
     const id = stream.stream_id;
     const name = typeof stream.name === "string" ? stream.name : `Canal ${i + 1}`;
@@ -186,10 +190,8 @@ export const fetchM3U = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<M3UResultDTO> => {
     const access = getXtreamAccess(data.url, data.username, data.password);
-    const tried: string[] = [];
 
     async function fetchText(target: string) {
-      tried.push(target);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 60_000);
       try {
