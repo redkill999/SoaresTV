@@ -47,10 +47,12 @@ export async function api<T = unknown>(
 }
 
 export async function login(c: XtreamCreds) {
-  const r = await api<{ user_info?: { auth?: number; status?: string }; server_info?: unknown }>(
+  const r = await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
     c,
   );
-  if (!r?.user_info || r.user_info.auth !== 1) throw new Error("Credenciais inválidas");
+  const auth = r?.user_info?.auth;
+  const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
+  if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
   return r;
 }
 
