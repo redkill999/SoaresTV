@@ -138,7 +138,7 @@ function SeriesPage() {
 
       <div className="flex gap-2 overflow-x-auto pb-3 mb-5 -mx-1 px-1">
         <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-          Todas categorias
+          {t("pages.allCategories")}
         </CatChip>
         {!creds || (catsQ.isLoading && !catsQ.data) ? (
           <CatChipsSkeleton />
