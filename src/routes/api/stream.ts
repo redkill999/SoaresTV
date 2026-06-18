@@ -56,6 +56,10 @@ function vodRangeForUpstream(requestedRange: string | null): string {
   return `bytes=${parsed.start}-${cappedEnd}`;
 }
 
+function defaultVodRange(): string {
+  return `bytes=0-${VOD_CHUNK_SIZE - 1}`;
+}
+
 function limitBody(body: ReadableStream<Uint8Array> | null, bytes: number) {
   if (!body) return body;
   return new ReadableStream<Uint8Array>({
@@ -134,7 +138,7 @@ async function handle(request: Request) {
   headers.set("Icy-MetaData", "0");
   const range = request.headers.get("range");
   const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
-  if (isVod) headers.set("Range", vodRangeForUpstream(range));
+  if (isVod) headers.set("Range", range || defaultVodRange());
   else if (range) headers.set("Range", range);
 
   let upstream: Response;
@@ -195,8 +199,11 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
+  if (isVod && status === 206 && range) {
+    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  }
   if (isVod && (status === 200 || status === 206)) {
-    const parsed = parseByteRange(vodRangeForUpstream(range)) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
+    const parsed = parseByteRange(defaultVodRange()) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
     const requestedLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
     const upstreamLength = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
     const bodyLength = Math.min(upstreamLength ?? requestedLength, requestedLength);
