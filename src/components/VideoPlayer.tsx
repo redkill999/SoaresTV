@@ -51,10 +51,30 @@ function httpsVariant(url: string): string | null {
   }
 }
 
-export function VideoPlayer({ src, poster, kind }: { src: string; poster?: string; kind?: "live" | "vod" }) {
+export function VideoPlayer({
+  src,
+  poster,
+  kind,
+  initialPosition,
+  onProgress,
+}: {
+  src: string;
+  poster?: string;
+  kind?: "live" | "vod";
+  initialPosition?: number;
+  onProgress?: (positionSec: number, durationSec: number) => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
+  const initialPositionRef = useRef(initialPosition ?? 0);
+  const onProgressRef = useRef(onProgress);
+  useEffect(() => {
+    initialPositionRef.current = initialPosition ?? 0;
+  }, [initialPosition]);
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+  }, [onProgress]);
 
   useEffect(() => {
     const video = videoRef.current;
