@@ -61,6 +61,22 @@ function HomePage() {
     if (!hasCreds && playlists.length === 0) navigate({ to: "/" });
   }, [navigate]);
 
+  // Pinta o "letterbox" do TV-mode com a mesma imagem da home,
+  // pra não sobrar barra preta em cima/embaixo no preview.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlBg = html.style.background;
+    const prevBodyBg = body.style.background;
+    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    html.style.background = bg;
+    body.style.background = bg;
+    return () => {
+      html.style.background = prevHtmlBg;
+      body.style.background = prevBodyBg;
+    };
+  }, []);
+
   if (!mounted) return <HomeSkeleton />;
 
   const openTile = (to: string) => {
