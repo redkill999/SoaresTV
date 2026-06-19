@@ -27,23 +27,24 @@ type Tile = {
 };
 
 const MAIN: Tile[] = [
-  { label: "LIVE TV", icon: Tv, to: "/live" },
+  { label: "TV AO VIVO", icon: Tv, to: "/live" },
   { label: "EPG", icon: CalendarDays, to: "/live" },
-  { label: "VOD", icon: Film, to: "/movies" },
-  { label: "SERIES", icon: Clapperboard, to: "/series" },
+  { label: "FILMES", icon: Film, to: "/movies" },
+  { label: "SÉRIES", icon: Clapperboard, to: "/series" },
 ];
 
 const BOTTOM_LEFT: Tile[] = [
-  { label: "ACCOUNT", icon: User, to: "/settings" },
+  { label: "CONTA", icon: User, to: "/settings" },
   { label: "MULTI", icon: LayoutGrid, to: "/live" },
   { label: "CATCH UP", icon: RotateCcw, to: "/live" },
 ];
 
 const BOTTOM_RIGHT: Tile[] = [
-  { label: "FAVORITE", icon: Star, to: "/favorites" },
-  { label: "RADIO", icon: Radio, to: "/live" },
-  { label: "SETTINGS", icon: SettingsIcon, to: "/settings" },
+  { label: "FAVORITOS", icon: Star, to: "/favorites" },
+  { label: "RÁDIO", icon: Radio, to: "/live" },
+  { label: "CONFIGURAÇÃO", icon: SettingsIcon, to: "/settings" },
 ];
+
 
 type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
