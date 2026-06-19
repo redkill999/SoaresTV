@@ -90,8 +90,12 @@ function HomePage() {
 
   if (!mounted) return <HomeSkeleton />;
 
-  const openTile = (to: string) => {
+  const openTile = (to: string, label?: string) => {
     if (!to) return;
+    if (label === "CONTA") {
+      navigate({ to: "/settings", search: { open: "conta" } });
+      return;
+    }
     const usesPlaylistContent = to === "/live" || to === "/movies" || to === "/series";
     if (m3uList && !store.getCreds() && usesPlaylistContent) {
       const xtreamCreds = xtreamCredsFromUrl(m3uList.url, m3uList.username, m3uList.password);
@@ -105,6 +109,7 @@ function HomePage() {
     }
     navigate({ to });
   };
+
 
 
   const setSleepTimer = (mins: number) => {
@@ -188,7 +193,7 @@ function HomePage() {
       <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-4">
         <div className="grid w-full grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
           {MAIN.map((t) => (
-            <MainTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
+            <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
         </div>
       </main>
@@ -197,7 +202,7 @@ function HomePage() {
       <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-5 pt-2 sm:px-6">
         <div className="flex items-end gap-2 sm:gap-3">
           {BOTTOM_LEFT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
+            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
         </div>
         <div className="flex flex-col items-center justify-end pb-1 text-center">
@@ -211,7 +216,7 @@ function HomePage() {
         </div>
         <div className="flex items-end justify-end gap-2 sm:gap-3">
           {BOTTOM_RIGHT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to)} />
+            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
         </div>
       </footer>
