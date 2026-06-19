@@ -68,6 +68,7 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -76,6 +77,18 @@ export function VideoPlayer({
   useEffect(() => {
     onProgressRef.current = onProgress;
   }, [onProgress]);
+  useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
+
+  const videoClass = useMemo(() => {
+    const base = "w-full bg-black rounded-xl shadow-card";
+    switch (settings.aspectRatio) {
+      case "16:9":   return `${base} aspect-video object-contain`;
+      case "4:3":    return `${base} aspect-[4/3] object-contain`;
+      case "fill":   return `${base} aspect-video object-cover`;
+      case "stretch":return `${base} aspect-video object-fill`;
+      default:       return `${base} aspect-video object-contain`;
+    }
+  }, [settings.aspectRatio]);
 
   useEffect(() => {
     const video = videoRef.current;
