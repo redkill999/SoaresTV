@@ -377,19 +377,23 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || kind === "live") return;
 
+    let hasSeeked = false;
     const seekToInitial = () => {
+      if (hasSeeked) return;
       const pos = initialPositionRef.current;
       const dur = video.duration;
-      if (!pos || !Number.isFinite(dur) || dur <= 0) return;
+      if (!Number.isFinite(dur) || dur <= 0) return;
+      if (!pos) { hasSeeked = true; return; }
       // Não restaura se já assistiu >95% (considera "completo")
-      if (pos / dur > 0.95) return;
+      if (pos / dur > 0.95) { hasSeeked = true; return; }
       // Não restaura faixas pequenas demais
-      if (pos < 10) return;
+      if (pos < 10) { hasSeeked = true; return; }
       try {
         video.currentTime = Math.min(pos, dur - 5);
       } catch {
         /* ignore */
       }
+      hasSeeked = true;
     };
 
     const reportProgress = () => {
@@ -410,6 +414,7 @@ export function VideoPlayer({
     };
 
     const onLoadedMeta = () => seekToInitial();
+    const onCanPlay = () => seekToInitial();
     const onPlay = () => startTicking();
     const onPause = () => {
       stopTicking();
@@ -423,6 +428,7 @@ export function VideoPlayer({
     };
 
     video.addEventListener("loadedmetadata", onLoadedMeta);
+    video.addEventListener("canplay", onCanPlay);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
@@ -431,6 +437,7 @@ export function VideoPlayer({
       stopTicking();
       reportProgress(); // salva ao trocar de mídia/desmontar
       video.removeEventListener("loadedmetadata", onLoadedMeta);
+      video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);

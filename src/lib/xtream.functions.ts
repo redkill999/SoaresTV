@@ -117,41 +117,60 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     const dashboardUrl = new URL("/dashboard", origin).toString();
     const body = new URLSearchParams({ username: data.username, password: data.password, save: "1" });
 
-    const loginRes = await fetch(loginUrl, {
-      method: "POST",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Content-Type": "application/x-www-form-urlencoded",
-        Referer: dashboardUrl,
-      },
-      body,
-      redirect: "manual",
-    });
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 15_000);
+    try {
+      const loginRes = await fetch(loginUrl, {
+        method: "POST",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Content-Type": "application/x-www-form-urlencoded",
+          Referer: dashboardUrl,
+        },
+        body,
+        redirect: "manual",
+        signal: ctrl.signal,
+      });
 
-    const cookies = loginRes.headers.get("set-cookie")?.split(/,(?=\s*[^;=]+=[^;]+)/).map((c) => c.split(";")[0]).join("; ") || "";
-    const location = loginRes.headers.get("location");
-    const nextUrl = location ? new URL(location, origin).toString() : dashboardUrl;
-    const pageRes = await fetch(nextUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
-        Accept: "text/html,*/*",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-      redirect: "follow",
-    });
-    const html = await pageRes.text();
-    const haystack = `${location || ""}\n${html}`;
+      const setCookieHeader =
+        (loginRes.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()?.join(", ") ??
+        loginRes.headers.get("set-cookie") ??
+        "";
+      const cookies = setCookieHeader
+        ? setCookieHeader.split(/,(?=\s*[^;=]+=[^;]+)/).map((c) => c.split(";")[0]).join("; ")
+        : "";
+      const location = loginRes.headers.get("location");
+      const nextUrl = location ? new URL(location, origin).toString() : dashboardUrl;
+      const pageRes = await fetch(nextUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
+          Accept: "text/html,*/*",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        redirect: "follow",
+        signal: ctrl.signal,
+      });
+      const html = await pageRes.text();
+      const haystack = `${location || ""}\n${html}`;
 
-    const matches = Array.from(haystack.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((m) => m[0].replace(/&amp;/g, "&"));
-    const xtreamUrl = matches.find((u) => /\/(player_api|get)\.php\b|:\d{2,5}\b/i.test(u));
-    if (xtreamUrl) return { server: normalizeServer(xtreamUrl) };
+      const matches = Array.from(haystack.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((m) => m[0].replace(/&amp;/g, "&"));
+      const xtreamUrl = matches.find((u) => /\/(player_api|get)\.php\b|:\d{2,5}\b/i.test(u));
+      if (xtreamUrl) return { server: normalizeServer(xtreamUrl) };
 
-    if (/Para acessar é preciso logar-se|Bem-vindo ao painel/i.test(html) && !cookies) {
-      throw new Error("Não foi possível entrar no painel web para descobrir o DNS Xtream.");
+      if (/Para acessar é preciso logar-se|Bem-vindo ao painel/i.test(html) && !cookies) {
+        throw new Error("Não foi possível entrar no painel web para descobrir o DNS Xtream.");
+      }
+
+      throw new Error("Login do painel web aceito, mas não encontrei DNS Xtream na página. Copie no XCIPTV o campo Portal/DNS/Host, normalmente com porta, não o link /dashboard.");
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") {
+        throw new Error("Tempo esgotado ao contatar o painel. Verifique o endereço e tente novamente.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    throw new Error("Login do painel web aceito, mas não encontrei DNS Xtream na página. Copie no XCIPTV o campo Portal/DNS/Host, normalmente com porta, não o link /dashboard.");
   });
 
 type M3UEntryDTO = {
@@ -335,17 +354,22 @@ function buildM3UCandidateUrls(raw: string, username?: string, password?: string
 
 type CategoryMap = Map<string, string>;
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchJson(url: string, timeoutMs = 12_000): Promise<unknown> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
       redirect: "follow",
+      signal: ctrl.signal,
     });
     if (!res.ok) return null;
     const text = await res.text();
     return JSON.parse(text);
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -450,7 +474,7 @@ async function mapXtreamSeries(
       u.searchParams.set("password", access.password);
       u.searchParams.set("action", "get_series_info");
       u.searchParams.set("series_id", String(sid));
-      const info = (await fetchJson(u.toString())) as
+      const info = (await fetchJson(u.toString(), 8_000)) as
         | { episodes?: Record<string, Array<{ id?: string | number; container_extension?: string }>> }
         | null;
       const seasons = info?.episodes ? Object.keys(info.episodes).sort() : [];
