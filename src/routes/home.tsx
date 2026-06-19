@@ -403,3 +403,121 @@ function HomeSkeleton() {
     </div>
   );
 }
+
+/* -------- Conta Dialog -------- */
+
+type XtUserInfo = {
+  username?: string;
+  message?: string;
+  is_trial?: string | number;
+  active_cons?: string | number;
+  max_connections?: string | number;
+  exp_date?: string | number | null;
+  status?: string;
+};
+
+function formatExp(v: XtUserInfo["exp_date"]): string {
+  if (v === null || v === undefined || v === "" || v === "0") return "Sem expiração";
+  const n = typeof v === "string" ? Number(v) : v;
+  if (!Number.isFinite(n) || (n as number) <= 0) return "Sem expiração";
+  try {
+    return new Date((n as number) * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return String(v);
+  }
+}
+
+function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [info, setInfo] = useState<XtUserInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hasCreds, setHasCreds] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const creds = store.getCreds();
+    setHasCreds(!!creds);
+    if (!creds) { setInfo(null); return; }
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const { api } = await import("@/lib/xtream");
+        const r = await api<{ user_info?: XtUserInfo }>(creds);
+        if (alive) setInfo(r?.user_info ?? null);
+      } catch {
+        if (alive) setInfo(null);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
+  const isTrial = (() => {
+    const v = info?.is_trial;
+    if (v === undefined || v === null) return null;
+    return String(v) === "1" ? "Sim" : "Não";
+  })();
+
+  const statusRaw = (info?.status || "").toString().toUpperCase();
+  const isActive = statusRaw === "ACTIVE" || statusRaw === "ATIVO";
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#0b1220] p-0 text-white">
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle className="text-base font-semibold tracking-[0.2em] text-white">CONTA</DialogTitle>
+          <DialogDescription className="text-white/60">Informações da sua conexão.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2 px-6 pb-4 pt-2 text-sm">
+          {!hasCreds ? (
+            <p className="text-white/60">Sem conta Xtream conectada.</p>
+          ) : loading && !info ? (
+            <p className="text-white/60">Carregando informações…</p>
+          ) : (
+            <>
+              <ContaRow label="Nome de usuário" value={info?.username || "—"} />
+              <ContaRow label="Mensagem" value={info?.message || "—"} highlight />
+              <ContaRow label="Está no Teste" value={isTrial ?? "—"} highlight={isTrial === "Sim"} />
+              <ContaRow label="Max Conn" value={`${info?.active_cons ?? "0"} / ${info?.max_connections ?? "—"}`} />
+              <ContaRow label="Expira" value={formatExp(info?.exp_date ?? null)} />
+              <ContaRow
+                label="Status"
+                value={statusRaw || "—"}
+                valueClassName={isActive ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}
+              />
+            </>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full bg-[#b71c3a] py-3 text-center text-sm font-semibold tracking-[0.25em] text-white transition hover:bg-[#9e1632]"
+        >
+          FECHAR
+        </button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ContaRow({
+  label, value, highlight, valueClassName,
+}: { label: string; value: string; highlight?: boolean; valueClassName?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-2">
+      <span className="text-white/70">{label}</span>
+      <span
+        className={[
+          "max-w-[60%] break-words text-right",
+          highlight ? "text-amber-400" : "text-white",
+          valueClassName ?? "",
+        ].join(" ")}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
