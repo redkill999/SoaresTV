@@ -51,7 +51,7 @@ function LoginPage() {
     const hasCreds = !!store.getCreds();
     const hasList = (store.getM3U() ?? []).length > 0;
     if (hasCreds || hasList) {
-      navigate({ to: "/home", replace: true });
+      navigate({ to: "/loading", replace: true });
       return;
     }
     const t = setTimeout(() => setSplash(false), 600);
@@ -120,7 +120,7 @@ function LoginPage() {
       }
 
       setResult(info ? JSON.stringify(info, null, 2) : `${entries.length} itens carregados via lista M3U`);
-      setTimeout(() => navigate({ to: "/home" }), 400);
+      setTimeout(() => navigate({ to: "/loading" }), 400);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro";
       setResult(msg);
@@ -173,7 +173,7 @@ function LoginPage() {
       if (!entries.length) throw new Error("Lista vazia");
       m3uCache.set(url, name, entries);
       toast.success(`${entries.length} canais carregados`);
-      navigate({ to: "/home" });
+      navigate({ to: "/loading" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao carregar M3U");
     } finally {
