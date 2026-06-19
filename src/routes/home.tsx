@@ -53,10 +53,18 @@ const STATUS = [
   { icon: RefreshCw, label: "UPDATE" },
 ];
 
+type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
+
 function HomePage() {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
+
+  // status state
+  const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
+  const [recOn, setRecOn] = useState(false);
+  const [alarmMin, setAlarmMin] = useState(0);
+  const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
