@@ -143,4 +143,11 @@ export const store = {
 
   getParental: () => read<ParentalConfig>(K.parental, { pin: null, lockedCategories: [] }),
   setParental: (p: ParentalConfig) => write(K.parental, p),
+
+  getAppSettings: () => ({ ...DEFAULT_APP_SETTINGS, ...read<Partial<AppSettings>>(K.appSettings, {}) }),
+  setAppSettings: (patch: Partial<AppSettings>) => {
+    const cur = { ...DEFAULT_APP_SETTINGS, ...read<Partial<AppSettings>>(K.appSettings, {}) };
+    write(K.appSettings, { ...cur, ...patch });
+  },
+  subscribeAppSettings: (fn: Listener) => subscribe(K.appSettings, fn),
 };
