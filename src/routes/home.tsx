@@ -78,7 +78,7 @@ function HomePage() {
   };
 
   const logout = () => {
-    store.clearCreds();
+    store.setCreds(null);
     navigate({ to: "/" });
   };
 
