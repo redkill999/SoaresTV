@@ -232,9 +232,11 @@ function HomePage() {
       />
       <VpnDialog open={openStatus === "vpn"} onClose={() => setOpenStatus(null)} />
       <MsgDialog open={openStatus === "msg"} onClose={() => setOpenStatus(null)} />
+      <ContaDialog open={openConta} onClose={() => setOpenConta(false)} />
     </div>
   );
 }
+
 
 
 function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
