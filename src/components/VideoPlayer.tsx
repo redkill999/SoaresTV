@@ -368,6 +368,40 @@ export function VideoPlayer({
     };
   }, []);
 
+  // Auto fullscreen: ao iniciar a reprodução, entra em tela cheia automaticamente.
+  // Browsers exigem gesto do usuário; o clique no card que levou ao player conta
+  // como gesto válido na maioria dos casos. Falhas são ignoradas silenciosamente.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let done = false;
+    const enter = async () => {
+      if (done) return;
+      done = true;
+      const anyVideo = video as HTMLVideoElement & {
+        webkitEnterFullscreen?: () => void;
+        webkitRequestFullscreen?: () => Promise<void> | void;
+      };
+      try {
+        if (typeof anyVideo.webkitEnterFullscreen === "function") {
+          anyVideo.webkitEnterFullscreen();
+        } else if (video.requestFullscreen) {
+          await video.requestFullscreen();
+        } else if (anyVideo.webkitRequestFullscreen) {
+          await anyVideo.webkitRequestFullscreen();
+        }
+      } catch {
+        /* sem gesto válido — usuário pode tocar no botão de fullscreen */
+      }
+    };
+    video.addEventListener("playing", enter, { once: true });
+    return () => {
+      video.removeEventListener("playing", enter);
+    };
+  }, [src]);
+
+
+
   // Continue assistindo: ao carregar metadata, faz seek para a posição salva
   // (apenas VOD/série, nunca live). Reporta progresso a cada 5s, ao pausar e
   // ao desmontar para o store de histórico.
