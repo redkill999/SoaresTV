@@ -25,8 +25,12 @@ import homeBg from "@/assets/home-bg.png.asset.json";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    open: typeof s.open === "string" ? (s.open as string) : undefined,
+  }),
   component: SettingsPage,
 });
+
 
 type TileKey =
   | "app" | "conta" | "playerSettings" | "player" | "tipoFluxo" | "atualizar"
