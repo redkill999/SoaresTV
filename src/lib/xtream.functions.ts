@@ -85,24 +85,27 @@ export const xtreamApi = createServerFn({ method: "POST" })
       await new Promise((r) => setTimeout(r, 200));
     }
 
+    // Em vez de lançar (o que vira "unhandled rejection" no boundary do
+    // server-fn e polui o overlay de runtime errors), retornamos um
+    // resultado tipado. O cliente (lib/xtream.ts) traduz para mensagem
+    // de UI/toast localmente.
+    let errMessage: string;
     if (lastStatus === 503 || lastStatus === 502 || lastStatus === 504) {
-      throw new Error(
-        `Painel Xtream rejeitou o acesso (HTTP ${lastStatus}) mesmo após tentar vários User-Agents. Pode ser bloqueio de IP do servidor (datacenter). Tente novamente em alguns segundos.`,
-      );
+      errMessage = `Painel Xtream rejeitou o acesso (HTTP ${lastStatus}) mesmo após tentar vários User-Agents. Pode ser bloqueio de IP do servidor (datacenter). Tente novamente em alguns segundos.`;
+    } else if (lastStatus === 401 || lastStatus === 403) {
+      errMessage = "Credenciais inválidas ou conta bloqueada pelo painel.";
+    } else if (lastStatus === 404) {
+      errMessage = "Esse endereço não parece ser o DNS Xtream: player_api.php/get.php não existe nele. Link /dashboard é só o painel web; use o DNS/porta da lista IPTV usada no XCIPTV.";
+    } else if (lastStatus === 429) {
+      errMessage = "Muitas requisições ao painel Xtream. Aguarde alguns segundos e tente novamente.";
+    } else if (lastStatus) {
+      errMessage = `Xtream respondeu HTTP ${lastStatus}`;
+    } else {
+      errMessage = lastErr instanceof Error
+        ? `Falha de rede ao contatar o servidor: ${lastErr.message}`
+        : "Falha de rede ao contatar o servidor Xtream.";
     }
-    if (lastStatus === 401 || lastStatus === 403) {
-      throw new Error("Credenciais inválidas ou conta bloqueada pelo painel.");
-    }
-    if (lastStatus === 404) {
-      throw new Error("Esse endereço não parece ser o DNS Xtream: player_api.php/get.php não existe nele. Link /dashboard é só o painel web; use o DNS/porta da lista IPTV usada no XCIPTV.");
-    }
-    if (lastStatus === 429) {
-      throw new Error("Muitas requisições ao painel Xtream. Aguarde alguns segundos e tente novamente.");
-    }
-    if (lastStatus) throw new Error(`Xtream respondeu HTTP ${lastStatus}`);
-    throw new Error(
-      lastErr instanceof Error ? `Falha de rede ao contatar o servidor: ${lastErr.message}` : "Falha de rede ao contatar o servidor Xtream.",
-    );
+    return { ok: false as const, error: errMessage, status: lastStatus };
   });
 
 export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
