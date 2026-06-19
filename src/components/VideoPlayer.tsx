@@ -378,15 +378,18 @@ export function VideoPlayer({
     if (!video || kind === "live") return;
 
     let hasSeeked = false;
+    // Mantemos o último (pos,dur) conhecido para conseguir salvar progresso
+    // no cleanup, mesmo que outro effect já tenha resetado o <video> antes.
+    let lastPos = 0;
+    let lastDur = 0;
+
     const seekToInitial = () => {
       if (hasSeeked) return;
       const pos = initialPositionRef.current;
       const dur = video.duration;
       if (!Number.isFinite(dur) || dur <= 0) return;
       if (!pos) { hasSeeked = true; return; }
-      // Não restaura se já assistiu >95% (considera "completo")
       if (pos / dur > 0.95) { hasSeeked = true; return; }
-      // Não restaura faixas pequenas demais
       if (pos < 10) { hasSeeked = true; return; }
       try {
         video.currentTime = Math.min(pos, dur - 5);
@@ -396,11 +399,17 @@ export function VideoPlayer({
       hasSeeked = true;
     };
 
-    const reportProgress = () => {
+    const captureProgress = () => {
       const pos = video.currentTime;
       const dur = video.duration;
-      if (!Number.isFinite(pos) || !Number.isFinite(dur) || dur <= 0) return;
-      onProgressRef.current?.(pos, dur);
+      if (Number.isFinite(pos) && pos > 0) lastPos = pos;
+      if (Number.isFinite(dur) && dur > 0) lastDur = dur;
+    };
+
+    const reportProgress = () => {
+      captureProgress();
+      if (lastDur <= 0) return;
+      onProgressRef.current?.(lastPos, lastDur);
     };
 
     let tickId: ReturnType<typeof setInterval> | null = null;
@@ -416,13 +425,13 @@ export function VideoPlayer({
     const onLoadedMeta = () => seekToInitial();
     const onCanPlay = () => seekToInitial();
     const onPlay = () => startTicking();
+    const onTimeUpdate = () => captureProgress();
     const onPause = () => {
       stopTicking();
       reportProgress();
     };
     const onEnded = () => {
       stopTicking();
-      // Marca como completo: posição = duração
       const dur = video.duration;
       if (Number.isFinite(dur) && dur > 0) onProgressRef.current?.(dur, dur);
     };
@@ -430,15 +439,19 @@ export function VideoPlayer({
     video.addEventListener("loadedmetadata", onLoadedMeta);
     video.addEventListener("canplay", onCanPlay);
     video.addEventListener("play", onPlay);
+    video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
 
     return () => {
       stopTicking();
-      reportProgress(); // salva ao trocar de mídia/desmontar
+      // Salva usando os últimos valores capturados — resiliente caso o effect
+      // de playback já tenha chamado video.load() antes deste cleanup.
+      if (lastDur > 0) onProgressRef.current?.(lastPos, lastDur);
       video.removeEventListener("loadedmetadata", onLoadedMeta);
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("play", onPlay);
+      video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };

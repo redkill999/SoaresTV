@@ -54,8 +54,8 @@ function LoginPage() {
       navigate({ to: "/loading", replace: true });
       return;
     }
-    const t = setTimeout(() => setSplash(false), 600);
-    return () => clearTimeout(t);
+    const splashTimer = setTimeout(() => setSplash(false), 600);
+    return () => clearTimeout(splashTimer);
   }, [navigate]);
 
   const onXtream = async (e: React.FormEvent) => {

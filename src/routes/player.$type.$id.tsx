@@ -166,7 +166,7 @@ function PlayerPage() {
   const initialPosition = useMemo(() => {
     if (!type || type === "live") return 0;
     return store.getHistoryItem(type, id)?.position ?? 0;
-  }, [type, id, url]);
+  }, [type, id]);
 
   const handleProgress = useCallback(
     (positionSec: number, durationSec: number) => {
