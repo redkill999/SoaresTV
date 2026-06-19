@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { store, type AppSettings } from "@/lib/storage";
 
 async function lockLandscape() {
   try {
