@@ -82,6 +82,11 @@ function HomePage() {
     };
   }, []);
 
+  // limpa o sleep-timer ao desmontar
+  useEffect(() => () => {
+    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+  }, []);
+
   if (!mounted) return <HomeSkeleton />;
 
   const openTile = (to: string) => {
@@ -100,10 +105,6 @@ function HomePage() {
     navigate({ to });
   };
 
-  // limpa o sleep-timer ao desmontar
-  useEffect(() => () => {
-    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
-  }, []);
 
   const setSleepTimer = (mins: number) => {
     if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
