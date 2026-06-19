@@ -183,30 +183,47 @@ function PlayerPage() {
       <div className="grid lg:grid-cols-[1fr_320px] gap-6">
         <div>
           {url ? (
-            <VideoPlayer src={url} kind={type === "live" ? "live" : "vod"} />
+            <VideoPlayer
+              src={url}
+              kind={type === "live" ? "live" : "vod"}
+              initialPosition={initialPosition}
+              onProgress={handleProgress}
+            />
           ) : (
             <div className="aspect-video bg-card rounded-xl flex items-center justify-center text-muted-foreground">
               {type === "series" ? "Selecione um episódio" : "Carregando…"}
             </div>
           )}
-          <div className="flex items-start justify-between gap-4 mt-4">
-            <div>
-              <h1 className="text-xl font-bold">{activeTitle || name || "Reproduzindo"}</h1>
+          <div className="flex items-start justify-between gap-4 mt-4 flex-wrap">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold truncate">{activeTitle || name || "Reproduzindo"}</h1>
               <p className="text-xs text-muted-foreground uppercase tracking-widest">{type}</p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!type) return;
-                store.toggleFav({ type, id, name: activeTitle || name });
-              }}
-            >
-              <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
-              Favorito
-            </Button>
-
+            <div className="flex items-center gap-2 shrink-0">
+              {isNative && url && (
+                <Button
+                  variant="outline"
+                  onClick={openInExternalPlayer}
+                  title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
+                >
+                  <ExternalLink className="size-4" />
+                  Player externo
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!type) return;
+                  store.toggleFav({ type, id, name: activeTitle || name });
+                }}
+              >
+                <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
+                Favorito
+              </Button>
+            </div>
           </div>
         </div>
+
 
         {type === "series" && (
           <aside className="glass rounded-xl p-4 max-h-[80vh] overflow-y-auto">
