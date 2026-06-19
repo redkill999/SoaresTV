@@ -80,30 +80,19 @@ function HomePage() {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#0a3a8c] text-white">
-      {/* Background light streaks */}
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
+      {/* Background image */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(60% 80% at 0% 50%, rgba(120,180,255,0.18), transparent 60%),
-            radial-gradient(60% 80% at 100% 50%, rgba(120,180,255,0.18), transparent 60%),
-            radial-gradient(40% 60% at 50% 100%, rgba(120,180,255,0.22), transparent 70%),
-            linear-gradient(180deg, #0a3a8c 0%, #0b3380 60%, #082968 100%)
-          `,
-        }}
+        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${homeBg.url})` }}
       />
+      {/* Subtle darken to keep tiles readable */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background: `
-            conic-gradient(from 220deg at 20% 80%, transparent 0deg, rgba(180,220,255,0.10) 30deg, transparent 60deg),
-            conic-gradient(from 40deg at 80% 80%, transparent 0deg, rgba(180,220,255,0.10) 30deg, transparent 60deg)
-          `,
-        }}
+        className="pointer-events-none absolute inset-0 bg-black/25"
       />
+
 
       {/* Top bar */}
       <header className="relative z-10 flex items-start justify-between px-6 pt-5">
