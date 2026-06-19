@@ -205,8 +205,8 @@ function PlayerPage() {
 
   return (
     <AppShell immersive>
-      <div className="flex h-dvh w-dvw flex-col overflow-hidden bg-black">
-        <div className="relative min-h-0 flex-1 bg-black">
+      <div className="relative h-dvh w-dvw overflow-hidden bg-player text-player-foreground">
+        <div className="absolute inset-0 bg-player">
           {url ? (
             <VideoPlayer
               src={url}
@@ -215,10 +215,11 @@ function PlayerPage() {
               onProgress={handleProgress}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-black text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
               {type === "series" ? "Carregando episódio…" : "Carregando…"}
             </div>
           )}
+        </div>
           <button
             onClick={() => {
               if (typeof window !== "undefined" && window.history.length > 1) {
@@ -227,15 +228,15 @@ function PlayerPage() {
                 navigate({ to: "/home" });
               }
             }}
-            className="absolute left-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-foreground backdrop-blur hover:bg-black/75"
+            className="absolute left-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-player/55 text-player-foreground backdrop-blur hover:bg-player/75"
             aria-label="Voltar"
           >
             <ArrowLeft className="size-5" />
           </button>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-4 pb-4 pt-16">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-player/80 via-player/30 to-transparent px-4 pb-4 pt-16">
             <div className="flex min-w-0 items-end justify-between gap-4">
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold text-foreground sm:text-xl">{activeTitle || name || "Reproduzindo"}</h1>
+                <h1 className="truncate text-lg font-bold text-player-foreground sm:text-xl">{activeTitle || name || "Reproduzindo"}</h1>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">{type}</p>
               </div>
               <div className="pointer-events-auto flex shrink-0 items-center gap-2">
@@ -244,7 +245,7 @@ function PlayerPage() {
                     variant="outline"
                     onClick={openInExternalPlayer}
                     title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
-                    className="bg-black/45 backdrop-blur"
+                    className="bg-player/45 backdrop-blur"
                   >
                     <ExternalLink className="size-4" />
                     Player externo
@@ -256,7 +257,7 @@ function PlayerPage() {
                     if (!type) return;
                     store.toggleFav({ type, id, name: activeTitle || name });
                   }}
-                  className="bg-black/45 backdrop-blur"
+                  className="bg-player/45 backdrop-blur"
                 >
                   <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
                   Favorito
@@ -264,11 +265,8 @@ function PlayerPage() {
               </div>
             </div>
           </div>
-        </div>
-
-
         {type === "series" && (
-          <aside className="max-h-[34dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-black/95 px-4 py-3 sm:max-h-[28dvh]">
+          <aside className="absolute bottom-0 right-0 z-30 max-h-[48dvh] w-full max-w-md overflow-y-auto border-l border-t border-white/10 bg-player/90 px-4 py-3 backdrop-blur sm:bottom-4 sm:right-4 sm:max-h-[62dvh] sm:rounded-lg sm:border">
             <h2 className="mb-3 font-semibold">Episódios</h2>
             {seriesQ.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
             {seriesQ.data?.episodes &&
@@ -299,7 +297,7 @@ function PlayerPage() {
           </aside>
         )}
         {type === "live" && (
-          <details className="max-h-[34dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-black/95 sm:max-h-[28dvh]">
+          <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
               <Clock className="size-4" /> Programação
             </summary>
