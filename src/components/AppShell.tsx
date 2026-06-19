@@ -42,7 +42,8 @@ export function AppShell({
 
   const logout = () => {
     store.setCreds(null);
-    navigate({ to: "/" });
+    store.setM3U([]);
+    navigate({ to: "/", replace: true });
   };
 
   // Mapeia rotas filhas (player/playlist) para o item de menu de origem,
