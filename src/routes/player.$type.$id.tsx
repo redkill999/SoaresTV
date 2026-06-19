@@ -1,13 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds, type FavItem } from "@/lib/storage";
-import { api, streamUrl, getShortEpg, type EpgListing } from "@/lib/xtream";
+import { api, streamUrl, getShortEpg, isNativeApp, type EpgListing } from "@/lib/xtream";
 import { useIsFavorite } from "@/hooks/use-favorites";
-import { ArrowLeft, Heart, Clock } from "lucide-react";
+import { ArrowLeft, Heart, Clock, ExternalLink } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
@@ -122,6 +122,43 @@ function PlayerPage() {
       at: Date.now(),
     });
   }, [url, type, id, creds]);
+
+  // Posição salva para "continue assistindo" (apenas VOD/série).
+  const initialPosition = useMemo(() => {
+    if (!type || type === "live") return 0;
+    return store.getHistoryItem(type, id)?.position ?? 0;
+  }, [type, id, url]);
+
+  const handleProgress = useCallback(
+    (positionSec: number, durationSec: number) => {
+      if (!type || type === "live") return;
+      store.updateProgress(type, id, positionSec, durationSec);
+    },
+    [type, id],
+  );
+
+  // Player externo (Android nativo): dispara Intent VIEW para o stream.
+  // Apps como MX Player, VLC, Just Player aceitam e usam ExoPlayer/FFmpeg por baixo.
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => {
+    void isNativeApp().then(setIsNative);
+  }, []);
+
+  const openInExternalPlayer = useCallback(() => {
+    if (!url) return;
+    try {
+      // Constrói Intent URI Android: força mimeType de vídeo e action VIEW.
+      // O sistema mostra o seletor com MX Player / VLC / etc.
+      const stripped = url.replace(/^https?:\/\//i, "");
+      const scheme = /^https:\/\//i.test(url) ? "https" : "http";
+      const intentUrl =
+        `intent://${stripped}` +
+        `#Intent;scheme=${scheme};type=video/*;action=android.intent.action.VIEW;end`;
+      window.location.href = intentUrl;
+    } catch {
+      window.open(url, "_blank");
+    }
+  }, [url]);
 
   const favType: FavItem["type"] = type ?? "movie";
   const fav = useIsFavorite(favType, id) && !!type;
