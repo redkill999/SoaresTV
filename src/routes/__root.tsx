@@ -205,12 +205,10 @@ function RootComponent() {
         .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
         .catch(() => {});
     }
-    // Smart TV / WebView: ativa navegação por D-pad (setas + Enter + Back).
-    const isTV = document.documentElement.hasAttribute("data-tv-mode");
-    const isSmartTV = document.documentElement.hasAttribute("data-smart-tv");
-    if (isTV || isSmartTV || w?.Capacitor?.isNativePlatform?.()) {
-      void import("@/lib/tv-dpad").then((m) => m.initTvDpad());
-    }
+    // Controle remoto / teclado (D-pad). Funciona em Smart TV (Tizen,
+    // WebOS, AndroidTV, FireTV), Capacitor (Android) e também desktop —
+    // o handler ignora inputs e só intercepta setas quando há foco.
+    void import("@/lib/tv-dpad").then((m) => m.initTvDpad());
   }, []);
 
   return (
