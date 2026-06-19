@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { store, type AppSettings } from "@/lib/storage";
 
 async function lockLandscape() {
   try {
@@ -67,6 +68,7 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -75,6 +77,18 @@ export function VideoPlayer({
   useEffect(() => {
     onProgressRef.current = onProgress;
   }, [onProgress]);
+  useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
+
+  const videoClass = useMemo(() => {
+    const base = "w-full bg-black rounded-xl shadow-card";
+    switch (settings.aspectRatio) {
+      case "16:9":   return `${base} aspect-video object-contain`;
+      case "4:3":    return `${base} aspect-[4/3] object-contain`;
+      case "fill":   return `${base} aspect-video object-cover`;
+      case "stretch":return `${base} aspect-video object-fill`;
+      default:       return `${base} aspect-video object-contain`;
+    }
+  }, [settings.aspectRatio]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -394,7 +408,8 @@ export function VideoPlayer({
         controls
         autoPlay
         playsInline
-        className="w-full aspect-video bg-black rounded-xl shadow-card"
+        style={{ ['--cue-scale' as never]: settings.subtitleScale }}
+        className={videoClass}
       />
       {error && (
         <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2 rounded-b-xl">
