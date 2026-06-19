@@ -54,14 +54,6 @@ export function MediaCard({
         to="/player/$type/$id"
         params={{ type, id: idStr }}
         search={{ name }}
-        onClick={() => {
-          // Sinaliza pro player que deve entrar em tela cheia (somente o vídeo).
-          try {
-            sessionStorage.setItem("soarestv:autofs", "1");
-          } catch {
-            /* ignore */
-          }
-        }}
         className="block"
       >
         <div
