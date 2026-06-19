@@ -4,6 +4,32 @@ export type M3UPlaylist = { name: string; url: string; username?: string; passwo
 export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
 export type HistItem = FavItem & { at: number; position?: number; duration?: number };
 export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
+export type AspectRatio = "default" | "16:9" | "4:3" | "fill" | "stretch";
+export type StreamFormat = "auto" | "hls" | "ts" | "mp4";
+export type PlayerChoice = "internal" | "external";
+export type RemoteLayout = "default" | "compact" | "tv";
+export type AppSettings = {
+  defaultPlayer: PlayerChoice;
+  streamFormat: StreamFormat;
+  hwAccel: boolean;
+  aspectRatio: AspectRatio;
+  subtitleScale: number; // 0.75 .. 2
+  autoplayNext: boolean;
+  epgOffsetMin: number; // -720..720
+  remoteLayout: RemoteLayout;
+  showHidden: boolean;
+};
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  defaultPlayer: "internal",
+  streamFormat: "auto",
+  hwAccel: true,
+  aspectRatio: "default",
+  subtitleScale: 1,
+  autoplayNext: true,
+  epgOffsetMin: 0,
+  remoteLayout: "default",
+  showHidden: false,
+};
 
 const K = {
   creds: "soarestv:creds",
@@ -11,6 +37,7 @@ const K = {
   favs: "soarestv:favorites",
   hist: "soarestv:history",
   parental: "soarestv:parental",
+  appSettings: "soarestv:appSettings",
 };
 
 const isBrowser = () => typeof window !== "undefined";
