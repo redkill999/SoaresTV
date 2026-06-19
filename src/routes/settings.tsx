@@ -276,35 +276,143 @@ function LanguageDialog({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+type XtUserInfo = {
+  username?: string;
+  message?: string;
+  is_trial?: string | number;
+  active_cons?: string | number;
+  max_connections?: string | number;
+  exp_date?: string | number | null;
+  status?: string;
+  created_at?: string | number;
+};
+
+function formatExp(v: XtUserInfo["exp_date"]): string {
+  if (v === null || v === undefined || v === "" || v === "0") return "Sem expiração";
+  const n = typeof v === "string" ? Number(v) : v;
+  if (!Number.isFinite(n) || n <= 0) return "Sem expiração";
+  try {
+    return new Date(n * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return String(v);
+  }
+}
+
 function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const creds = open ? store.getCreds() : null;
   const lists = open ? store.getM3U() : [];
+  const [info, setInfo] = useState<XtUserInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !creds) { setInfo(null); return; }
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const { api } = await import("@/lib/xtream");
+        const r = await api<{ user_info?: XtUserInfo }>(creds);
+        if (alive) setInfo(r?.user_info ?? null);
+      } catch {
+        if (alive) setInfo(null);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [open, creds]);
+
+  const isTrial = (() => {
+    const v = info?.is_trial;
+    if (v === undefined || v === null) return null;
+    return String(v) === "1" ? "Sim" : "Não";
+  })();
+
+  const statusRaw = (info?.status || "").toString().toUpperCase();
+  const isActive = statusRaw === "ACTIVE" || statusRaw === "ATIVO";
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Conta</DialogTitle>
-          <DialogDescription>Informações da sua conexão atual.</DialogDescription>
+      <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#0b1220] p-0 text-white">
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle className="text-base font-semibold tracking-wide text-white">CONTA</DialogTitle>
+          <DialogDescription className="text-white/60">Informações da sua conexão.</DialogDescription>
         </DialogHeader>
-        {creds ? (
-          <div className="space-y-3 text-sm">
-            <Row label="Servidor" value={creds.server} mono />
-            <Row label="Usuário" value={creds.username} />
-            <Row label="Senha" value={"•".repeat(Math.min(creds.password.length, 12))} />
-          </div>
-        ) : lists.length > 0 ? (
-          <div className="space-y-3 text-sm">
-            <Row label="Modo" value="Lista M3U" />
-            <Row label="Lista" value={lists[0].name} />
-            <Row label="URL" value={lists[0].url} mono />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Sem conta conectada.</p>
-        )}
+
+        <div className="space-y-3 px-6 pb-4 pt-2 text-sm">
+          {creds ? (
+            loading && !info ? (
+              <p className="text-white/60">Carregando informações…</p>
+            ) : (
+              <>
+                <InfoRow label="Nome de usuário" value={info?.username || creds.username} />
+                <InfoRow label="Mensagem" value={info?.message || "—"} highlight />
+                <InfoRow
+                  label="Está no Teste"
+                  value={isTrial ?? "—"}
+                  highlight={isTrial === "Sim"}
+                />
+                <InfoRow
+                  label="Max Conn"
+                  value={`${info?.active_cons ?? "0"} / ${info?.max_connections ?? "—"}`}
+                />
+                <InfoRow label="Expira" value={formatExp(info?.exp_date ?? null)} />
+                <InfoRow
+                  label="Status"
+                  value={statusRaw || "—"}
+                  valueClassName={isActive ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}
+                />
+              </>
+            )
+          ) : lists.length > 0 ? (
+            <>
+              <InfoRow label="Modo" value="Lista M3U" />
+              <InfoRow label="Lista" value={lists[0].name} />
+              <InfoRow label="URL" value={lists[0].url} mono />
+            </>
+          ) : (
+            <p className="text-white/60">Sem conta conectada.</p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full bg-[#b71c3a] py-3 text-center text-sm font-semibold tracking-[0.2em] text-white transition hover:bg-[#9e1632]"
+        >
+          FECHAR
+        </button>
       </DialogContent>
     </Dialog>
   );
 }
+
+function InfoRow({
+  label, value, mono, highlight, valueClassName,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-2">
+      <span className="text-white/70">{label}</span>
+      <span
+        className={[
+          "max-w-[60%] break-words text-right",
+          mono ? "font-mono text-xs" : "",
+          highlight ? "text-amber-400" : "text-white",
+          valueClassName ?? "",
+        ].join(" ")}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
