@@ -80,7 +80,7 @@ export function VideoPlayer({
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
 
   const videoClass = useMemo(() => {
-    const base = "h-full w-full bg-black";
+    const base = "h-full w-full bg-player";
     switch (settings.aspectRatio) {
       case "16:9":   return `${base} object-contain`;
       case "4:3":    return `${base} object-contain`;
@@ -439,7 +439,7 @@ export function VideoPlayer({
 
 
   return (
-    <div className="relative h-full w-full bg-black">
+    <div className="relative h-full w-full bg-player">
       <video
         ref={videoRef}
         poster={poster}
@@ -450,7 +450,7 @@ export function VideoPlayer({
         className={videoClass}
       />
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2">
+        <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       )}

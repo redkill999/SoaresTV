@@ -29,6 +29,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-player: var(--player);
+  --color-player-foreground: var(--player-foreground);
   --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
 }
@@ -65,6 +67,8 @@
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.58 0.22 275);
+  --player: oklch(0 0 0);
+  --player-foreground: oklch(0.98 0.005 270);
 
   --gradient-brand: linear-gradient(135deg, oklch(0.30 0.14 280) 0%, oklch(0.45 0.22 275) 55%, oklch(0.62 0.22 270) 100%);
   --gradient-bg:
@@ -224,6 +228,9 @@ html[data-tv-mode][data-tv-orientation="landscape"] body {
 html[data-tv-mode] body .min-h-screen { min-height: 720px !important; }
 html[data-tv-mode] body .h-screen { height: 720px !important; }
 html[data-tv-mode] body .max-h-screen { max-height: 720px !important; }
+html[data-tv-mode] body .min-h-dvh { min-height: 720px !important; }
+html[data-tv-mode] body .h-dvh { height: 720px !important; }
+html[data-tv-mode] body .w-dvw { width: 1280px !important; }
 
 
 

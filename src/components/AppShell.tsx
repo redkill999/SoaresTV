@@ -68,7 +68,7 @@ export function AppShell({
   };
 
   if (immersive) {
-    return <main className="min-h-dvh bg-black text-foreground overflow-hidden">{children}</main>;
+    return <main className="min-h-dvh overflow-hidden bg-player text-player-foreground">{children}</main>;
   }
 
   return (
