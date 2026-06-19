@@ -86,8 +86,19 @@ export function MediaCard({
               {badge}
             </span>
           )}
+
+          {pct !== null && (
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-black/60">
+              <div
+                className="h-full bg-brand-gradient shadow-glow"
+                style={{ width: `${pct}%` }}
+                aria-label={`${Math.round(pct)}% assistido`}
+              />
+            </div>
+          )}
         </div>
       </Link>
+
 
       <button
         onClick={(e) => {
