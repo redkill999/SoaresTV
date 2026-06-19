@@ -368,6 +368,67 @@ export function VideoPlayer({
     };
   }, []);
 
+  // Auto tela-cheia: quando o usuário entra no player vindo de um card,
+  // dispara requestFullscreen no <video> assim que começa a tocar — equivale
+  // a clicar manualmente no ícone de expandir do controle nativo.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let done = false;
+    try {
+      if (sessionStorage.getItem("soarestv:autofs") !== "1") return;
+    } catch {
+      return;
+    }
+
+    const requestFs = async () => {
+      if (done) return;
+      const v = video as HTMLVideoElement & {
+        webkitEnterFullscreen?: () => void;
+        webkitRequestFullscreen?: () => Promise<void> | void;
+      };
+      try {
+        if (document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
+          done = true;
+          try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
+          return;
+        }
+        if (typeof v.requestFullscreen === "function") {
+          await v.requestFullscreen();
+        } else if (typeof v.webkitRequestFullscreen === "function") {
+          await v.webkitRequestFullscreen();
+        } else if (typeof v.webkitEnterFullscreen === "function") {
+          // iOS Safari: só funciona após o vídeo já estar tocando.
+          v.webkitEnterFullscreen();
+        } else {
+          return;
+        }
+        done = true;
+        try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
+      } catch {
+        // Activation expirou ou navegador bloqueou — tenta novamente no próximo evento.
+      }
+    };
+
+    const onPlaying = () => { void requestFs(); };
+    const onLoaded = () => { void requestFs(); };
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("loadedmetadata", onLoaded);
+    // Tenta imediatamente também (caso o vídeo já esteja pronto / activation ainda vigente).
+    void requestFs();
+
+    // Limpa a flag após alguns segundos pra não “vazar” pra uma próxima sessão.
+    const timeout = setTimeout(() => {
+      try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
+    }, 10_000);
+
+    return () => {
+      clearTimeout(timeout);
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("loadedmetadata", onLoaded);
+    };
+  }, [src]);
+
   // Continue assistindo: ao carregar metadata, faz seek para a posição salva
   // (apenas VOD/série, nunca live). Reporta progresso a cada 5s, ao pausar e
   // ao desmontar para o store de histórico.
