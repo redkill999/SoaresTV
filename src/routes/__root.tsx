@@ -125,6 +125,7 @@ const TV_MODE_SCRIPT = `(function(){
       var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
       // TV mode: smart TV UA, app nativo, OU tela grande landscape sem touch.
       var isTV = isNative || isSmartTV || (!isPhoneOrTablet && maxDim >= 1280 && minDim >= 720);
+      var html = document.documentElement;
       if (isSmartTV) html.setAttribute && document.documentElement.setAttribute('data-smart-tv','');
 
       var metas = document.querySelectorAll('meta[name="viewport"]');
@@ -135,7 +136,6 @@ const TV_MODE_SCRIPT = `(function(){
         ? 'width=1280, initial-scale=1, user-scalable=no'
         : 'width=device-width, initial-scale=1, viewport-fit=cover');
       document.head.appendChild(m);
-      var html = document.documentElement;
       if (isTV) {
         html.setAttribute('data-tv-mode','');
         setTimeout(function(){

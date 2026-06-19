@@ -25,10 +25,12 @@ export function AppShell({
   children,
   search,
   onSearch,
+  immersive = false,
 }: {
   children: ReactNode;
   search?: string;
   onSearch?: (v: string) => void;
+  immersive?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
@@ -64,6 +66,10 @@ export function AppShell({
     if (playerParent && to === playerParent) return true;
     return false;
   };
+
+  if (immersive) {
+    return <main className="min-h-dvh overflow-hidden bg-player text-player-foreground">{children}</main>;
+  }
 
   return (
     <div className="min-h-dvh flex">
