@@ -202,17 +202,21 @@ export function VideoPlayer({
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 30,
+          backBufferLength: 60,
           maxBufferLength: 60,
           maxMaxBufferLength: 120,
           maxBufferSize: 120 * 1000 * 1000,
           maxBufferHole: 1.0,
           highBufferWatchdogPeriod: 3,
           nudgeMaxRetry: 10,
+          nudgeOffset: 0.2,
           fragLoadingMaxRetry: 8,
           manifestLoadingMaxRetry: 6,
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
+          fragLoadingTimeOut: 20_000,
+          manifestLoadingTimeOut: 15_000,
+          levelLoadingTimeOut: 15_000,
           liveSyncDurationCount: 4,
           liveMaxLatencyDurationCount: 10,
           startLevel: -1,
@@ -226,6 +230,35 @@ export function VideoPlayer({
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
 
+        // Stall watchdog para LIVE: se ficar travado em "waiting" > 8s,
+        // força recarga do segmento (recupera congelamentos típicos de IPTV).
+        let stallTimer: ReturnType<typeof setTimeout> | null = null;
+        const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
+        const onWaiting = () => {
+          if (!isLive || cancelled) return;
+          clearStall();
+          stallTimer = setTimeout(() => {
+            if (cancelled || !hls) return;
+            try {
+              hls.stopLoad();
+              hls.startLoad();
+              // Pequeno nudge pra destravar buffer hole
+              try { video.currentTime = video.currentTime + 0.1; } catch { /* noop */ }
+              void video.play().catch(() => undefined);
+            } catch { /* noop */ }
+          }, 8_000);
+        };
+        const onResumed = () => clearStall();
+        video.addEventListener("waiting", onWaiting);
+        video.addEventListener("playing", onResumed);
+        video.addEventListener("canplay", onResumed);
+        const detachStallListeners = () => {
+          clearStall();
+          video.removeEventListener("waiting", onWaiting);
+          video.removeEventListener("playing", onResumed);
+          video.removeEventListener("canplay", onResumed);
+        };
+
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
           if (!data.fatal) return;
@@ -233,6 +266,7 @@ export function VideoPlayer({
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
                 if (netRetries++ >= MAX_NET_RETRIES) {
+                  detachStallListeners();
                   hls?.destroy();
                   hls = null;
                   setError("Conexão instável com o canal. Tente novamente.");
@@ -244,12 +278,14 @@ export function VideoPlayer({
                   hls?.startLoad();
                 }, delay);
               } else {
+                detachStallListeners();
                 tryNextVod();
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
               if (isLive) {
                 if (mediaRetries++ >= MAX_MEDIA_RETRIES) {
+                  detachStallListeners();
                   hls?.destroy();
                   hls = null;
                   setError("Erro de mídia no canal. Tente novamente.");
@@ -257,10 +293,12 @@ export function VideoPlayer({
                 }
                 hls?.recoverMediaError();
               } else {
+                detachStallListeners();
                 tryNextVod();
               }
               return;
             default:
+              detachStallListeners();
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
