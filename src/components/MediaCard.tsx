@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Play } from "lucide-react";
+import { Heart, Play, Tv, Film, Clapperboard, ImageOff } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import { useState } from "react";
