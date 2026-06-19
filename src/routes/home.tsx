@@ -45,14 +45,6 @@ const BOTTOM_RIGHT: Tile[] = [
   { label: "SETTINGS", icon: SettingsIcon, to: "/settings" },
 ];
 
-const STATUS = [
-  { icon: AlarmClock, label: "ALARM" },
-  { icon: Video, label: "REC" },
-  { icon: Lock, label: "VPN" },
-  { icon: Mail, label: "MSG" },
-  { icon: RefreshCw, label: "UPDATE" },
-];
-
 type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
 function HomePage() {
