@@ -4,6 +4,7 @@
 
 let bound = false;
 let lastInteractionWasKeyboard = false;
+let routeWatchId: ReturnType<typeof setInterval> | null = null;
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -148,7 +149,8 @@ function handleKey(e: KeyboardEvent) {
   const isDown   = key === "ArrowDown"  || code === 40;
   const isLeft   = key === "ArrowLeft"  || code === 37;
   const isRight  = key === "ArrowRight" || code === 39;
-  const isEnter  = key === "Enter"      || code === 13 || code === 32 /* Space/OK em alguns remotos */;
+  // Space (32) NÃO é mapeado como OK fora de Smart TVs — quebra <select>, <details>, etc.
+  const isEnter  = key === "Enter"      || code === 13 || (code === 32 && isSmartTvEnv());
   const isBack   =
     key === "Backspace" || key === "GoBack" || key === "BrowserBack" ||
     code === 8 /* Backspace */ || code === 10009 /* Tizen Return */ ||
@@ -268,7 +270,8 @@ export function initTvDpad() {
 
   // Re-foco após troca de rota (quando a página nova não tem foco)
   let lastPath = window.location.pathname;
-  setInterval(() => {
+  if (routeWatchId) clearInterval(routeWatchId);
+  routeWatchId = setInterval(() => {
     if (window.location.pathname !== lastPath) {
       lastPath = window.location.pathname;
       setTimeout(() => {
@@ -278,6 +281,16 @@ export function initTvDpad() {
       }, 200);
     }
   }, 250);
+}
+
+/** Remove handlers do D-pad (útil para HMR/testes). */
+export function destroyTvDpad() {
+  if (typeof window === "undefined" || !bound) return;
+  window.removeEventListener("keydown", handleKey, { capture: true } as EventListenerOptions);
+  window.removeEventListener("mousedown", handleMouse, { capture: true } as EventListenerOptions);
+  window.removeEventListener("pointerdown", handleMouse, { capture: true } as EventListenerOptions);
+  if (routeWatchId) { clearInterval(routeWatchId); routeWatchId = null; }
+  bound = false;
 }
 
 /** Detecta se o ambiente parece ser Smart TV / TV Box. */

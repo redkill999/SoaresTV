@@ -105,7 +105,7 @@ function LivePage() {
     return list;
   }, [streamsQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
-  const parental = useMemo(() => store.getParental(), [cat]);
+  const parental = store.getParental();
   const needGate =
     cat !== "all" &&
     cat !== "favorites" &&

@@ -185,7 +185,6 @@ function SettingsTile({
   return (
     <button
       onClick={onClick}
-      onFocus={onClick}
       className={[
         "group relative flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl",
         "bg-[#0b1a3d]/85 p-3 text-white/85 transition",
@@ -319,19 +318,22 @@ function formatExp(v: XtUserInfo["exp_date"]): string {
 }
 
 function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const creds = open ? store.getCreds() : null;
   const lists = open ? store.getM3U() : [];
   const [info, setInfo] = useState<XtUserInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creds, setCreds] = useState<ReturnType<typeof store.getCreds>>(null);
 
   useEffect(() => {
-    if (!open || !creds) { setInfo(null); return; }
+    if (!open) { setInfo(null); setCreds(null); return; }
+    const c = store.getCreds();
+    setCreds(c);
+    if (!c) { setInfo(null); return; }
     let alive = true;
     setLoading(true);
     (async () => {
       try {
         const { api } = await import("@/lib/xtream");
-        const r = await api<{ user_info?: XtUserInfo }>(creds);
+        const r = await api<{ user_info?: XtUserInfo }>(c);
         if (alive) setInfo(r?.user_info ?? null);
       } catch {
         if (alive) setInfo(null);
