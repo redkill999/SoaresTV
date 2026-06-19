@@ -204,23 +204,9 @@ function PlayerPage() {
 
 
   return (
-    <AppShell>
-      <button
-        onClick={() => {
-          if (typeof window !== "undefined" && window.history.length > 1) {
-            window.history.back();
-          } else {
-            navigate({ to: "/home" });
-          }
-        }}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4"
-      >
-        <ArrowLeft className="size-4" /> Voltar
-      </button>
-
-
-      <div className={type === "live" ? "block" : "grid lg:grid-cols-[1fr_320px] gap-6"}>
-        <div>
+    <AppShell immersive>
+      <div className="flex h-dvh w-dvw flex-col overflow-hidden bg-black">
+        <div className="relative min-h-0 flex-1 bg-black">
           {url ? (
             <VideoPlayer
               src={url}
@@ -229,44 +215,61 @@ function PlayerPage() {
               onProgress={handleProgress}
             />
           ) : (
-            <div className="aspect-video bg-card rounded-xl flex items-center justify-center text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center bg-black text-muted-foreground">
               {type === "series" ? "Carregando episódio…" : "Carregando…"}
             </div>
           )}
-          <div className="flex items-start justify-between gap-4 mt-4 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold truncate">{activeTitle || name || "Reproduzindo"}</h1>
-              <p className="text-xs text-muted-foreground uppercase tracking-widest">{type}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isNative && url && (
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate({ to: "/home" });
+              }
+            }}
+            className="absolute left-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-foreground backdrop-blur hover:bg-black/75"
+            aria-label="Voltar"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-4 pb-4 pt-16">
+            <div className="flex min-w-0 items-end justify-between gap-4">
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-bold text-foreground sm:text-xl">{activeTitle || name || "Reproduzindo"}</h1>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">{type}</p>
+              </div>
+              <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+                {isNative && url && (
+                  <Button
+                    variant="outline"
+                    onClick={openInExternalPlayer}
+                    title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
+                    className="bg-black/45 backdrop-blur"
+                  >
+                    <ExternalLink className="size-4" />
+                    Player externo
+                  </Button>
+                )}
                 <Button
                   variant="outline"
-                  onClick={openInExternalPlayer}
-                  title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
+                  onClick={() => {
+                    if (!type) return;
+                    store.toggleFav({ type, id, name: activeTitle || name });
+                  }}
+                  className="bg-black/45 backdrop-blur"
                 >
-                  <ExternalLink className="size-4" />
-                  Player externo
+                  <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
+                  Favorito
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (!type) return;
-                  store.toggleFav({ type, id, name: activeTitle || name });
-                }}
-              >
-                <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
-                Favorito
-              </Button>
+              </div>
             </div>
           </div>
         </div>
 
 
         {type === "series" && (
-          <aside className="glass rounded-xl p-4 max-h-[80vh] overflow-y-auto">
-            <h2 className="font-semibold mb-3">Episódios</h2>
+          <aside className="max-h-[34dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-black/95 px-4 py-3 sm:max-h-[28dvh]">
+            <h2 className="mb-3 font-semibold">Episódios</h2>
             {seriesQ.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
             {seriesQ.data?.episodes &&
               Object.entries(seriesQ.data.episodes).map(([season, eps]) => (
@@ -296,11 +299,11 @@ function PlayerPage() {
           </aside>
         )}
         {type === "live" && (
-          <details className="mt-6 glass rounded-xl">
+          <details className="max-h-[34dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-black/95 sm:max-h-[28dvh]">
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
               <Clock className="size-4" /> Programação
             </summary>
-            <div className="px-4 pb-4 max-h-[60vh] overflow-y-auto">
+            <div className="px-4 pb-4">
               {epgQ.isLoading && <p className="text-sm text-muted-foreground">Carregando EPG…</p>}
               {!epgQ.isLoading && !epgQ.data?.length && (
                 <p className="text-sm text-muted-foreground">Sem EPG disponível.</p>
