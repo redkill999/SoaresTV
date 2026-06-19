@@ -354,17 +354,22 @@ function buildM3UCandidateUrls(raw: string, username?: string, password?: string
 
 type CategoryMap = Map<string, string>;
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchJson(url: string, timeoutMs = 12_000): Promise<unknown> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
       redirect: "follow",
+      signal: ctrl.signal,
     });
     if (!res.ok) return null;
     const text = await res.text();
     return JSON.parse(text);
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
