@@ -347,53 +347,8 @@ function PlayerPage() {
             </div>
           </details>
         )}
-        {type === "live" && (
-          <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
-            <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
-              <Clock className="size-4" /> Programação
-            </summary>
-            <div className="px-4 pb-4">
-              {epgQ.isLoading && <p className="text-sm text-muted-foreground">Carregando EPG…</p>}
-              {!epgQ.isLoading && !epgQ.data?.length && (
-                <p className="text-sm text-muted-foreground">Sem EPG disponível.</p>
-              )}
-              <div className="space-y-2">
-                {(epgQ.data ?? []).map((p: EpgListing, i: number) => {
-                  const start = new Date(Number(p.start_timestamp) * 1000);
-                  const stop = new Date(Number(p.stop_timestamp) * 1000);
-                  const now = Date.now();
-                  const live = now >= start.getTime() && now < stop.getTime();
-                  return (
-                    <div
-                      key={p.id}
-                      className={`p-3 rounded-lg border ${
-                        live
-                          ? "bg-brand-gradient/20 border-primary/50"
-                          : "bg-white/5 border-white/5"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {live ? "Agora" : i === 0 ? "Anterior" : "A seguir"}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} –{" "}
-                          {stop.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                      <div className="text-sm font-medium mt-1">{p.title}</div>
-                      {p.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {p.description}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </details>
-        )}
+        {null}
+
       </div>
     </AppShell>
   );
