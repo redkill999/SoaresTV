@@ -55,13 +55,6 @@ export function MediaCard({
         params={{ type, id: idStr }}
         search={{ name }}
         className="block"
-        onClick={() => {
-          try {
-            sessionStorage.setItem("soarestv:autofs", "1");
-          } catch {
-            /* ignore */
-          }
-        }}
       >
         <div
           className={`relative ${aspectClass[aspect]} rounded-xl overflow-hidden bg-card/60 shadow-card border border-white/5 group-hover:border-primary/60 group-hover:shadow-glow transition-all`}
