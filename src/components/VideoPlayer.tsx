@@ -408,7 +408,8 @@ export function VideoPlayer({
         controls
         autoPlay
         playsInline
-        className="w-full aspect-video bg-black rounded-xl shadow-card"
+        style={{ ['--cue-scale' as never]: settings.subtitleScale }}
+        className={videoClass}
       />
       {error && (
         <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2 rounded-b-xl">
