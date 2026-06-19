@@ -134,7 +134,12 @@ export async function api<T = unknown>(
   if (native) return native.data;
 
   const r = await xtreamApi({ data: { ...c, action, params } });
-  if (!r.ok) throw new Error("Resposta inválida do servidor");
+  if (!r.ok) {
+    // Erro estruturado vindo do server-fn (auth/rede/etc.) — relança no
+    // cliente para a UI tratar via try/catch local (toast/estado).
+    const msg = "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
+    throw new Error(msg);
+  }
   return r.data as T;
 }
 
