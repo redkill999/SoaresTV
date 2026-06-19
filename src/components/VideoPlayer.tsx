@@ -316,6 +316,75 @@ export function VideoPlayer({
     };
   }, []);
 
+  // Continue assistindo: ao carregar metadata, faz seek para a posição salva
+  // (apenas VOD/série, nunca live). Reporta progresso a cada 5s, ao pausar e
+  // ao desmontar para o store de histórico.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || kind === "live") return;
+
+    const seekToInitial = () => {
+      const pos = initialPositionRef.current;
+      const dur = video.duration;
+      if (!pos || !Number.isFinite(dur) || dur <= 0) return;
+      // Não restaura se já assistiu >95% (considera "completo")
+      if (pos / dur > 0.95) return;
+      // Não restaura faixas pequenas demais
+      if (pos < 10) return;
+      try {
+        video.currentTime = Math.min(pos, dur - 5);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const reportProgress = () => {
+      const pos = video.currentTime;
+      const dur = video.duration;
+      if (!Number.isFinite(pos) || !Number.isFinite(dur) || dur <= 0) return;
+      onProgressRef.current?.(pos, dur);
+    };
+
+    let tickId: ReturnType<typeof setInterval> | null = null;
+    const startTicking = () => {
+      if (tickId) return;
+      tickId = setInterval(reportProgress, 5000);
+    };
+    const stopTicking = () => {
+      if (tickId) clearInterval(tickId);
+      tickId = null;
+    };
+
+    const onLoadedMeta = () => seekToInitial();
+    const onPlay = () => startTicking();
+    const onPause = () => {
+      stopTicking();
+      reportProgress();
+    };
+    const onEnded = () => {
+      stopTicking();
+      // Marca como completo: posição = duração
+      const dur = video.duration;
+      if (Number.isFinite(dur) && dur > 0) onProgressRef.current?.(dur, dur);
+    };
+
+    video.addEventListener("loadedmetadata", onLoadedMeta);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+
+    return () => {
+      stopTicking();
+      reportProgress(); // salva ao trocar de mídia/desmontar
+      video.removeEventListener("loadedmetadata", onLoadedMeta);
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
+    };
+  }, [src, kind]);
+
+
+
 
   return (
     <div className="relative">
