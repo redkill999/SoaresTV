@@ -179,10 +179,8 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  // Start "hydrated" on the server so SSR isn't blocked; flip false on the
-  // client until IndexedDB cache is loaded so first paint of Movies/Series
-  // can read persisted data synchronously via loadPersisted().
-  const [cacheReady, setCacheReady] = useState(typeof window === "undefined");
+
+
 
   // Re-apply TV mode after React hydration in case hydration cleared the attribute / meta
   useEffect(() => {
@@ -192,20 +190,9 @@ function RootComponent() {
     } catch {}
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
-    // Hidrata o cache persistente (IndexedDB) antes do primeiro render das
-    // rotas para que Filmes/Séries abram instantaneamente em reloads.
-    let cancelled = false;
-    void import("@/lib/query-persist").then((m) =>
-      m.hydratePersistedCache().finally(() => {
-        if (!cancelled) setCacheReady(true);
-      }),
-    );
-    // Safety: never block UI longer than 400ms even if IDB hangs.
-    const timeout = setTimeout(() => setCacheReady(true), 400);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
+    // Hidrata o cache persistente (IndexedDB) o quanto antes para que
+    // Filmes/Séries abram instantaneamente em reloads.
+    void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
   }, []);
 
   return (
