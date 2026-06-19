@@ -45,6 +45,7 @@ function PlayerPage() {
     setCreds(store.getCreds());
   }, []);
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
+  const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
   // Valida o tipo da URL — params são `string`, podem vir errados.
