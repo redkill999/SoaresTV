@@ -15,7 +15,7 @@ export const Route = createFileRoute("/home")({
 
 type Tile = {
   label: string;
-  icon: ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string; strokeWidth?: number | string }>;
   to: string;
 };
 
