@@ -368,37 +368,65 @@ export function VideoPlayer({
     };
   }, []);
 
-  // Auto fullscreen: ao iniciar a reprodução, entra em tela cheia automaticamente.
-  // Browsers exigem gesto do usuário; o clique no card que levou ao player conta
-  // como gesto válido na maioria dos casos. Falhas são ignoradas silenciosamente.
+  // Auto fullscreen DO VÍDEO (não do app inteiro). Disparado pela flag setada
+  // no clique do card — assim respeitamos o user-activation do navegador.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    let want = false;
+    try {
+      want = sessionStorage.getItem("soarestv:autofs") === "1";
+    } catch {
+      /* ignore */
+    }
+    if (!want) return;
+    try {
+      sessionStorage.removeItem("soarestv:autofs");
+    } catch {
+      /* ignore */
+    }
+
     let done = false;
-    const enter = async () => {
+    const anyVideo = video as HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+
+    const tryEnter = async () => {
       if (done) return;
-      done = true;
-      const anyVideo = video as HTMLVideoElement & {
-        webkitEnterFullscreen?: () => void;
-        webkitRequestFullscreen?: () => Promise<void> | void;
-      };
+      if (document.fullscreenElement === video) {
+        done = true;
+        return;
+      }
       try {
         if (typeof anyVideo.webkitEnterFullscreen === "function") {
           anyVideo.webkitEnterFullscreen();
+          done = true;
         } else if (video.requestFullscreen) {
           await video.requestFullscreen();
+          done = true;
         } else if (anyVideo.webkitRequestFullscreen) {
           await anyVideo.webkitRequestFullscreen();
+          done = true;
         }
       } catch {
-        /* sem gesto válido — usuário pode tocar no botão de fullscreen */
+        /* tenta novamente no próximo evento */
       }
     };
-    video.addEventListener("playing", enter, { once: true });
+
+    // Tenta agora, ao carregar metadata e ao iniciar reprodução — algum desses
+    // pega o restante da janela de user-activation (~5s no Chromium).
+    void tryEnter();
+    const onMeta = () => void tryEnter();
+    const onPlay = () => void tryEnter();
+    video.addEventListener("loadedmetadata", onMeta);
+    video.addEventListener("playing", onPlay);
     return () => {
-      video.removeEventListener("playing", enter);
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.removeEventListener("playing", onPlay);
     };
   }, [src]);
+
 
 
 
