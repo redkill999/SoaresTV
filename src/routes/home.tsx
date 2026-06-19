@@ -52,6 +52,7 @@ function HomePage() {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
+  const [openConta, setOpenConta] = useState(false);
 
   // status state
   const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
@@ -89,8 +90,6 @@ function HomePage() {
   }, []);
 
   if (!mounted) return <HomeSkeleton />;
-
-  const [openConta, setOpenConta] = useState(false);
 
   const openTile = (to: string, label?: string) => {
     if (label === "CONTA") { setOpenConta(true); return; }
