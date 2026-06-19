@@ -38,6 +38,7 @@ const K = {
   hist: "soarestv:history",
   parental: "soarestv:parental",
   appSettings: "soarestv:appSettings",
+  lastEp: "soarestv:lastEpisode",
 };
 
 const isBrowser = () => typeof window !== "undefined";
