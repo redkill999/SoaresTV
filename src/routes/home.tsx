@@ -221,9 +221,22 @@ function HomePage() {
           ))}
         </div>
       </footer>
+
+      <Toaster theme="dark" />
+
+      {/* Status dialogs */}
+      <AlarmDialog
+        open={openStatus === "alarm"}
+        onClose={() => setOpenStatus(null)}
+        current={alarmMin}
+        onPick={setSleepTimer}
+      />
+      <VpnDialog open={openStatus === "vpn"} onClose={() => setOpenStatus(null)} />
+      <MsgDialog open={openStatus === "msg"} onClose={() => setOpenStatus(null)} />
     </div>
   );
 }
+
 
 function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   const Icon = tile.icon;
