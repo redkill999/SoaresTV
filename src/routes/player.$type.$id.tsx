@@ -199,6 +199,59 @@ function PlayerPage() {
     }
   }, [url]);
 
+  const leavingRef = useRef(false);
+  const closePlayer = useCallback(() => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+
+    try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
+
+    try {
+      const d = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> | void };
+      if (d.fullscreenElement && typeof document.exitFullscreen === "function") void document.exitFullscreen();
+      else if (d.webkitFullscreenElement && typeof d.webkitExitFullscreen === "function") void d.webkitExitFullscreen();
+    } catch { /* ignore */ }
+
+    const fallback = () => {
+      if (type === "live") navigate({ to: "/live", replace: true });
+      else if (type === "movie") navigate({ to: "/movies", replace: true });
+      else if (type === "series") navigate({ to: "/series", replace: true });
+      else navigate({ to: "/home", replace: true });
+    };
+
+    const currentPath = window.location.pathname;
+    window.setTimeout(() => {
+      if (window.history.length > 1) window.history.back();
+      else fallback();
+
+      window.setTimeout(() => {
+        if (window.location.pathname === currentPath || window.location.pathname.startsWith("/player/")) {
+          fallback();
+        }
+      }, 350);
+    }, 0);
+  }, [navigate, type]);
+
+  useEffect(() => {
+    const d = document as Document & { webkitFullscreenElement?: Element };
+    const wasFullscreen = { current: !!(d.fullscreenElement || d.webkitFullscreenElement) };
+    const onFullscreenChange = () => {
+      const isFullscreen = !!(d.fullscreenElement || d.webkitFullscreenElement);
+      if (isFullscreen) {
+        wasFullscreen.current = true;
+        return;
+      }
+      if (wasFullscreen.current && !leavingRef.current) closePlayer();
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+    };
+  }, [closePlayer]);
+
   const favType: FavItem["type"] = type ?? "movie";
   const fav = useIsFavorite(favType, id) && !!type;
 
@@ -221,21 +274,7 @@ function PlayerPage() {
           )}
         </div>
           <button
-            onClick={async () => {
-              try {
-                const d = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> | void };
-                if (d.fullscreenElement || d.webkitFullscreenElement) {
-                  if (typeof document.exitFullscreen === "function") await document.exitFullscreen();
-                  else if (typeof d.webkitExitFullscreen === "function") await d.webkitExitFullscreen();
-                }
-              } catch { /* ignore */ }
-              try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                window.history.back();
-              } else {
-                navigate({ to: "/home" });
-              }
-            }}
+            onClick={closePlayer}
             className="absolute left-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-player/55 text-player-foreground backdrop-blur hover:bg-player/75"
             aria-label="Voltar"
           >
