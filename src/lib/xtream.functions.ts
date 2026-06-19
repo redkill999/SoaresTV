@@ -474,7 +474,7 @@ async function mapXtreamSeries(
       u.searchParams.set("password", access.password);
       u.searchParams.set("action", "get_series_info");
       u.searchParams.set("series_id", String(sid));
-      const info = (await fetchJson(u.toString())) as
+      const info = (await fetchJson(u.toString(), 8_000)) as
         | { episodes?: Record<string, Array<{ id?: string | number; container_extension?: string }>> }
         | null;
       const seasons = info?.episodes ? Object.keys(info.episodes).sort() : [];
