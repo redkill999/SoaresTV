@@ -337,6 +337,7 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
       clearWatchdog();
+      detachStallListeners?.();
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
