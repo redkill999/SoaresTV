@@ -131,6 +131,7 @@ export function VideoPlayer({
     let triedDirect = false;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
+    let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
@@ -252,7 +253,7 @@ export function VideoPlayer({
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
         video.addEventListener("canplay", onResumed);
-        const detachStallListeners = () => {
+        detachStallListeners = () => {
           clearStall();
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
@@ -266,7 +267,7 @@ export function VideoPlayer({
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
                 if (netRetries++ >= MAX_NET_RETRIES) {
-                  detachStallListeners();
+                  detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
                   setError("Conexão instável com o canal. Tente novamente.");
@@ -278,14 +279,14 @@ export function VideoPlayer({
                   hls?.startLoad();
                 }, delay);
               } else {
-                detachStallListeners();
+                detachStallListeners?.();
                 tryNextVod();
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
               if (isLive) {
                 if (mediaRetries++ >= MAX_MEDIA_RETRIES) {
-                  detachStallListeners();
+                  detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
                   setError("Erro de mídia no canal. Tente novamente.");
@@ -293,12 +294,12 @@ export function VideoPlayer({
                 }
                 hls?.recoverMediaError();
               } else {
-                detachStallListeners();
+                detachStallListeners?.();
                 tryNextVod();
               }
               return;
             default:
-              detachStallListeners();
+              detachStallListeners?.();
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
@@ -336,6 +337,7 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
       clearWatchdog();
+      detachStallListeners?.();
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);

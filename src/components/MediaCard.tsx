@@ -124,12 +124,13 @@ export function MediaCard({
 
 
       <button
+        type="button"
         onClick={(e) => {
           e.preventDefault();
           store.toggleFav({ type, id: idStr, name, logo: image });
         }}
         className="absolute top-2 right-2 size-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
-        aria-label="Favoritar"
+        aria-label={fav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
       >
         <Heart
           className={`size-4 transition-colors ${
