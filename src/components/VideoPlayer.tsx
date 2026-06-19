@@ -80,13 +80,13 @@ export function VideoPlayer({
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
 
   const videoClass = useMemo(() => {
-    const base = "w-full bg-black rounded-xl shadow-card";
+    const base = "h-full w-full bg-black";
     switch (settings.aspectRatio) {
-      case "16:9":   return `${base} aspect-video object-contain`;
-      case "4:3":    return `${base} aspect-[4/3] object-contain`;
-      case "fill":   return `${base} aspect-video object-cover`;
-      case "stretch":return `${base} aspect-video object-fill`;
-      default:       return `${base} aspect-video object-contain`;
+      case "16:9":   return `${base} object-contain`;
+      case "4:3":    return `${base} object-contain`;
+      case "fill":   return `${base} object-cover`;
+      case "stretch":return `${base} object-fill`;
+      default:       return `${base} object-contain`;
     }
   }, [settings.aspectRatio]);
 
@@ -368,68 +368,6 @@ export function VideoPlayer({
     };
   }, []);
 
-  // Auto fullscreen DO VÍDEO (não do app inteiro). Disparado pela flag setada
-  // no clique do card — assim respeitamos o user-activation do navegador.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    let want = false;
-    try {
-      want = sessionStorage.getItem("soarestv:autofs") === "1";
-    } catch {
-      /* ignore */
-    }
-    if (!want) return;
-    try {
-      sessionStorage.removeItem("soarestv:autofs");
-    } catch {
-      /* ignore */
-    }
-
-    let done = false;
-    const anyVideo = video as HTMLVideoElement & {
-      webkitEnterFullscreen?: () => void;
-      webkitRequestFullscreen?: () => Promise<void> | void;
-    };
-
-    const tryEnter = async () => {
-      if (done) return;
-      if (document.fullscreenElement === video) {
-        done = true;
-        return;
-      }
-      try {
-        if (typeof anyVideo.webkitEnterFullscreen === "function") {
-          anyVideo.webkitEnterFullscreen();
-          done = true;
-        } else if (video.requestFullscreen) {
-          await video.requestFullscreen();
-          done = true;
-        } else if (anyVideo.webkitRequestFullscreen) {
-          await anyVideo.webkitRequestFullscreen();
-          done = true;
-        }
-      } catch {
-        /* tenta novamente no próximo evento */
-      }
-    };
-
-    // Tenta agora, ao carregar metadata e ao iniciar reprodução — algum desses
-    // pega o restante da janela de user-activation (~5s no Chromium).
-    void tryEnter();
-    const onMeta = () => void tryEnter();
-    const onPlay = () => void tryEnter();
-    video.addEventListener("loadedmetadata", onMeta);
-    video.addEventListener("playing", onPlay);
-    return () => {
-      video.removeEventListener("loadedmetadata", onMeta);
-      video.removeEventListener("playing", onPlay);
-    };
-  }, [src]);
-
-
-
-
   // Continue assistindo: ao carregar metadata, faz seek para a posição salva
   // (apenas VOD/série, nunca live). Reporta progresso a cada 5s, ao pausar e
   // ao desmontar para o store de histórico.
@@ -501,7 +439,7 @@ export function VideoPlayer({
 
 
   return (
-    <div className="relative">
+    <div className="relative h-full w-full bg-black">
       <video
         ref={videoRef}
         poster={poster}
@@ -512,7 +450,7 @@ export function VideoPlayer({
         className={videoClass}
       />
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2 rounded-b-xl">
+        <div className="absolute inset-x-0 bottom-0 bg-black/80 text-destructive text-xs px-3 py-2">
           {error}
         </div>
       )}
