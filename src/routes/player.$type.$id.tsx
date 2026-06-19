@@ -221,7 +221,15 @@ function PlayerPage() {
           )}
         </div>
           <button
-            onClick={() => {
+            onClick={async () => {
+              try {
+                const d = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> | void };
+                if (d.fullscreenElement || d.webkitFullscreenElement) {
+                  if (typeof document.exitFullscreen === "function") await document.exitFullscreen();
+                  else if (typeof d.webkitExitFullscreen === "function") await d.webkitExitFullscreen();
+                }
+              } catch { /* ignore */ }
+              try { sessionStorage.removeItem("soarestv:autofs"); } catch { /* ignore */ }
               if (typeof window !== "undefined" && window.history.length > 1) {
                 window.history.back();
               } else {
