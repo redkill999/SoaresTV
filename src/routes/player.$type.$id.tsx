@@ -331,6 +331,7 @@ function PlayerPage() {
                       const active = String(ep.id) === activeEpisodeId;
                       return (
                         <button
+                          type="button"
                           key={ep.id}
                           onClick={() => playEpisode(ep)}
                           className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
