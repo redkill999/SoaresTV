@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   Tv, CalendarDays, Film, Clapperboard,
   User, LayoutGrid, RotateCcw,
@@ -7,8 +7,13 @@ import {
   AlarmClock, Video, Lock, Mail, RefreshCw,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { store, type M3UPlaylist } from "@/lib/storage";
+import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { xtreamCredsFromUrl } from "@/lib/xtream";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import homeBg from "@/assets/home-bg.png.asset.json";
 
 export const Route = createFileRoute("/home")({
