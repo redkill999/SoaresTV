@@ -267,18 +267,122 @@ function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
 function StatusIcon({
   icon: Icon,
   label,
+  onClick,
+  active = false,
+  activeColor = "bg-emerald-400",
 }: {
   icon: ComponentType<{ className?: string; strokeWidth?: number | string }>;
   label: string;
+  onClick?: () => void;
+  active?: boolean;
+  activeColor?: string;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       title={label}
-      className="flex flex-col items-center gap-0.5 text-white/85"
+      className="relative flex flex-col items-center gap-0.5 text-white/85 hover:text-white transition-colors focus:outline-none"
     >
       <Icon className="size-5" strokeWidth={1.8} />
       <span className="text-[8px] font-semibold tracking-wider">{label}</span>
-    </div>
+      {active && (
+        <span className={`absolute -top-0.5 -right-0.5 size-1.5 rounded-full ${activeColor} shadow-[0_0_6px_rgba(255,255,255,0.6)]`} />
+      )}
+    </button>
+  );
+}
+
+/* -------- Status dialogs -------- */
+
+function AlarmDialog({
+  open, onClose, current, onPick,
+}: { open: boolean; onClose: () => void; current: number; onPick: (m: number) => void }) {
+  const opts = [0, 15, 30, 60, 90, 120];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Sleep timer</DialogTitle>
+          <DialogDescription>Desliga o app automaticamente após o tempo escolhido.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-3 gap-2">
+          {opts.map((m) => (
+            <button
+              key={m}
+              onClick={() => onPick(m)}
+              className={`rounded-lg border py-2 text-sm transition ${current === m ? "bg-primary text-primary-foreground border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              {m === 0 ? "Desligado" : `${m} min`}
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VpnDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [ip, setIp] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setIp(null); setErr(null);
+    fetch("https://api.ipify.org?format=json")
+      .then((r) => r.json())
+      .then((d: { ip: string }) => setIp(d.ip))
+      .catch(() => setErr("Sem conexão"));
+  }, [open]);
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>VPN / Conexão</DialogTitle>
+          <DialogDescription>Status atual da sua conexão.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Status</span>
+            <span className={online ? "text-emerald-400" : "text-red-400"}>{online ? "Online" : "Offline"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">IP público</span>
+            <span className="font-mono">{ip ?? (err ?? "...")}</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MsgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [items, setItems] = useState<HistItem[]>([]);
+  useEffect(() => { if (open) setItems(store.getHistory().slice(0, 8)); }, [open]);
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Mensagens</DialogTitle>
+          <DialogDescription>Atividade recente.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-72 overflow-auto">
+          <div className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+            <div className="font-medium">Bem-vindo ao SoaresTV</div>
+            <div className="text-xs text-muted-foreground">App pronto para uso. Versão 1.0.0</div>
+          </div>
+          {items.length === 0 && <p className="text-xs text-muted-foreground">Sem atividade ainda.</p>}
+          {items.map((it) => (
+            <div key={`${it.type}:${it.id}`} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+              <div className="font-medium truncate">{it.name}</div>
+              <div className="text-xs text-muted-foreground">
+                {it.type.toUpperCase()} • {new Date(it.at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
