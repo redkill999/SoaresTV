@@ -201,6 +201,10 @@ function handleKey(e: KeyboardEvent) {
       return;
     }
     e.preventDefault();
+    if (window.location.pathname.startsWith("/player/")) {
+      window.dispatchEvent(new CustomEvent("soarestv:player-back"));
+      return;
+    }
     if (window.history.length > 1) window.history.back();
     return;
   }
