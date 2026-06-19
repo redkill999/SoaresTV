@@ -38,6 +38,7 @@ const K = {
   hist: "soarestv:history",
   parental: "soarestv:parental",
   appSettings: "soarestv:appSettings",
+  lastEp: "soarestv:lastEpisode",
 };
 
 const isBrowser = () => typeof window !== "undefined";
@@ -150,4 +151,15 @@ export const store = {
     write(K.appSettings, { ...cur, ...patch });
   },
   subscribeAppSettings: (fn: Listener) => subscribe(K.appSettings, fn),
+
+  /** Último episódio assistido por série (id da série -> id do episódio). */
+  getLastEpisode: (seriesId: string): string | null => {
+    const map = read<Record<string, string>>(K.lastEp, {});
+    return map[seriesId] ?? null;
+  },
+  setLastEpisode: (seriesId: string, episodeId: string) => {
+    const map = read<Record<string, string>>(K.lastEp, {});
+    if (map[seriesId] === episodeId) return;
+    write(K.lastEp, { ...map, [seriesId]: episodeId });
+  },
 };
