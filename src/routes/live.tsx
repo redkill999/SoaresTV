@@ -35,6 +35,7 @@ export const Route = createFileRoute("/live")({
 function LivePage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState<string>("all"); // "all" | "favorites" | "recent" | category_id
   const [sort, setSort] = useState<SortKey>("default");
   const [unlocked, setUnlocked] = useState(false);
