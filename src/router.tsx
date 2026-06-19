@@ -1,6 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { RouteErrorState } from "./components/RouteErrorState";
+
 
 export const getRouter = () => {
   const queryClient = new QueryClient({
@@ -24,7 +26,11 @@ export const getRouter = () => {
     // Preload the route module/chunk on hover/focus
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
+    defaultErrorComponent: ({ error, reset }) => (
+      <RouteErrorState error={error as Error} reset={reset} />
+    ),
   });
+
 
   return router;
 };
