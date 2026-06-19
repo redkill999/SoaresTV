@@ -199,7 +199,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        {cacheReady ? <Outlet /> : null}
+        <Outlet />
       </ThemeProvider>
     </QueryClientProvider>
   );
