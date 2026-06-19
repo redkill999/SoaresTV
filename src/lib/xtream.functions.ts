@@ -171,17 +171,6 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     } finally {
       clearTimeout(timeoutId);
     }
-    const haystack = `${location || ""}\n${html}`;
-
-    const matches = Array.from(haystack.matchAll(/https?:\/\/[^\s"'<>]+/gi)).map((m) => m[0].replace(/&amp;/g, "&"));
-    const xtreamUrl = matches.find((u) => /\/(player_api|get)\.php\b|:\d{2,5}\b/i.test(u));
-    if (xtreamUrl) return { server: normalizeServer(xtreamUrl) };
-
-    if (/Para acessar é preciso logar-se|Bem-vindo ao painel/i.test(html) && !cookies) {
-      throw new Error("Não foi possível entrar no painel web para descobrir o DNS Xtream.");
-    }
-
-    throw new Error("Login do painel web aceito, mas não encontrei DNS Xtream na página. Copie no XCIPTV o campo Portal/DNS/Host, normalmente com porta, não o link /dashboard.");
   });
 
 type M3UEntryDTO = {
