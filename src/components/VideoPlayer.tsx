@@ -267,7 +267,7 @@ export function VideoPlayer({
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
                 if (netRetries++ >= MAX_NET_RETRIES) {
-                  detachStallListeners();
+                  detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
                   setError("Conexão instável com o canal. Tente novamente.");
@@ -279,14 +279,14 @@ export function VideoPlayer({
                   hls?.startLoad();
                 }, delay);
               } else {
-                detachStallListeners();
+                detachStallListeners?.();
                 tryNextVod();
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
               if (isLive) {
                 if (mediaRetries++ >= MAX_MEDIA_RETRIES) {
-                  detachStallListeners();
+                  detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
                   setError("Erro de mídia no canal. Tente novamente.");
@@ -294,12 +294,12 @@ export function VideoPlayer({
                 }
                 hls?.recoverMediaError();
               } else {
-                detachStallListeners();
+                detachStallListeners?.();
                 tryNextVod();
               }
               return;
             default:
-              detachStallListeners();
+              detachStallListeners?.();
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
