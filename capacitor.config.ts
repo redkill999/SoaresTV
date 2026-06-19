@@ -14,10 +14,15 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: true,
+    // XCIPTV-like: landscape travado e fullscreen imersivo
+    backgroundColor: '#000000',
   },
   plugins: {
     CapacitorHttp: {
       enabled: true,
+    },
+    ScreenOrientation: {
+      orientation: 'landscape',
     },
   },
 };
