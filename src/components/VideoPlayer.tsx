@@ -131,6 +131,7 @@ export function VideoPlayer({
     let triedDirect = false;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
+    let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
