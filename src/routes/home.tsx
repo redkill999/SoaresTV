@@ -90,8 +90,12 @@ function HomePage() {
 
   if (!mounted) return <HomeSkeleton />;
 
-  const openTile = (to: string) => {
+  const openTile = (to: string, label?: string) => {
     if (!to) return;
+    if (label === "CONTA") {
+      navigate({ to: "/settings", search: { open: "conta" } });
+      return;
+    }
     const usesPlaylistContent = to === "/live" || to === "/movies" || to === "/series";
     if (m3uList && !store.getCreds() && usesPlaylistContent) {
       const xtreamCreds = xtreamCredsFromUrl(m3uList.url, m3uList.username, m3uList.password);
@@ -105,6 +109,7 @@ function HomePage() {
     }
     navigate({ to });
   };
+
 
 
   const setSleepTimer = (mins: number) => {
