@@ -33,10 +33,20 @@ export function MediaCard({
   const idStr = String(id);
   const fav = useIsFavorite(type, idStr);
   const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
   const pct =
     typeof progress === "number" && Number.isFinite(progress)
       ? Math.max(0, Math.min(1, progress)) * 100
       : null;
+
+  const showImage = !!image && !errored;
+  const FallbackIcon = type === "live" ? Tv : type === "movie" ? Film : type === "series" ? Clapperboard : ImageOff;
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
 
   return (
     <div className="group relative">
@@ -49,7 +59,7 @@ export function MediaCard({
         <div
           className={`relative ${aspectClass[aspect]} rounded-xl overflow-hidden bg-card/60 shadow-card border border-white/5 group-hover:border-primary/60 group-hover:shadow-glow transition-all`}
         >
-          {image ? (
+          {showImage ? (
             <>
               {!loaded && (
                 <div className="absolute inset-0 animate-pulse bg-white/[0.04]" />
@@ -59,8 +69,8 @@ export function MediaCard({
                 alt={name}
                 loading="lazy"
                 onLoad={() => setLoaded(true)}
-                onError={(e) => {
-                  e.currentTarget.style.opacity = "0.15";
+                onError={() => {
+                  setErrored(true);
                   setLoaded(true);
                 }}
                 className={`w-full h-full ${
@@ -69,8 +79,21 @@ export function MediaCard({
               />
             </>
           ) : (
-            <div className="w-full h-full bg-brand-gradient/30 flex items-center justify-center text-3xl font-display font-bold opacity-50">
-              {name.slice(0, 1).toUpperCase()}
+            <div
+              className="w-full h-full flex flex-col items-center justify-center gap-2 text-center px-3"
+              style={{
+                background:
+                  "linear-gradient(135deg, hsl(var(--primary) / 0.18), hsl(var(--accent) / 0.10) 60%, hsl(var(--card) / 0.6))",
+              }}
+              aria-label={`Sem imagem: ${name}`}
+            >
+              <FallbackIcon className="size-8 text-primary/80" strokeWidth={1.6} />
+              <div className="font-display text-2xl font-bold text-foreground/80 leading-none">
+                {initials || name.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground line-clamp-1">
+                {type === "live" ? "Canal" : type === "movie" ? "Filme" : "Série"}
+              </div>
             </div>
           )}
 
