@@ -304,7 +304,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
         </DialogHeader>
         {creds ? (
           <div className="space-y-2 text-sm">
-            <div><Label className="text-muted-foreground">Servidor</Label><div className="font-mono text-xs break-all">{creds.host}</div></div>
+            <div><Label className="text-muted-foreground">Servidor</Label><div className="font-mono text-xs break-all">{creds.server}</div></div>
             <div><Label className="text-muted-foreground">Usuário</Label><div>{creds.username}</div></div>
           </div>
         ) : lists.length > 0 ? (
