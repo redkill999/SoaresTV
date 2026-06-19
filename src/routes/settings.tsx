@@ -65,8 +65,24 @@ type OpenKey = Exclude<TileKey, "atualizar" | "clearCache" | "sair">;
 
 function SettingsPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const [focused, setFocused] = useState<TileKey>("language");
   const [open, setOpen] = useState<OpenKey | null>(null);
+
+  useEffect(() => {
+    const k = search.open as OpenKey | undefined;
+    if (!k) return;
+    const valid: OpenKey[] = [
+      "app","conta","playerSettings","player","tipoFluxo","parental",
+      "teste","backup","remoto","language","socorro","outras",
+    ];
+    if (valid.includes(k)) {
+      setOpen(k);
+      setFocused(k as TileKey);
+      navigate({ to: "/settings", search: {}, replace: true });
+    }
+  }, [search.open, navigate]);
+
 
   useEffect(() => {
     const html = document.documentElement;
