@@ -247,3 +247,25 @@ div[style*="Edit with Lovable"],
   position: absolute !important;
   z-index: -9999 !important;
 }
+
+/* ===== Controle remoto / D-pad: foco visível para Smart TV ===== */
+/* Anel de foco bem visível quando navegando por teclado/remoto */
+.tv-focus :focus,
+.tv-focus :focus-visible,
+[data-tv-mode] :focus,
+[data-tv-mode] :focus-visible,
+[data-smart-tv] :focus,
+[data-smart-tv] :focus-visible {
+  outline: 3px solid hsl(var(--primary)) !important;
+  outline-offset: 3px !important;
+  border-radius: 8px;
+  box-shadow: 0 0 0 6px hsl(var(--primary) / 0.25) !important;
+  transition: outline-offset 80ms ease, box-shadow 80ms ease;
+  z-index: 5;
+  position: relative;
+}
+/* Body/html/main não devem mostrar o anel */
+.tv-focus :is(html, body, main, section, article, div):focus:not([tabindex]) {
+  outline: none !important;
+  box-shadow: none !important;
+}
