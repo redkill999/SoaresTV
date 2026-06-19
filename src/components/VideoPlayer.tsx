@@ -253,7 +253,7 @@ export function VideoPlayer({
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
         video.addEventListener("canplay", onResumed);
-        const detachStallListeners = () => {
+        detachStallListeners = () => {
           clearStall();
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
