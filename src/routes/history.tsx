@@ -42,16 +42,23 @@ function HistoryPage() {
         emptyTitle={t("empty.noResults")}
         emptyHint={t("empty.recentHint")}
       >
-        {items.map((it) => (
-          <MediaCard
-            key={`${it.type}-${it.id}-${it.at}`}
-            type={it.type}
-            id={it.id}
-            name={it.name}
-            image={it.logo}
-            aspect={it.type === "live" ? "wide" : "poster"}
-          />
-        ))}
+        {items.map((it) => {
+          const progress =
+            it.type !== "live" && it.duration && it.duration > 0 && typeof it.position === "number"
+              ? it.position / it.duration
+              : undefined;
+          return (
+            <MediaCard
+              key={`${it.type}-${it.id}-${it.at}`}
+              type={it.type}
+              id={it.id}
+              name={it.name}
+              image={it.logo}
+              aspect={it.type === "live" ? "wide" : "poster"}
+              progress={progress}
+            />
+          );
+        })}
       </MediaGrid>
     </AppShell>
   );

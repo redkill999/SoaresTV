@@ -2,7 +2,7 @@
 export type XtreamCreds = { server: string; username: string; password: string };
 export type M3UPlaylist = { name: string; url: string; username?: string; password?: string; mode?: "playlist" | "xtream" };
 export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
-export type HistItem = FavItem & { at: number; position?: number };
+export type HistItem = FavItem & { at: number; position?: number; duration?: number };
 export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
 
 const K = {
@@ -96,6 +96,21 @@ export const store = {
     const next = [item, ...cur].slice(0, 100);
     write(K.hist, next);
   },
+  /** Atualiza posição/duração do item mais recente sem reordenar o histórico. */
+  updateProgress: (type: HistItem["type"], id: string, position: number, duration: number) => {
+    const cur = read<HistItem[]>(K.hist, []);
+    const idx = cur.findIndex((x) => x.type === type && x.id === id);
+    if (idx === -1) return;
+    const next = cur.slice();
+    next[idx] = { ...next[idx], position, duration, at: Date.now() };
+    write(K.hist, next);
+  },
+  removeHistory: (type: HistItem["type"], id: string) => {
+    const cur = read<HistItem[]>(K.hist, []);
+    write(K.hist, cur.filter((x) => !(x.type === type && x.id === id)));
+  },
+  getHistoryItem: (type: HistItem["type"], id: string) =>
+    read<HistItem[]>(K.hist, []).find((x) => x.type === type && x.id === id) ?? null,
   clearHistory: () => write(K.hist, []),
   subscribeHistory: (fn: Listener) => subscribe(K.hist, fn),
 

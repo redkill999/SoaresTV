@@ -19,6 +19,7 @@ export function MediaCard({
   image,
   badge,
   aspect = "poster",
+  progress,
 }: {
   type: FavItem["type"];
   id: string | number;
@@ -26,10 +27,16 @@ export function MediaCard({
   image?: string;
   badge?: string;
   aspect?: Aspect;
+  /** 0–1: mostra barra de progresso na base da capa (continue assistindo). */
+  progress?: number;
 }) {
   const idStr = String(id);
   const fav = useIsFavorite(type, idStr);
   const [loaded, setLoaded] = useState(false);
+  const pct =
+    typeof progress === "number" && Number.isFinite(progress)
+      ? Math.max(0, Math.min(1, progress)) * 100
+      : null;
 
   return (
     <div className="group relative">
@@ -79,8 +86,19 @@ export function MediaCard({
               {badge}
             </span>
           )}
+
+          {pct !== null && (
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-black/60">
+              <div
+                className="h-full bg-brand-gradient shadow-glow"
+                style={{ width: `${pct}%` }}
+                aria-label={`${Math.round(pct)}% assistido`}
+              />
+            </div>
+          )}
         </div>
       </Link>
+
 
       <button
         onClick={(e) => {
