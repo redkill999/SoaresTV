@@ -96,14 +96,14 @@ function LivePage() {
     } else if (cat !== "all") {
       list = list.filter((x) => String(x.category_id) === cat);
     }
-    if (search) {
-      const s = search.toLowerCase();
+    if (deferredSearch) {
+      const s = deferredSearch.toLowerCase();
       list = list.filter((x) => x.name.toLowerCase().includes(s));
     }
     if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
     if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
     return list;
-  }, [streamsQ.data, search, sort, cat, favIds, recentIds]);
+  }, [streamsQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   const parental = useMemo(() => store.getParental(), [cat]);
   const needGate =
