@@ -108,6 +108,53 @@ function HomePage() {
     navigate({ to });
   };
 
+  // limpa o sleep-timer ao desmontar
+  useEffect(() => () => {
+    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+  }, []);
+
+  const setSleepTimer = (mins: number) => {
+    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+    setAlarmMin(mins);
+    if (mins <= 0) {
+      toast.success("Alarme desligado");
+      setOpenStatus(null);
+      return;
+    }
+    alarmTimerRef.current = setTimeout(() => {
+      toast("Sleep timer", { description: "Tempo encerrado, voltando ao login." });
+      store.setCreds(null);
+      navigate({ to: "/", replace: true });
+    }, mins * 60_000);
+    toast.success(`Alarme: ${mins} min`);
+    setOpenStatus(null);
+  };
+
+  const toggleRec = () => {
+    const next = !recOn;
+    setRecOn(next);
+    toast.success(next ? "Gravação iniciada" : "Gravação parada");
+  };
+
+  const runUpdate = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
+        .forEach((k) => localStorage.removeItem(k));
+      toast.success("Conteúdos atualizados");
+      setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
+    } catch {
+      toast.error("Falha ao atualizar");
+    }
+  };
+
+  const handleStatus = (k: StatusKey) => {
+    if (k === "rec")    return toggleRec();
+    if (k === "update") return runUpdate();
+    setOpenStatus(k);
+  };
+
+
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
       {/* Background image */}
