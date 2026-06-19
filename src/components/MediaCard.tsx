@@ -55,17 +55,9 @@ export function MediaCard({
         params={{ type, id: idStr }}
         search={{ name }}
         onClick={() => {
-          // Pede fullscreen no documento durante o gesto do clique — única
-          // forma confiável de já abrir o player em tela cheia (browsers exigem
-          // user gesture, e o `play()` automático no destino não conta).
+          // Sinaliza pro player que deve entrar em tela cheia (somente o vídeo).
           try {
-            const el = document.documentElement as HTMLElement & {
-              webkitRequestFullscreen?: () => Promise<void> | void;
-            };
-            if (!document.fullscreenElement) {
-              if (el.requestFullscreen) void el.requestFullscreen().catch(() => undefined);
-              else if (el.webkitRequestFullscreen) void el.webkitRequestFullscreen();
-            }
+            sessionStorage.setItem("soarestv:autofs", "1");
           } catch {
             /* ignore */
           }
