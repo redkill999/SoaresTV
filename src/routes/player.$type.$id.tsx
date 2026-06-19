@@ -266,8 +266,11 @@ function PlayerPage() {
             </div>
           </div>
         {type === "series" && (
-          <aside className="absolute bottom-0 right-0 z-30 max-h-[48dvh] w-full max-w-md overflow-y-auto border-l border-t border-white/10 bg-player/90 px-4 py-3 backdrop-blur sm:bottom-4 sm:right-4 sm:max-h-[62dvh] sm:rounded-lg sm:border">
-            <h2 className="mb-3 font-semibold">Episódios</h2>
+          <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
+            <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
+              Episódios
+            </summary>
+            <div className="px-4 pb-4">
             {seriesQ.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
             {seriesQ.data?.episodes &&
               Object.entries(seriesQ.data.episodes).map(([season, eps]) => (
@@ -294,7 +297,8 @@ function PlayerPage() {
                   </div>
                 </div>
               ))}
-          </aside>
+            </div>
+          </details>
         )}
         {type === "live" && (
           <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
