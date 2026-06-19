@@ -207,10 +207,10 @@ function HomePage() {
         <div className="flex flex-col items-center justify-end pb-1 text-center">
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-white/70">
             <Tv className="size-3.5" />
-            <span>Developed by</span>
+            <span>Desenvolvido por</span>
           </div>
           <div className="text-[11px] font-semibold tracking-[0.2em] text-white/90">
-            SOARESTV.APP
+            RedKiLL999
           </div>
         </div>
         <div className="flex items-end justify-end gap-2 sm:gap-3">
