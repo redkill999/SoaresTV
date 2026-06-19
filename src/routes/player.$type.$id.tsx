@@ -64,6 +64,44 @@ function PlayerPage() {
     queryFn: () => api<SeriesInfo>(creds!, "get_series_info", { series_id: id }),
   });
 
+  type Episode = { id: string; title: string; container_extension: string; episode_num: number; direct_source?: string };
+
+  const playEpisode = useCallback(
+    (ep: Episode) => {
+      if (!creds) return;
+      const directPath = (() => {
+        try {
+          return ep.direct_source ? new URL(ep.direct_source).pathname.toLowerCase() : "";
+        } catch {
+          return "";
+        }
+      })();
+      const usableDirect =
+        ep.direct_source &&
+        /^https?:\/\//i.test(ep.direct_source) &&
+        /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+      setEpisodeUrl(
+        usableDirect
+          ? ep.direct_source!
+          : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
+      );
+      setActiveEpisodeId(String(ep.id));
+      setActiveTitle(`${name} — ${ep.title}`);
+      store.setLastEpisode(id, String(ep.id));
+    },
+    [creds, id, name],
+  );
+
+  // Auto-seleciona último episódio assistido (ou o primeiro) ao abrir a série.
+  useEffect(() => {
+    if (type !== "series" || episodeUrl || !seriesQ.data?.episodes) return;
+    const allEps: Episode[] = Object.values(seriesQ.data.episodes).flat() as Episode[];
+    if (!allEps.length) return;
+    const lastId = store.getLastEpisode(id);
+    const target = (lastId && allEps.find((e) => String(e.id) === lastId)) || allEps[0];
+    playEpisode(target);
+  }, [type, seriesQ.data, episodeUrl, id, playEpisode]);
+
 
   const movieQ = useQuery({
     queryKey: ["movie-info", id],
