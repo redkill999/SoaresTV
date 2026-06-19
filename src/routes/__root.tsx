@@ -119,11 +119,14 @@ const TV_MODE_SCRIPT = `(function(){
       var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
       var ua = (navigator.userAgent || '').toLowerCase();
       var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
+      // Smart TVs: Tizen (Samsung), WebOS (LG), AndroidTV, GoogleTV, FireTV (AFT*), Hisense/VIDAA, NetCast, Roku, BRAVIA
+      var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox/.test(ua);
       // Dentro do APK (Capacitor) sempre tratamos como TV pra replicar o layout do XCIPTV.
       var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-      // TV mode: large landscape screen WITHOUT touch (smart TVs, set-top boxes) OU app nativo.
-      // Phones/tablets no navegador continuam com layout responsivo.
-      var isTV = isNative || (!isPhoneOrTablet && maxDim >= 1280 && minDim >= 720);
+      // TV mode: smart TV UA, app nativo, OU tela grande landscape sem touch.
+      var isTV = isNative || isSmartTV || (!isPhoneOrTablet && maxDim >= 1280 && minDim >= 720);
+      if (isSmartTV) html.setAttribute && document.documentElement.setAttribute('data-smart-tv','');
+
       var metas = document.querySelectorAll('meta[name="viewport"]');
       for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
       var m = document.createElement('meta');
