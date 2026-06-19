@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   Tv, CalendarDays, Film, Clapperboard,
   User, LayoutGrid, RotateCcw,
@@ -7,8 +7,13 @@ import {
   AlarmClock, Video, Lock, Mail, RefreshCw,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { store, type M3UPlaylist } from "@/lib/storage";
+import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { xtreamCredsFromUrl } from "@/lib/xtream";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import homeBg from "@/assets/home-bg.png.asset.json";
 
 export const Route = createFileRoute("/home")({
@@ -40,18 +45,18 @@ const BOTTOM_RIGHT: Tile[] = [
   { label: "SETTINGS", icon: SettingsIcon, to: "/settings" },
 ];
 
-const STATUS = [
-  { icon: AlarmClock, label: "ALARM" },
-  { icon: Video, label: "REC" },
-  { icon: Lock, label: "VPN" },
-  { icon: Mail, label: "MSG" },
-  { icon: RefreshCw, label: "UPDATE" },
-];
+type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
 function HomePage() {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
+
+  // status state
+  const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
+  const [recOn, setRecOn] = useState(false);
+  const [alarmMin, setAlarmMin] = useState(0);
+  const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -95,6 +100,53 @@ function HomePage() {
     navigate({ to });
   };
 
+  // limpa o sleep-timer ao desmontar
+  useEffect(() => () => {
+    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+  }, []);
+
+  const setSleepTimer = (mins: number) => {
+    if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
+    setAlarmMin(mins);
+    if (mins <= 0) {
+      toast.success("Alarme desligado");
+      setOpenStatus(null);
+      return;
+    }
+    alarmTimerRef.current = setTimeout(() => {
+      toast("Sleep timer", { description: "Tempo encerrado, voltando ao login." });
+      store.setCreds(null);
+      navigate({ to: "/", replace: true });
+    }, mins * 60_000);
+    toast.success(`Alarme: ${mins} min`);
+    setOpenStatus(null);
+  };
+
+  const toggleRec = () => {
+    const next = !recOn;
+    setRecOn(next);
+    toast.success(next ? "Gravação iniciada" : "Gravação parada");
+  };
+
+  const runUpdate = () => {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
+        .forEach((k) => localStorage.removeItem(k));
+      toast.success("Conteúdos atualizados");
+      setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
+    } catch {
+      toast.error("Falha ao atualizar");
+    }
+  };
+
+  const handleStatus = (k: StatusKey) => {
+    if (k === "rec")    return toggleRec();
+    if (k === "update") return runUpdate();
+    setOpenStatus(k);
+  };
+
+
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
       {/* Background image */}
@@ -122,9 +174,11 @@ function HomePage() {
           </div>
         </div>
         <div className="flex w-40 items-start justify-end gap-2.5">
-          {STATUS.map((s) => (
-            <StatusIcon key={s.label} icon={s.icon} label={s.label} />
-          ))}
+          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
+          <StatusIcon icon={Video}      label="REC"    active={recOn}        activeColor="bg-red-500"     onClick={() => handleStatus("rec")} />
+          <StatusIcon icon={Lock}       label="VPN"                                                       onClick={() => handleStatus("vpn")} />
+          <StatusIcon icon={Mail}       label="MSG"                                                       onClick={() => handleStatus("msg")} />
+          <StatusIcon icon={RefreshCw}  label="UPDATE"                                                    onClick={() => handleStatus("update")} />
         </div>
       </header>
 
@@ -159,9 +213,22 @@ function HomePage() {
           ))}
         </div>
       </footer>
+
+      <Toaster theme="dark" />
+
+      {/* Status dialogs */}
+      <AlarmDialog
+        open={openStatus === "alarm"}
+        onClose={() => setOpenStatus(null)}
+        current={alarmMin}
+        onPick={setSleepTimer}
+      />
+      <VpnDialog open={openStatus === "vpn"} onClose={() => setOpenStatus(null)} />
+      <MsgDialog open={openStatus === "msg"} onClose={() => setOpenStatus(null)} />
     </div>
   );
 }
+
 
 function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   const Icon = tile.icon;
@@ -192,18 +259,122 @@ function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
 function StatusIcon({
   icon: Icon,
   label,
+  onClick,
+  active = false,
+  activeColor = "bg-emerald-400",
 }: {
   icon: ComponentType<{ className?: string; strokeWidth?: number | string }>;
   label: string;
+  onClick?: () => void;
+  active?: boolean;
+  activeColor?: string;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       title={label}
-      className="flex flex-col items-center gap-0.5 text-white/85"
+      className="relative flex flex-col items-center gap-0.5 text-white/85 hover:text-white transition-colors focus:outline-none"
     >
       <Icon className="size-5" strokeWidth={1.8} />
       <span className="text-[8px] font-semibold tracking-wider">{label}</span>
-    </div>
+      {active && (
+        <span className={`absolute -top-0.5 -right-0.5 size-1.5 rounded-full ${activeColor} shadow-[0_0_6px_rgba(255,255,255,0.6)]`} />
+      )}
+    </button>
+  );
+}
+
+/* -------- Status dialogs -------- */
+
+function AlarmDialog({
+  open, onClose, current, onPick,
+}: { open: boolean; onClose: () => void; current: number; onPick: (m: number) => void }) {
+  const opts = [0, 15, 30, 60, 90, 120];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Sleep timer</DialogTitle>
+          <DialogDescription>Desliga o app automaticamente após o tempo escolhido.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-3 gap-2">
+          {opts.map((m) => (
+            <button
+              key={m}
+              onClick={() => onPick(m)}
+              className={`rounded-lg border py-2 text-sm transition ${current === m ? "bg-primary text-primary-foreground border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              {m === 0 ? "Desligado" : `${m} min`}
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VpnDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [ip, setIp] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setIp(null); setErr(null);
+    fetch("https://api.ipify.org?format=json")
+      .then((r) => r.json())
+      .then((d: { ip: string }) => setIp(d.ip))
+      .catch(() => setErr("Sem conexão"));
+  }, [open]);
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>VPN / Conexão</DialogTitle>
+          <DialogDescription>Status atual da sua conexão.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Status</span>
+            <span className={online ? "text-emerald-400" : "text-red-400"}>{online ? "Online" : "Offline"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">IP público</span>
+            <span className="font-mono">{ip ?? (err ?? "...")}</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MsgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [items, setItems] = useState<HistItem[]>([]);
+  useEffect(() => { if (open) setItems(store.getHistory().slice(0, 8)); }, [open]);
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Mensagens</DialogTitle>
+          <DialogDescription>Atividade recente.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-72 overflow-auto">
+          <div className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+            <div className="font-medium">Bem-vindo ao SoaresTV</div>
+            <div className="text-xs text-muted-foreground">App pronto para uso. Versão 1.0.0</div>
+          </div>
+          {items.length === 0 && <p className="text-xs text-muted-foreground">Sem atividade ainda.</p>}
+          {items.map((it) => (
+            <div key={`${it.type}:${it.id}`} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+              <div className="font-medium truncate">{it.name}</div>
+              <div className="text-xs text-muted-foreground">
+                {it.type.toUpperCase()} • {new Date(it.at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
