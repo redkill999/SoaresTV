@@ -119,9 +119,11 @@ const TV_MODE_SCRIPT = `(function(){
       var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
       var ua = (navigator.userAgent || '').toLowerCase();
       var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
-      // TV mode: large landscape screen WITHOUT touch (smart TVs, set-top boxes).
-      // Phones/tablets (even big ones) get natural responsive layout.
-      var isTV = !isPhoneOrTablet && maxDim >= 1280 && minDim >= 720;
+      // Dentro do APK (Capacitor) sempre tratamos como TV pra replicar o layout do XCIPTV.
+      var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+      // TV mode: large landscape screen WITHOUT touch (smart TVs, set-top boxes) OU app nativo.
+      // Phones/tablets no navegador continuam com layout responsivo.
+      var isTV = isNative || (!isPhoneOrTablet && maxDim >= 1280 && minDim >= 720);
       var metas = document.querySelectorAll('meta[name="viewport"]');
       for (var i = 0; i < metas.length; i++) metas[i].parentNode.removeChild(metas[i]);
       var m = document.createElement('meta');
@@ -193,6 +195,13 @@ function RootComponent() {
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
+    // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
+    const w = window as any;
+    if (w?.Capacitor?.isNativePlatform?.()) {
+      void import("@capacitor/screen-orientation")
+        .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
+        .catch(() => {});
+    }
   }, []);
 
   return (
