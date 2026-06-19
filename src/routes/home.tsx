@@ -182,9 +182,11 @@ function HomePage() {
           </div>
         </div>
         <div className="flex w-40 items-start justify-end gap-2.5">
-          {STATUS.map((s) => (
-            <StatusIcon key={s.label} icon={s.icon} label={s.label} />
-          ))}
+          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
+          <StatusIcon icon={Video}      label="REC"    active={recOn}        activeColor="bg-red-500"     onClick={() => handleStatus("rec")} />
+          <StatusIcon icon={Lock}       label="VPN"                                                       onClick={() => handleStatus("vpn")} />
+          <StatusIcon icon={Mail}       label="MSG"                                                       onClick={() => handleStatus("msg")} />
+          <StatusIcon icon={RefreshCw}  label="UPDATE"                                                    onClick={() => handleStatus("update")} />
         </div>
       </header>
 
