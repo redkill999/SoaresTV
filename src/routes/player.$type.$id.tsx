@@ -274,6 +274,7 @@ function PlayerPage() {
           )}
         </div>
           <button
+            type="button"
             onClick={closePlayer}
             className="absolute left-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-player/55 text-player-foreground backdrop-blur hover:bg-player/75"
             aria-label="Voltar"
