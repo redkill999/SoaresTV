@@ -54,6 +54,22 @@ export function MediaCard({
         to="/player/$type/$id"
         params={{ type, id: idStr }}
         search={{ name }}
+        onClick={() => {
+          // Pede fullscreen no documento durante o gesto do clique — única
+          // forma confiável de já abrir o player em tela cheia (browsers exigem
+          // user gesture, e o `play()` automático no destino não conta).
+          try {
+            const el = document.documentElement as HTMLElement & {
+              webkitRequestFullscreen?: () => Promise<void> | void;
+            };
+            if (!document.fullscreenElement) {
+              if (el.requestFullscreen) void el.requestFullscreen().catch(() => undefined);
+              else if (el.webkitRequestFullscreen) void el.webkitRequestFullscreen();
+            }
+          } catch {
+            /* ignore */
+          }
+        }}
         className="block"
       >
         <div
