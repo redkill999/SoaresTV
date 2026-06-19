@@ -1,17 +1,22 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   Smartphone, User, SlidersHorizontal, PlayCircle, Network, RefreshCw,
   Lock, Gauge, CloudUpload, Tv2, Globe, LifeBuoy,
   Settings2, Eraser, LogOut, ArrowLeft, Plus, Trash2, ChevronRight,
+  Upload, Download, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { store, type M3UPlaylist, type ParentalConfig } from "@/lib/storage";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import {
+  store, type M3UPlaylist, type ParentalConfig, type AppSettings,
+  type AspectRatio, type StreamFormat, type PlayerChoice, type RemoteLayout,
+} from "@/lib/storage";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { useTranslation } from "react-i18next";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -32,7 +37,6 @@ type Tile = {
   key: TileKey;
   label: string;
   icon: ComponentType<{ className?: string; strokeWidth?: number | string }>;
-  sub?: string;
 };
 
 const TILES: Tile[] = [
@@ -53,13 +57,13 @@ const TILES: Tile[] = [
   { key: "sair",            label: "Sair",                 icon: LogOut },
 ];
 
+type OpenKey = Exclude<TileKey, "atualizar" | "clearCache" | "sair">;
+
 function SettingsPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const [focused, setFocused] = useState<TileKey>("language");
-  const [open, setOpen] = useState<null | "outras" | "language" | "conta" | "app" | "socorro" | "parental">(null);
+  const [open, setOpen] = useState<OpenKey | null>(null);
 
-  // Aplica o mesmo fundo da home no letterbox do TV-mode
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -81,14 +85,11 @@ function SettingsPage() {
         return;
       case "clearCache":
         try {
-          // limpa apenas caches de conteúdo, preserva credenciais/listas
           Object.keys(localStorage)
             .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
             .forEach((k) => localStorage.removeItem(k));
           toast.success("Cache limpo");
-        } catch {
-          toast.error("Falha ao limpar cache");
-        }
+        } catch { toast.error("Falha ao limpar cache"); }
         return;
       case "atualizar":
         try {
@@ -96,36 +97,10 @@ function SettingsPage() {
             .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:"))
             .forEach((k) => localStorage.removeItem(k));
           toast.success("Conteúdos atualizados");
-        } catch {
-          toast.error("Falha ao atualizar");
-        }
-        return;
-      case "backup": {
-        try {
-          const data: Record<string, unknown> = {};
-          Object.keys(localStorage).forEach((k) => (data[k] = localStorage.getItem(k)));
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `soarestv-backup-${Date.now()}.json`;
-          a.click();
-          URL.revokeObjectURL(a.href);
-          toast.success("Backup gerado");
-        } catch {
-          toast.error("Falha no backup");
-        }
-        return;
-      }
-      case "outras":
-      case "language":
-      case "conta":
-      case "app":
-      case "socorro":
-      case "parental":
-        setOpen(k);
+        } catch { toast.error("Falha ao atualizar"); }
         return;
       default:
-        toast("Em breve", { description: TILES.find((t) => t.key === k)?.label.replace("\n", " ") });
+        setOpen(k as OpenKey);
     }
   };
 
@@ -133,7 +108,6 @@ function SettingsPage() {
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
       <Toaster theme="dark" />
 
-      {/* Fundo */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -141,7 +115,6 @@ function SettingsPage() {
       />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
 
-      {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4">
         <button
           onClick={() => navigate({ to: "/home" })}
@@ -156,7 +129,6 @@ function SettingsPage() {
         <span className="size-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" aria-hidden />
       </header>
 
-      {/* Grade de tiles */}
       <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 items-center justify-center px-4 pb-6">
         <div className="grid w-full grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-6">
           {TILES.map((tile) => (
@@ -170,15 +142,18 @@ function SettingsPage() {
         </div>
       </main>
 
-      <OutrasDialog open={open === "outras"} onClose={() => setOpen(null)} />
-      <LanguageDialog open={open === "language"} onClose={() => setOpen(null)} />
-      <ContaDialog open={open === "conta"} onClose={() => setOpen(null)} />
-      <AboutDialog
-        open={open === "app" || open === "socorro"}
-        onClose={() => setOpen(null)}
-        kind={open === "socorro" ? "socorro" : "app"}
-      />
-      <ParentalDialog open={open === "parental"} onClose={() => setOpen(null)} />
+      <AppDialog          open={open === "app"}            onClose={() => setOpen(null)} />
+      <ContaDialog        open={open === "conta"}          onClose={() => setOpen(null)} />
+      <PlayerSettingsDialog open={open === "playerSettings"} onClose={() => setOpen(null)} />
+      <PlayerDialog       open={open === "player"}         onClose={() => setOpen(null)} />
+      <StreamTypeDialog   open={open === "tipoFluxo"}      onClose={() => setOpen(null)} />
+      <ParentalDialog     open={open === "parental"}       onClose={() => setOpen(null)} />
+      <SpeedTestDialog    open={open === "teste"}          onClose={() => setOpen(null)} />
+      <BackupDialog       open={open === "backup"}         onClose={() => setOpen(null)} />
+      <RemoteDialog       open={open === "remoto"}         onClose={() => setOpen(null)} />
+      <LanguageDialog     open={open === "language"}       onClose={() => setOpen(null)} />
+      <AboutDialog        open={open === "socorro"}        onClose={() => setOpen(null)} kind="socorro" />
+      <OutrasDialog       open={open === "outras"}         onClose={() => setOpen(null)} />
     </div>
   );
 }
@@ -206,6 +181,14 @@ function SettingsTile({
       </span>
     </button>
   );
+}
+
+/* --------------------------- Hooks --------------------------- */
+
+function useAppSettings(): [AppSettings, (p: Partial<AppSettings>) => void] {
+  const [s, setS] = useState<AppSettings>(() => store.getAppSettings());
+  useEffect(() => store.subscribeAppSettings(() => setS(store.getAppSettings())), []);
+  return [s, (p) => store.setAppSettings(p)];
 }
 
 /* --------------------------- Dialogs --------------------------- */
@@ -283,6 +266,7 @@ function LanguageDialog({ open, onClose }: { open: boolean; onClose: () => void 
             >
               <span className="text-xl leading-none">{l.flag}</span>
               <span className="flex-1 text-sm font-medium">{l.label}</span>
+              {current === l.code && <CheckCircle2 className="size-4 text-primary" />}
               <ChevronRight className="size-4 text-muted-foreground" />
             </button>
           ))}
@@ -303,13 +287,16 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
           <DialogDescription>Informações da sua conexão atual.</DialogDescription>
         </DialogHeader>
         {creds ? (
-          <div className="space-y-2 text-sm">
-            <div><Label className="text-muted-foreground">Servidor</Label><div className="font-mono text-xs break-all">{creds.server}</div></div>
-            <div><Label className="text-muted-foreground">Usuário</Label><div>{creds.username}</div></div>
+          <div className="space-y-3 text-sm">
+            <Row label="Servidor" value={creds.server} mono />
+            <Row label="Usuário" value={creds.username} />
+            <Row label="Senha" value={"•".repeat(Math.min(creds.password.length, 12))} />
           </div>
         ) : lists.length > 0 ? (
-          <div className="text-sm">
-            Você está usando lista M3U: <span className="font-medium">{lists[0].name}</span>
+          <div className="space-y-3 text-sm">
+            <Row label="Modo" value="Lista M3U" />
+            <Row label="Lista" value={lists[0].name} />
+            <Row label="URL" value={lists[0].url} mono />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Sem conta conectada.</p>
@@ -319,19 +306,50 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   );
 }
 
-function AboutDialog({ open, onClose, kind }: { open: boolean; onClose: () => void; kind: "app" | "socorro" }) {
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <Label className="text-muted-foreground text-xs">{label}</Label>
+      <div className={`break-all ${mono ? "font-mono text-xs" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const platform = typeof navigator !== "undefined" ? navigator.platform : "";
+  const lang = typeof navigator !== "undefined" ? navigator.language : "";
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{kind === "app" ? "Sobre o APP" : "Socorro"}</DialogTitle>
-          <DialogDescription>
-            {kind === "app"
-              ? "SoaresTV — IPTV web player. Dados armazenados localmente no seu navegador."
-              : "Precisa de ajuda? Entre em contato pelo site soarestv.app."}
-          </DialogDescription>
+          <DialogTitle>Sobre o APP</DialogTitle>
+          <DialogDescription>SoaresTV — IPTV Player</DialogDescription>
         </DialogHeader>
-        <div className="text-xs text-muted-foreground">Versão 1.0.0</div>
+        <div className="space-y-3 text-sm">
+          <Row label="Versão" value="1.0.0" />
+          <Row label="Plataforma" value={platform || "—"} />
+          <Row label="Idioma do sistema" value={lang || "—"} />
+          <Row label="User Agent" value={ua || "—"} mono />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AboutDialog({ open, onClose, kind }: { open: boolean; onClose: () => void; kind: "socorro" }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Socorro</DialogTitle>
+          <DialogDescription>Precisa de ajuda?</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 text-sm">
+          <p>Suporte: <a className="text-primary underline" href="mailto:suporte@soarestv.app">suporte@soarestv.app</a></p>
+          <p>Site: <a className="text-primary underline" href="https://soarestv.app" target="_blank" rel="noreferrer">soarestv.app</a></p>
+          <p className="text-muted-foreground text-xs">{kind}</p>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -367,5 +385,252 @@ function ParentalDialog({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PlayerSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [s, set] = useAppSettings();
+  const ratios: AspectRatio[] = ["default", "16:9", "4:3", "fill", "stretch"];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Player Settings</DialogTitle>
+          <DialogDescription>Ajustes do reprodutor de vídeo.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div>
+            <Label className="text-xs text-muted-foreground">Proporção</Label>
+            <div className="mt-2 grid grid-cols-5 gap-2">
+              {ratios.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => set({ aspectRatio: r })}
+                  className={`rounded-md py-2 text-xs border transition ${s.aspectRatio === r ? "bg-primary text-primary-foreground border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                >{r}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Tamanho da legenda ({s.subtitleScale.toFixed(2)}x)</Label>
+            <Slider value={[s.subtitleScale]} min={0.75} max={2} step={0.05} onValueChange={([v]) => set({ subtitleScale: v })} className="mt-2" />
+          </div>
+          <Toggle label="Aceleração por hardware" value={s.hwAccel} onChange={(v) => set({ hwAccel: v })} />
+          <Toggle label="Auto-play próximo episódio" value={s.autoplayNext} onChange={(v) => set({ autoplayNext: v })} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PlayerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [s, set] = useAppSettings();
+  const options: { v: PlayerChoice; t: string; d: string }[] = [
+    { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
+    { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
+  ];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Player</DialogTitle>
+          <DialogDescription>Escolha o reprodutor padrão.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {options.map((o) => (
+            <button
+              key={o.v}
+              onClick={() => { set({ defaultPlayer: o.v }); toast.success(`Player: ${o.t}`); onClose(); }}
+              className={`w-full text-left rounded-lg p-3 border transition ${s.defaultPlayer === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{o.t}</span>
+                {s.defaultPlayer === o.v && <CheckCircle2 className="size-4 text-primary" />}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StreamTypeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [s, set] = useAppSettings();
+  const opts: { v: StreamFormat; t: string; d: string }[] = [
+    { v: "auto", t: "Automático", d: "Detecta HLS/TS automaticamente." },
+    { v: "hls",  t: "HLS (.m3u8)", d: "Prefere variante HLS quando disponível." },
+    { v: "ts",   t: "MPEG-TS (.ts)", d: "Força fluxo TS bruto." },
+    { v: "mp4",  t: "MP4 progressivo", d: "Força MP4 direto." },
+  ];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Tipo de fluxo</DialogTitle>
+          <DialogDescription>Formato preferido para streams ao vivo.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {opts.map((o) => (
+            <button
+              key={o.v}
+              onClick={() => { set({ streamFormat: o.v }); toast.success(`Fluxo: ${o.t}`); onClose(); }}
+              className={`w-full text-left rounded-lg p-3 border transition ${s.streamFormat === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{o.t}</span>
+                {s.streamFormat === o.v && <CheckCircle2 className="size-4 text-primary" />}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ mbps: number; ms: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setRunning(true); setError(null); setResult(null);
+    try {
+      // Baixa ~2MB de um endpoint de teste pra medir vazão real.
+      const url = "https://speed.cloudflare.com/__down?bytes=2000000&t=" + Date.now();
+      const t0 = performance.now();
+      const res = await fetch(url, { cache: "no-store" });
+      const buf = await res.arrayBuffer();
+      const t1 = performance.now();
+      const ms = t1 - t0;
+      const bits = buf.byteLength * 8;
+      const mbps = bits / (ms / 1000) / 1_000_000;
+      setResult({ mbps, ms });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha no teste");
+    } finally { setRunning(false); }
+  };
+
+  useEffect(() => { if (open) { setResult(null); setError(null); void run(); } }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Teste rápido</DialogTitle>
+          <DialogDescription>Medida da velocidade de download.</DialogDescription>
+        </DialogHeader>
+        <div className="py-4 text-center">
+          {running && <div className="text-sm text-muted-foreground animate-pulse">Medindo…</div>}
+          {error && <div className="text-sm text-destructive">{error}</div>}
+          {result && (
+            <div>
+              <div className="text-4xl font-bold tabular-nums">{result.mbps.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">Mbps</span></div>
+              <div className="text-xs text-muted-foreground mt-1">latência ~{result.ms.toFixed(0)} ms</div>
+            </div>
+          )}
+        </div>
+        <Button onClick={run} disabled={running} className="bg-brand-gradient w-full">
+          {running ? "Testando…" : "Refazer teste"}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const exportAll = () => {
+    try {
+      const data: Record<string, string | null> = {};
+      Object.keys(localStorage).forEach((k) => (data[k] = localStorage.getItem(k)));
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `soarestv-backup-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success("Backup gerado");
+    } catch { toast.error("Falha no backup"); }
+  };
+
+  const importFile = async (f: File) => {
+    try {
+      const txt = await f.text();
+      const data = JSON.parse(txt) as Record<string, string>;
+      Object.entries(data).forEach(([k, v]) => { if (typeof v === "string") localStorage.setItem(k, v); });
+      toast.success("Restauração concluída — recarregue o app");
+      setTimeout(() => location.reload(), 800);
+    } catch { toast.error("Arquivo inválido"); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Backup e restauração</DialogTitle>
+          <DialogDescription>Exporte ou restaure suas listas, favoritos e ajustes.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <Button onClick={exportAll} className="bg-brand-gradient">
+            <Download className="size-4" /> Exportar
+          </Button>
+          <Button variant="outline" onClick={() => inputRef.current?.click()}>
+            <Upload className="size-4" /> Restaurar
+          </Button>
+        </div>
+        <input
+          ref={inputRef} type="file" accept="application/json" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [s, set] = useAppSettings();
+  const opts: { v: RemoteLayout; t: string; d: string }[] = [
+    { v: "default", t: "Padrão",  d: "Otimizado para toque." },
+    { v: "compact", t: "Compacto", d: "Botões menores para tablets." },
+    { v: "tv",      t: "TV",       d: "Foco navegável via setas do controle remoto." },
+  ];
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Controle remoto</DialogTitle>
+          <DialogDescription>Layout de navegação por controle.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {opts.map((o) => (
+            <button
+              key={o.v}
+              onClick={() => { set({ remoteLayout: o.v }); toast.success(`Layout: ${o.t}`); onClose(); }}
+              className={`w-full text-left rounded-lg p-3 border transition ${s.remoteLayout === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{o.t}</span>
+                {s.remoteLayout === o.v && <CheckCircle2 className="size-4 text-primary" />}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm">{label}</span>
+      <Switch checked={value} onCheckedChange={onChange} />
+    </div>
   );
 }
