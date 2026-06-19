@@ -195,6 +195,13 @@ function RootComponent() {
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
+    // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
+    const w = window as any;
+    if (w?.Capacitor?.isNativePlatform?.()) {
+      void import("@capacitor/screen-orientation")
+        .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
+        .catch(() => {});
+    }
   }, []);
 
   return (
