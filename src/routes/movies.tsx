@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
@@ -35,6 +35,7 @@ export const Route = createFileRoute("/movies")({
 function MoviesPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState("all");
   const [sort, setSort] = useState<SortKey>("default");
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
@@ -109,14 +110,14 @@ function MoviesPage() {
     } else if (cat !== "all") {
       list = list.filter((m) => String(m.category_id) === cat);
     }
-    if (search) {
-      const s = search.toLowerCase();
+    if (deferredSearch) {
+      const s = deferredSearch.toLowerCase();
       list = list.filter((x) => x.name.toLowerCase().includes(s));
     }
     if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
     if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
     return list;
-  }, [listQ.data, search, sort, cat, favIds, recentIds]);
+  }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
     <AppShell search={search} onSearch={setSearch}>
