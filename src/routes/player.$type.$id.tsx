@@ -272,15 +272,8 @@ function PlayerPage() {
             </div>
           )}
         </div>
-          <button
-            type="button"
-            data-player-back="true"
-            onClick={closePlayer}
-            className="absolute left-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-player/55 text-player-foreground backdrop-blur hover:bg-player/75"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
+          {/* Botão de voltar e botão de favorito ficam ocultos durante a reprodução.
+              Use a tecla Voltar do controle remoto / ESC para sair do player. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-player/80 via-player/30 to-transparent px-4 pb-4 pt-16">
             <div className="flex min-w-0 items-end justify-between gap-4">
               <div className="min-w-0">
@@ -299,17 +292,6 @@ function PlayerPage() {
                     Player externo
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!type) return;
-                    store.toggleFav({ type, id, name: activeTitle || name });
-                  }}
-                  className="bg-player/45 backdrop-blur"
-                >
-                  <Heart className={`size-4 ${fav ? "fill-primary text-primary" : ""}`} />
-                  Favorito
-                </Button>
               </div>
             </div>
           </div>
