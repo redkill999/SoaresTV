@@ -137,6 +137,6 @@ function MoviesPage() {
           )}
         </div>
       </div>
-    </div>
+    </div></AppShell>
   );
 }
