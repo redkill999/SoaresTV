@@ -79,9 +79,10 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:launchMode="singleTask"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode|navigation"
+            android:launchMode="singleTop"
             android:screenOrientation="landscape"
+            android:resizeableActivity="false"
             android:exported="true"
             android:theme="@style/AppTheme.NoActionBarLaunch">
 
