@@ -156,44 +156,6 @@ export function AppShell({
         <div className="p-4 sm:p-6 flex-1 min-w-0">{children}</div>
       </main>
 
-      {/* Bottom nav — mobile/tablet */}
-      <nav
-        aria-label={t("nav.library")}
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-border/60"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <ul className="grid grid-cols-6">
-          {ALL_NAV.map((n) => {
-            const active = isActive(n.to);
-            const Icon = n.icon;
-            return (
-              <li key={n.to}>
-                <Link
-                  to={n.to}
-                  data-nav-item="true"
-                  data-active={active ? "true" : "false"}
-                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 min-h-[56px] text-[10px] font-medium transition-colors outline-none ${
-                    active
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span
-                    className={`grid place-items-center size-10 rounded-xl transition-all ${
-                      active
-                        ? "bg-brand-gradient shadow-glow text-primary-foreground"
-                        : ""
-                    }`}
-                  >
-                    <Icon className="size-5" />
-                  </span>
-                  <span className="tracking-wide">{t(n.labelKey)}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </div>
   );
 }
