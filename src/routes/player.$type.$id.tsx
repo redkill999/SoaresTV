@@ -272,29 +272,22 @@ function PlayerPage() {
             </div>
           )}
         </div>
-          {/* Botão de voltar e botão de favorito ficam ocultos durante a reprodução.
-              Use a tecla Voltar do controle remoto / ESC para sair do player. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-player/80 via-player/30 to-transparent px-4 pb-4 pt-16">
-            <div className="flex min-w-0 items-end justify-between gap-4">
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold text-player-foreground sm:text-xl">{activeTitle || name || "Reproduzindo"}</h1>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">{type}</p>
-              </div>
-              <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-                {isNative && url && (
-                  <Button
-                    variant="outline"
-                    onClick={openInExternalPlayer}
-                    title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
-                    className="bg-player/45 backdrop-blur"
-                  >
-                    <ExternalLink className="size-4" />
-                    Player externo
-                  </Button>
-                )}
-              </div>
+          {/* Título/tipo e botão de voltar/favorito ficam ocultos durante a reprodução.
+              Use a tecla Voltar do controle remoto / ESC para sair do player.
+              Mantemos apenas o botão "Player externo" no app nativo, no canto. */}
+          {isNative && url && (
+            <div className="pointer-events-auto absolute right-3 top-3 z-20">
+              <Button
+                variant="outline"
+                onClick={openInExternalPlayer}
+                title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
+                className="bg-player/45 backdrop-blur"
+              >
+                <ExternalLink className="size-4" />
+                Player externo
+              </Button>
             </div>
-          </div>
+          )}
         {type === "series" && (
           <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
