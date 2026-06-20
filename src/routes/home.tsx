@@ -190,8 +190,8 @@ function HomePage() {
       </header>
 
       {/* Main 4 tiles */}
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-4">
-        <div className="grid w-full grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
+        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4">
           {MAIN.map((t) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
@@ -199,7 +199,7 @@ function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-5 pt-2 sm:px-6">
+      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-3 pt-1 sm:px-6 sm:pb-5">
         <div className="flex items-end gap-2 sm:gap-3">
           {BOTTOM_LEFT.map((t) => (
             <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
