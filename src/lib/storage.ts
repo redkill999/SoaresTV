@@ -7,6 +7,14 @@ export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
 export type AspectRatio = "default" | "16:9" | "4:3" | "fill" | "stretch";
 export type StreamFormat = "auto" | "hls" | "ts" | "mp4";
 export type PlayerChoice = "internal" | "external" | "vlc" | "exo";
+export type PlayerEngine = "exo" | "vlc";
+export type CategoryPlayers = {
+  live: PlayerEngine;
+  vod: PlayerEngine;
+  series: PlayerEngine;
+  catchup: PlayerEngine;
+  multiscreen: PlayerEngine;
+};
 export type RemoteLayout = "default" | "compact" | "tv";
 export type AppSettings = {
   defaultPlayer: PlayerChoice;
@@ -18,6 +26,7 @@ export type AppSettings = {
   epgOffsetMin: number; // -720..720
   remoteLayout: RemoteLayout;
   showHidden: boolean;
+  categoryPlayers: CategoryPlayers;
 };
 const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultPlayer: "internal",
@@ -29,6 +38,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   epgOffsetMin: 0,
   remoteLayout: "default",
   showHidden: false,
+  categoryPlayers: { live: "exo", vod: "exo", series: "exo", catchup: "exo", multiscreen: "exo" },
 };
 
 const K = {
