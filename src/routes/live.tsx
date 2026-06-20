@@ -134,6 +134,6 @@ function LivePage() {
           </div>
         </div>
       )}
-    </div>
+    </div></AppShell>
   );
 }
