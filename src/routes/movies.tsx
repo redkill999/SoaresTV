@@ -98,9 +98,9 @@ function MoviesPage() {
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
-    <AppShell><div className="-m-4 sm:-m-6 min-h-[calc(100dvh-3rem)] xciptv-bg text-white">
+    <AppShell><div className="-m-4 sm:-m-6 h-[calc(100dvh-3rem)] flex flex-col overflow-hidden xciptv-bg text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
-      <div className="flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-6">
+      <div className="flex-1 min-h-0 flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
         <XciptvCategoryList
           categories={sidebarCats}
           value={cat}
@@ -110,7 +110,7 @@ function MoviesPage() {
           recentCount={recentIds.length}
           totalCount={listQ.data?.length ?? 0}
         />
-        <div className="flex-1 min-w-0 sm:max-h-[calc(100dvh-10rem)] sm:overflow-y-auto sm:overscroll-contain sm:pr-1 sm:[-webkit-overflow-scrolling:touch]">
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
           {!creds || (listQ.isLoading && filtered.length === 0) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (

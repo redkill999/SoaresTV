@@ -34,7 +34,7 @@ export function XciptvCategoryList({
   ];
 
   return (
-    <aside className="w-full sm:w-56 lg:w-64 shrink-0 flex flex-col">
+    <aside className="w-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
       <div className="px-2 pb-2">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-white/40" />
@@ -47,7 +47,7 @@ export function XciptvCategoryList({
         </label>
       </div>
 
-      <ul className="flex-1 overflow-y-auto pr-1 max-h-[60dvh] sm:max-h-[calc(100dvh-10rem)]">
+      <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
         {specials.map((s) => (
           <Row key={s.id} active={value === s.id} onClick={() => onChange(s.id)} label={s.label} count={s.count} icon={s.icon} />
         ))}
