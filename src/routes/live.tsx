@@ -1,17 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { MediaCard } from "@/components/MediaCard";
-import { MediaGrid } from "@/components/MediaGrid";
 import { CategorySidebar } from "@/components/CategorySidebar";
-import { SortMenu, type SortKey } from "@/components/SectionTabs";
 import { ParentalGate } from "@/components/ParentalGate";
+import { MiniLivePlayer } from "@/components/MiniLivePlayer";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
-import i18n from "@/lib/i18n";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Tv } from "lucide-react";
+import { ArrowLeft, Heart, Search, Tv, CalendarDays } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 
 export const Route = createFileRoute("/live")({
@@ -34,12 +31,13 @@ export const Route = createFileRoute("/live")({
 
 function LivePage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [cat, setCat] = useState<string>("all"); // "all" | "favorites" | "recent" | category_id
-  const [sort, setSort] = useState<SortKey>("default");
+  const [cat, setCat] = useState<string>("all");
   const [unlocked, setUnlocked] = useState(false);
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  const [selected, setSelected] = useState<LiveStream | null>(null);
   useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
@@ -65,7 +63,6 @@ function LivePage() {
     [history],
   );
 
-  // counts per category
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of streamsQ.data ?? []) {
@@ -100,10 +97,16 @@ function LivePage() {
       const s = deferredSearch.toLowerCase();
       list = list.filter((x) => x.name.toLowerCase().includes(s));
     }
-    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
     return list;
-  }, [streamsQ.data, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [streamsQ.data, deferredSearch, cat, favIds, recentIds]);
+
+  // Auto-select first visible channel when the list changes
+  useEffect(() => {
+    if (!selected && filtered.length) setSelected(filtered[0]);
+    if (selected && !filtered.find((s) => s.stream_id === selected.stream_id) && filtered.length) {
+      setSelected(filtered[0]);
+    }
+  }, [filtered, selected]);
 
   const parental = store.getParental();
   const needGate =
@@ -120,11 +123,29 @@ function LivePage() {
     );
   }
 
+  const openFull = (s: LiveStream) => {
+    navigate({
+      to: "/player/$type/$id",
+      params: { type: "live", id: String(s.stream_id) },
+      search: { name: s.name },
+    });
+  };
+
   return (
     <AppShell search={search} onSearch={setSearch}>
-      <Header title={t("pages.live.title")} subtitle={t("pages.live.subtitle")} sort={sort} setSort={setSort} />
+      <Header title={t("pages.live.title")} subtitle={t("pages.live.subtitle")} />
 
-      <div className="flex flex-col gap-4 sm:flex-row">
+      {/* Mini-player on top */}
+      <div className="mb-4">
+        <MiniLivePlayer
+          creds={creds}
+          streamId={selected?.stream_id ?? null}
+          name={selected?.name}
+          logo={selected?.stream_icon}
+        />
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row">
         <CategorySidebar
           categories={sidebarCats}
           value={cat}
@@ -138,44 +159,83 @@ function LivePage() {
           totalCount={streamsQ.data?.length ?? 0}
         />
 
-        <div className="min-w-0 flex-1">
-          <MediaGrid
-            loading={!creds || streamsQ.isLoading}
-            empty={!!creds && !streamsQ.isLoading && filtered.length === 0}
-            aspect="square"
-            emptyIcon={<Tv className="size-7" />}
-            emptyTitle={emptyTitle(cat, "channel")}
-            emptyHint={emptyHint(cat, search)}
-          >
-            {filtered.map((s) => (
-              <MediaCard
-                key={s.stream_id}
-                type="live"
-                id={s.stream_id}
-                name={s.name}
-                image={s.stream_icon}
-                badge="LIVE"
-                aspect="square"
-              />
-            ))}
-          </MediaGrid>
+        {/* Channel list */}
+        <div className="flex-1 min-w-0">
+          <div className="rounded-2xl border border-white/10 bg-card/40 backdrop-blur overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <Search className="size-3.5" />
+              <span>{filtered.length} canais</span>
+            </div>
+            {!creds || streamsQ.isLoading ? (
+              <ul className="divide-y divide-white/5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <li key={i} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="size-10 rounded-md bg-white/[0.05] animate-pulse shrink-0" />
+                    <div className="flex-1 h-3 rounded bg-white/[0.05] animate-pulse" />
+                  </li>
+                ))}
+              </ul>
+            ) : filtered.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                <Tv className="size-7 mx-auto mb-2 opacity-50" />
+                Nenhum canal encontrado.
+              </div>
+            ) : (
+              <ul className="divide-y divide-white/5 max-h-[60dvh] lg:max-h-[calc(100dvh-26rem)] overflow-y-auto">
+                {filtered.map((s) => {
+                  const isSel = selected?.stream_id === s.stream_id;
+                  const isFav = favIds.has(String(s.stream_id));
+                  return (
+                    <li key={s.stream_id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isSel) openFull(s);
+                          else setSelected(s);
+                        }}
+                        onDoubleClick={() => openFull(s)}
+                        className={`group w-full text-left flex items-center gap-3 px-3 py-2.5 transition-colors outline-none ${
+                          isSel
+                            ? "bg-primary/15 border-l-2 border-primary"
+                            : "border-l-2 border-transparent hover:bg-white/5 focus-visible:bg-white/5"
+                        }`}
+                      >
+                        {s.stream_icon ? (
+                          <img
+                            src={s.stream_icon}
+                            alt=""
+                            loading="lazy"
+                            className="size-10 rounded-md object-contain bg-white/5 shrink-0"
+                            onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+                          />
+                        ) : (
+                          <div className="size-10 rounded-md bg-white/5 grid place-items-center shrink-0">
+                            <Tv className="size-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm font-medium truncate ${isSel ? "text-primary" : ""}`}>
+                            {s.name}
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            #{s.num}
+                          </div>
+                        </div>
+                        {isFav && <Heart className="size-3.5 fill-primary text-primary shrink-0" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </AppShell>
   );
 }
 
-function Header({
-  title,
-  subtitle,
-  sort,
-  setSort,
-}: {
-  title: string;
-  subtitle: string;
-  sort: SortKey;
-  setSort: (v: SortKey) => void;
-}) {
+function Header({ title, subtitle }: { title: string; subtitle: string }) {
   const { t } = useTranslation();
   return (
     <div className="mb-4">
@@ -191,23 +251,14 @@ function Header({
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">{title}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
         </div>
-        <div className="shrink-0">
-          <SortMenu value={sort} onChange={setSort} />
-        </div>
+        <Link
+          to="/guide"
+          className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3 rounded-full text-sm font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors border border-primary/30"
+        >
+          <CalendarDays className="size-4" />
+          <span className="hidden sm:inline">Guia EPG</span>
+        </Link>
       </div>
     </div>
   );
-}
-
-export function emptyTitle(tab: string, itemKey: "channel" | "movie" | "series") {
-  const item = i18n.t(`empty.${itemKey}`);
-  if (tab === "favorites") return i18n.t("empty.noFav", { item });
-  if (tab === "recent") return i18n.t("empty.noRecent", { item });
-  return i18n.t("empty.noResults");
-}
-export function emptyHint(tab: string, search: string) {
-  if (search) return i18n.t("empty.searchHint", { q: search });
-  if (tab === "favorites") return i18n.t("empty.favHint");
-  if (tab === "recent") return i18n.t("empty.recentHint");
-  return i18n.t("empty.defaultHint");
 }
