@@ -147,6 +147,6 @@ function SeriesPage() {
           )}
         </div>
       </div>
-    </div>
+    </div></AppShell>
   );
 }
