@@ -110,7 +110,7 @@ function MoviesPage() {
           recentCount={recentIds.length}
           totalCount={listQ.data?.length ?? 0}
         />
-        <div className="flex-1 min-w-0 max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1">
+        <div className="flex-1 min-w-0 max-h-[calc(100dvh-10rem)] overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
           {!creds || (listQ.isLoading && filtered.length === 0) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (
