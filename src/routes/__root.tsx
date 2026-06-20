@@ -133,7 +133,7 @@ const TV_MODE_SCRIPT = `(function(){
       var ua = (navigator.userAgent || '').toLowerCase();
       var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
       // Smart TVs: Tizen (Samsung), WebOS (LG), AndroidTV, GoogleTV, FireTV (AFT*), Hisense/VIDAA, NetCast, Roku, BRAVIA
-      var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox/.test(ua);
+      var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|androidtv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox|tcl|mibox|mitv|chromecast|aosp on iat|linux; ?android[^)]*; ?(?:tv|atv|mibox|tcl)/.test(ua);
       // Dentro do APK (Capacitor) sempre tratamos como TV pra replicar o layout do XCIPTV.
       var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
       // TV mode: somente app nativo (APK) ou Smart TV real via UA.
