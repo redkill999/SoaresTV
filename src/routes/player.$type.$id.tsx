@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, isNativeApp, type EpgListing } from "@/lib/xtream";
 import { useIsFavorite } from "@/hooks/use-favorites";
-import { Clock, ExternalLink } from "lucide-react";
+import { Clock, ExternalLink, ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
