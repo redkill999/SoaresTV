@@ -65,10 +65,11 @@ function LoginPage() {
       if (cancelled) return;
       if (native) {
         setNativeSplash(true);
-        setSplash(false);
       } else {
+        setSplash(true);
         timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
       }
+      setSplashReady(true);
     });
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [navigate]);
