@@ -197,6 +197,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
 
 
 
@@ -217,12 +218,24 @@ function RootComponent() {
       void import("@capacitor/screen-orientation")
         .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
         .catch(() => {});
+      // Hardware back button (Android/AndroidTV): volta na história ou sai do app.
+      void import("@capacitor/app")
+        .then(({ App }) => {
+          App.addListener("backButton", () => {
+            if (window.history.length > 1) {
+              router.history.back();
+            } else {
+              App.exitApp();
+            }
+          });
+        })
+        .catch(() => {});
     }
     // Controle remoto / teclado (D-pad). Funciona em Smart TV (Tizen,
     // WebOS, AndroidTV, FireTV), Capacitor (Android) e também desktop —
     // o handler ignora inputs e só intercepta setas quando há foco.
     void import("@/lib/tv-dpad").then((m) => m.initTvDpad());
-  }, []);
+  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>
