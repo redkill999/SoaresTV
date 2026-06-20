@@ -106,7 +106,7 @@ function LivePage() {
             recentCount={recentIds.length}
             totalCount={streamsQ.data?.length ?? 0}
           />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1">
             {!creds || streamsQ.isLoading ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                 {Array.from({ length: 18 }).map((_, i) => (
