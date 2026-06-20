@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { ArrowDownAZ, ArrowUpZA, Search, Tv, X } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { ArrowDownAZ, ArrowUpZA, ArrowLeft, Search, Tv, X } from "lucide-react";
 import type { SortKey } from "@/components/SectionTabs";
 
 export function XciptvHeader({
@@ -18,8 +18,16 @@ export function XciptvHeader({
   categoryLabel?: string;
   title?: string;
 }) {
+  const router = useRouter();
   const [now, setNow] = useState(() => new Date());
   const [searchOpen, setSearchOpen] = useState(false);
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.history.back();
+    } else {
+      router.navigate({ to: "/home" });
+    }
+  };
   useEffect(() => {
     const i = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(i);
@@ -34,13 +42,23 @@ export function XciptvHeader({
 
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6 py-3">
-      {/* Left: time + date */}
-      <div className="min-w-0 flex flex-col">
-        <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
-          {time}
-        </div>
-        <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
-          {date}
+      {/* Left: back + time + date */}
+      <div className="min-w-0 flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={handleBack}
+          aria-label="Voltar"
+          className="shrink-0 grid place-items-center size-8 sm:size-9 rounded-md bg-black/40 border border-white/15 text-white/90 hover:text-[#1FB6FF] hover:border-[#1FB6FF]/60 transition-colors"
+        >
+          <ArrowLeft className="size-4 sm:size-5" />
+        </button>
+        <div className="min-w-0 flex flex-col">
+          <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
+            {time}
+          </div>
+          <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
+            {date}
+          </div>
         </div>
       </div>
 
