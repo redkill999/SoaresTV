@@ -299,7 +299,7 @@ function PlayerPage() {
         >
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/home" })}
+            onClick={() => router.history.back()}
             aria-label="Voltar"
             title="Voltar"
             className="pointer-events-auto bg-player/45 backdrop-blur"
