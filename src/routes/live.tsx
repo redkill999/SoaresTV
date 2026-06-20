@@ -91,7 +91,7 @@ function LivePage() {
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
 
   return (
-    <AppShell fixedViewport><div className="-m-4 sm:-m-6 flex-1 min-h-0 flex flex-col overflow-hidden xciptv-bg text-white">
+    <AppShell fixedViewport><div className="flex-1 min-h-0 flex flex-col overflow-hidden xciptv-bg text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
@@ -106,7 +106,7 @@ function LivePage() {
             recentCount={recentIds.length}
             totalCount={streamsQ.data?.length ?? 0}
           />
-          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
+          <div className="h-full flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
             {!creds || streamsQ.isLoading ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                 {Array.from({ length: 18 }).map((_, i) => (

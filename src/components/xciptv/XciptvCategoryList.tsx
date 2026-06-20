@@ -34,7 +34,7 @@ export function XciptvCategoryList({
   ];
 
   return (
-    <aside className="w-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
+    <aside className="w-full sm:h-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
       <div className="px-2 pb-2">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-white/40" />
