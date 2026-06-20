@@ -555,16 +555,37 @@ function PlayerSettingsDialog({ open, onClose }: { open: boolean; onClose: () =>
 
 function PlayerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [s, set] = useAppSettings();
-  const options: { v: PlayerChoice; t: string; d: string }[] = [
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void import("@/lib/xtream").then(({ isNativeApp }) =>
+      isNativeApp().then((n) => { if (alive) setIsNative(n); }),
+    );
+    return () => { alive = false; };
+  }, []);
+
+  const webOptions: { v: PlayerChoice; t: string; d: string }[] = [
     { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
     { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
   ];
+  // Em Android (celular/TV) mostra opções nativas: ExoPlayer (interno do Android,
+  // ótimo para HLS) e VLC Player (suporta praticamente qualquer codec/container).
+  const nativeOptions: { v: PlayerChoice; t: string; d: string }[] = [
+    { v: "exo", t: "ExoPlayer", d: "Player nativo do Android — melhor para HLS/DASH ao vivo." },
+    { v: "vlc", t: "VLC Player", d: "Abre o stream no app VLC (instale na Play Store)." },
+    { v: "internal", t: "Player interno", d: "Reprodutor embutido do app." },
+    { v: "external", t: "Outro player externo", d: "Deixa o Android escolher (MX Player, etc)." },
+  ];
+  const options = isNative ? nativeOptions : webOptions;
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Player</DialogTitle>
-          <DialogDescription>Escolha o reprodutor padrão.</DialogDescription>
+          <DialogDescription>
+            {isNative ? "Escolha o reprodutor padrão do Android." : "Escolha o reprodutor padrão."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           {options.map((o) => (

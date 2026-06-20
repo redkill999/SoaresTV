@@ -6,7 +6,7 @@ export type HistItem = FavItem & { at: number; position?: number; duration?: num
 export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
 export type AspectRatio = "default" | "16:9" | "4:3" | "fill" | "stretch";
 export type StreamFormat = "auto" | "hls" | "ts" | "mp4";
-export type PlayerChoice = "internal" | "external";
+export type PlayerChoice = "internal" | "external" | "vlc" | "exo";
 export type RemoteLayout = "default" | "compact" | "tv";
 export type AppSettings = {
   defaultPlayer: PlayerChoice;
