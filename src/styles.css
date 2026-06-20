@@ -266,29 +266,55 @@ div[style*="Edit with Lovable"],
   z-index: -9999 !important;
 }
 
-/* ===== Controle remoto / D-pad: foco visível para Smart TV ===== */
-/* Anel de foco bem visível quando navegando por teclado/remoto */
-.tv-focus :focus,
-.tv-focus :focus-visible,
+/* ===== Controle remoto / D-pad: foco visível APENAS para Smart TV / TV mode ===== */
+/* Cor de foco TV: amarelo cítrico bem contrastado contra o fundo azul XCIPTV.
+   Aplicado só quando o app está rodando em TV (data-tv-mode ou data-smart-tv),
+   nunca em navegador desktop nem em celular.                                  */
+:where([data-tv-mode], [data-smart-tv]) {
+  --tv-focus: #FFD60A;
+  --tv-focus-glow: rgba(255, 214, 10, 0.55);
+}
+
 [data-tv-mode] :focus,
 [data-tv-mode] :focus-visible,
 [data-smart-tv] :focus,
-[data-smart-tv] :focus-visible {
-  outline: 3px solid hsl(var(--primary)) !important;
+[data-smart-tv] :focus-visible,
+.tv-focus :focus,
+.tv-focus :focus-visible {
+  outline: 4px solid var(--tv-focus) !important;
   outline-offset: 3px !important;
-  border-radius: 8px;
-  box-shadow: 0 0 0 6px hsl(var(--primary) / 0.25) !important;
-  transition: outline-offset 80ms ease, box-shadow 80ms ease;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 8px var(--tv-focus-glow),
+    0 0 24px var(--tv-focus-glow) !important;
+  transition: outline-offset 80ms ease, box-shadow 80ms ease, transform 120ms ease;
   z-index: 5;
   position: relative;
 }
+
+/* Tiles principais e cards crescem um pouquinho quando focados na TV */
+[data-tv-mode] button:focus,
+[data-tv-mode] button:focus-visible,
+[data-tv-mode] a:focus,
+[data-tv-mode] a:focus-visible,
+[data-smart-tv] button:focus,
+[data-smart-tv] button:focus-visible,
+[data-smart-tv] a:focus,
+[data-smart-tv] a:focus-visible {
+  transform: scale(1.04);
+}
+
 /* Body/html/main não devem mostrar o anel */
+[data-tv-mode] :is(html, body, main, section, article):focus,
+[data-smart-tv] :is(html, body, main, section, article):focus,
 .tv-focus :is(html, body, main, section, article, div):focus:not([tabindex]) {
   outline: none !important;
   box-shadow: none !important;
+  transform: none !important;
 }
 
-/* ===== Menu: destaque azul para item selecionado/focado ===== */
+/* Menu lateral / nav: destaque azul (mantém comportamento já validado para hover desktop) */
 [data-nav-item]:focus,
 [data-nav-item]:focus-visible,
 [data-nav-item]:hover {
@@ -305,3 +331,17 @@ div[style*="Edit with Lovable"],
   color: #ffffff !important;
   box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 18px rgba(59, 130, 246, 0.35) !important;
 }
+
+/* Em TV mode o nav-item focado usa o amarelo, igual ao resto da TV */
+[data-tv-mode] [data-nav-item]:focus,
+[data-tv-mode] [data-nav-item]:focus-visible,
+[data-smart-tv] [data-nav-item]:focus,
+[data-smart-tv] [data-nav-item]:focus-visible {
+  outline: 4px solid var(--tv-focus) !important;
+  background-color: rgba(255, 214, 10, 0.18) !important;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 8px var(--tv-focus-glow),
+    0 0 28px var(--tv-focus-glow) !important;
+}
+
