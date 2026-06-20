@@ -8,6 +8,7 @@ import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
+import { useProgressive } from "@/hooks/use-progressive";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Clapperboard } from "lucide-react";
 
@@ -133,20 +134,30 @@ function SeriesPage() {
               Nenhuma série encontrada.
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-              {filtered.map((s) => (
-                <XciptvTile
-                  key={s.series_id}
-                  type="series"
-                  id={String(s.series_id)}
-                  name={s.name}
-                  image={s.cover}
-                />
-              ))}
-            </div>
+            <SeriesGrid filtered={filtered} />
           )}
         </div>
       </div>
     </div></AppShell>
+  );
+}
+
+function SeriesGrid({ filtered }: { filtered: Series[] }) {
+  const { visible, sentinelRef, hasMore } = useProgressive(filtered);
+  return (
+    <>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+        {visible.map((s) => (
+          <XciptvTile
+            key={s.series_id}
+            type="series"
+            id={String(s.series_id)}
+            name={s.name}
+            image={s.cover}
+          />
+        ))}
+      </div>
+      {hasMore && <div ref={sentinelRef} className="h-8" />}
+    </>
   );
 }
