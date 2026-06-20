@@ -10,7 +10,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
-import { emptyHint, emptyTitle } from "./live";
+import { emptyHint, emptyTitle } from "@/lib/empty-states";
 import { useTranslation } from "react-i18next";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
 
