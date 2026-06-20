@@ -114,7 +114,7 @@ export function AppShell({
         </div>
 
 
-        <div className="p-4 sm:p-6 flex-1 min-w-0">{children}</div>
+        <div className="p-4 sm:p-6 flex-1 min-w-0 min-h-0 flex flex-col">{children}</div>
       </main>
 
     </div>
