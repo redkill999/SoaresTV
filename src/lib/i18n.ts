@@ -50,6 +50,7 @@ const pt = {
   },
   nav: {
     channels: "Canais",
+    guide: "Guia",
     movies: "Filmes",
     series: "Séries",
     favorites: "Favoritos",
@@ -124,6 +125,7 @@ const en: typeof pt = {
   },
   nav: {
     channels: "Channels",
+    guide: "Guide",
     movies: "Movies",
     series: "Series",
     favorites: "Favorites",
@@ -198,6 +200,7 @@ const es: typeof pt = {
   },
   nav: {
     channels: "Canales",
+    guide: "Guía",
     movies: "Películas",
     series: "Series",
     favorites: "Favoritos",
@@ -272,6 +275,7 @@ const fr: typeof pt = {
   },
   nav: {
     channels: "Chaînes",
+    guide: "Guide",
     movies: "Films",
     series: "Séries",
     favorites: "Favoris",
