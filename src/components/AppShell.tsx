@@ -74,48 +74,7 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh flex">
-      {/* Sidebar — desktop */}
-      <aside className="w-40 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-2 sticky top-0 h-dvh">
-        <Link to="/home" className="flex items-center gap-1.5 mb-4">
-          <div className="size-7 rounded-md bg-brand-gradient shadow-glow grid place-items-center">
-            <Tv className="size-3.5 text-primary-foreground" strokeWidth={2.25} />
-          </div>
-          <div className="min-w-0">
-            <div className="font-display font-bold text-xs tracking-tight leading-none">
-              SoaresTV
-            </div>
-            <div className="mt-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
-              IPTV Player
-            </div>
-          </div>
-        </Link>
-
-        <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70 mb-1 px-2">
-          {t("nav.library")}
-        </div>
-        <nav className="flex flex-col gap-0.5">
-          {PRIMARY_NAV.map((n) => (
-            <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
-          ))}
-        </nav>
-
-        <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70 mt-4 mb-1 px-2">
-          {t("nav.general")}
-        </div>
-        <nav className="flex flex-col gap-0.5 flex-1">
-          {SECONDARY_NAV.map((n) => (
-            <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
-          ))}
-        </nav>
-
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-white/5 transition-colors"
-        >
-          <LogOut className="size-3.5" />
-          {t("common.signOut")}
-        </button>
-      </aside>
+      {/* Sidebar removida — navegação principal acontece pelo header XCIPTV / topo */}
 
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
