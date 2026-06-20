@@ -257,7 +257,7 @@ function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex aspect-square w-[54px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 xs:w-[60px] sm:w-[78px]"
+      className="flex aspect-square w-[56px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 sm:w-[78px]"
     >
       <Icon className="size-5 sm:size-7" strokeWidth={1.7} />
       <span className="text-[8px] font-semibold tracking-widest sm:text-[10px]">{tile.label}</span>
