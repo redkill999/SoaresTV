@@ -96,7 +96,7 @@ function LivePage() {
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col items-stretch sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
           <XciptvCategoryList
             categories={sidebarCats}
             value={cat}
@@ -106,7 +106,7 @@ function LivePage() {
             recentCount={recentIds.length}
             totalCount={streamsQ.data?.length ?? 0}
           />
-          <div className="h-full flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
+          <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
             {!creds || streamsQ.isLoading ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                 {Array.from({ length: 18 }).map((_, i) => (

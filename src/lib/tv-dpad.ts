@@ -135,6 +135,7 @@ function ensureFocus(): HTMLElement | null {
 }
 
 function handleKey(e: KeyboardEvent) {
+  const tvMode = document.documentElement.hasAttribute("data-tv-mode") || isSmartTvEnv();
   // Não interfere quando digitando em inputs/textarea/contenteditable
   const target = e.target as HTMLElement | null;
   const tag = target?.tagName;
@@ -217,6 +218,10 @@ function handleKey(e: KeyboardEvent) {
   }
 
   if (typing) return;
+
+  // No navegador desktop, deixa setas/scroll nativos funcionarem normalmente.
+  // A navegação espacial por D-pad fica restrita ao APK/Smart TV.
+  if (!tvMode) return;
 
   if (isEnter) {
     const active = document.activeElement as HTMLElement | null;
