@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, isNativeApp, type EpgListing } from "@/lib/xtream";
 import { useIsFavorite } from "@/hooks/use-favorites";
-import { Clock, ExternalLink } from "lucide-react";
+import { Clock, ExternalLink, ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
@@ -38,6 +38,8 @@ function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
+  const router = useRouter();
+
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
@@ -255,9 +257,26 @@ function PlayerPage() {
   void useIsFavorite;
 
 
+  // Mostra controles (seta voltar) ao mover o mouse, e oculta após alguns segundos
+  const [showControls, setShowControls] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealControls = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setShowControls(false), 2500);
+  }, []);
+  useEffect(() => () => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  }, []);
+
   return (
     <AppShell immersive>
-      <div className="relative h-dvh w-dvw overflow-hidden bg-player text-player-foreground">
+      <div
+        className="relative h-dvh w-dvw overflow-hidden bg-player text-player-foreground"
+        onMouseMove={revealControls}
+        onMouseEnter={revealControls}
+        onTouchStart={revealControls}
+      >
         <div className="absolute inset-0 bg-player">
           {url ? (
             <VideoPlayer
@@ -272,6 +291,24 @@ function PlayerPage() {
             </div>
           )}
         </div>
+        {/* Seta de voltar — visível apenas ao mover o mouse */}
+        <div
+          className={`pointer-events-none absolute left-3 top-3 z-30 transition-opacity duration-300 ${
+            showControls ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <Button
+            variant="outline"
+            onClick={() => router.history.back()}
+            aria-label="Voltar"
+            title="Voltar"
+            className="pointer-events-auto bg-player/45 backdrop-blur"
+          >
+            <ArrowLeft className="size-4" />
+            Voltar
+          </Button>
+        </div>
+
           {/* Título/tipo e botão de voltar/favorito ficam ocultos durante a reprodução.
               Use a tecla Voltar do controle remoto / ESC para sair do player.
               Mantemos apenas o botão "Player externo" no app nativo, no canto. */}
