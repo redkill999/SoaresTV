@@ -154,7 +154,7 @@ function HomePage() {
 
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
       {/* Background image — stretched to fill so toda a arte aparece igual ao desktop,
           sem corte nas bordas em celular/TV (cover cortaria as laterais ou topo/base). */}
       <div
