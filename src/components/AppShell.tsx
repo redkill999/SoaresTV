@@ -27,11 +27,13 @@ export function AppShell({
   search,
   onSearch,
   immersive = false,
+  fixedViewport = false,
 }: {
   children: ReactNode;
   search?: string;
   onSearch?: (v: string) => void;
   immersive?: boolean;
+  fixedViewport?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
@@ -73,7 +75,7 @@ export function AppShell({
   }
 
   return (
-    <div className="h-dvh overflow-hidden flex">
+    <div className={fixedViewport ? "h-dvh overflow-hidden flex" : "min-h-dvh flex"}>
       {/* Sidebar removida — navegação principal acontece pelo header XCIPTV / topo */}
 
       <main className="flex-1 min-w-0 min-h-0 flex flex-col">
