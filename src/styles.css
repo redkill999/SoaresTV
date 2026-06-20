@@ -266,13 +266,13 @@ div[style*="Edit with Lovable"],
   z-index: -9999 !important;
 }
 
-/* ===== Controle remoto / D-pad: foco visível APENAS para Smart TV / TV mode ===== */
-/* Cor de foco TV: amarelo cítrico bem contrastado contra o fundo azul XCIPTV.
-   Aplicado só quando o app está rodando em TV (data-tv-mode ou data-smart-tv),
-   nunca em navegador desktop nem em celular.                                  */
+/* ===== Controle remoto / D-pad: foco visível APENAS para Smart TV / TV mode =====
+   Usa box-shadow INSET + outline negativo + mudança de fundo para que o destaque
+   apareça MESMO quando o pai usa overflow:hidden (caso dos grids/scrollers do
+   XCIPTV). Anéis externos seriam cortados pelo container e não apareceriam.   */
 :where([data-tv-mode], [data-smart-tv]) {
   --tv-focus: #FFD60A;
-  --tv-focus-glow: rgba(255, 214, 10, 0.55);
+  --tv-focus-soft: rgba(255, 214, 10, 0.22);
 }
 
 [data-tv-mode] :focus,
@@ -281,28 +281,48 @@ div[style*="Edit with Lovable"],
 [data-smart-tv] :focus-visible,
 .tv-focus :focus,
 .tv-focus :focus-visible {
+  /* outline desenhada DENTRO da caixa (offset negativo) — não é cortada por overflow:hidden */
   outline: 4px solid var(--tv-focus) !important;
-  outline-offset: 3px !important;
-  border-radius: 10px;
+  outline-offset: -4px !important;
+  /* halo interno + leve halo externo (que ainda ajuda quando não há clipping) */
   box-shadow:
-    0 0 0 2px #000,
-    0 0 0 8px var(--tv-focus-glow),
-    0 0 24px var(--tv-focus-glow) !important;
-  transition: outline-offset 80ms ease, box-shadow 80ms ease, transform 120ms ease;
+    inset 0 0 0 2px #000,
+    inset 0 0 0 6px var(--tv-focus),
+    0 0 0 4px var(--tv-focus-soft) !important;
+  background-color: var(--tv-focus-soft) !important;
+  border-radius: 10px;
+  transition: background-color 80ms ease, box-shadow 80ms ease, transform 120ms ease;
   z-index: 5;
   position: relative;
 }
 
-/* Tiles principais e cards crescem um pouquinho quando focados na TV */
+/* Tiles principais e cards crescem um pouquinho quando focados na TV.
+   scale é mantido pois não é cortado por overflow do pai (apenas pelo viewport). */
 [data-tv-mode] button:focus,
 [data-tv-mode] button:focus-visible,
 [data-tv-mode] a:focus,
 [data-tv-mode] a:focus-visible,
+[data-tv-mode] [role="button"]:focus,
+[data-tv-mode] [role="button"]:focus-visible,
+[data-tv-mode] [tabindex]:focus,
+[data-tv-mode] [tabindex]:focus-visible,
 [data-smart-tv] button:focus,
 [data-smart-tv] button:focus-visible,
 [data-smart-tv] a:focus,
-[data-smart-tv] a:focus-visible {
+[data-smart-tv] a:focus-visible,
+[data-smart-tv] [role="button"]:focus,
+[data-smart-tv] [role="button"]:focus-visible {
   transform: scale(1.04);
+}
+
+/* Imagens dentro de tiles focados ficam mais vivas — ajuda a "marcar" o card
+   mesmo quando ele é majoritariamente <img> (poster de filme/série/canal). */
+[data-tv-mode] :focus img,
+[data-tv-mode] :focus-visible img,
+[data-smart-tv] :focus img,
+[data-smart-tv] :focus-visible img {
+  filter: brightness(1.15) saturate(1.1);
+  transition: filter 120ms ease;
 }
 
 /* Body/html/main não devem mostrar o anel */
