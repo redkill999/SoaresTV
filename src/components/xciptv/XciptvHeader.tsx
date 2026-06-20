@@ -22,11 +22,7 @@ export function XciptvHeader({
   const [now, setNow] = useState(() => new Date());
   const [searchOpen, setSearchOpen] = useState(false);
   const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.history.back();
-    } else {
-      router.navigate({ to: "/home" });
-    }
+    router.navigate({ to: "/home" });
   };
   useEffect(() => {
     const i = setInterval(() => setNow(new Date()), 1000);
