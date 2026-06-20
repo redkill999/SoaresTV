@@ -293,7 +293,7 @@ function PlayerPage() {
         </div>
         {/* Seta de voltar — visível apenas ao mover o mouse */}
         <div
-          className={`pointer-events-none absolute left-3 top-3 z-30 transition-opacity duration-300 ${
+          className={`pointer-events-none absolute left-2 top-2 sm:left-3 sm:top-3 z-30 transition-opacity duration-300 ${
             showControls ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -302,10 +302,10 @@ function PlayerPage() {
             onClick={closePlayer}
             aria-label="Voltar"
             title="Voltar"
-            className="pointer-events-auto bg-player/45 backdrop-blur"
+            className="pointer-events-auto bg-player/45 backdrop-blur min-h-11 px-3 sm:px-4 text-sm sm:text-base"
           >
-            <ArrowLeft className="size-4" />
-            Voltar
+            <ArrowLeft className="size-4 sm:size-5" />
+            <span className="hidden xs:inline sm:inline">Voltar</span>
           </Button>
         </div>
 
@@ -313,15 +313,15 @@ function PlayerPage() {
               Use a tecla Voltar do controle remoto / ESC para sair do player.
               Mantemos apenas o botão "Player externo" no app nativo, no canto. */}
           {isNative && url && (
-            <div className="pointer-events-auto absolute right-3 top-3 z-20">
+            <div className="pointer-events-auto absolute right-2 top-2 sm:right-3 sm:top-3 z-20">
               <Button
                 variant="outline"
                 onClick={openInExternalPlayer}
                 title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
-                className="bg-player/45 backdrop-blur"
+                className="bg-player/45 backdrop-blur min-h-11 px-3 sm:px-4 text-sm sm:text-base"
               >
-                <ExternalLink className="size-4" />
-                Player externo
+                <ExternalLink className="size-4 sm:size-5" />
+                <span className="hidden sm:inline">Player externo</span>
               </Button>
             </div>
           )}
