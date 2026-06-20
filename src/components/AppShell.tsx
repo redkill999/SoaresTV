@@ -75,7 +75,7 @@ export function AppShell({
   return (
     <div className="min-h-dvh flex">
       {/* Sidebar — desktop */}
-      <aside className="w-52 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-3 sticky top-0 h-dvh">
+      <aside className="w-40 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-2 sticky top-0 h-dvh">
         <Link to="/home" className="flex items-center gap-2 mb-6">
           <div className="size-8 rounded-lg bg-brand-gradient shadow-glow grid place-items-center">
             <Tv className="size-4 text-primary-foreground" strokeWidth={2.25} />
