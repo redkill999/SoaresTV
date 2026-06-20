@@ -28,7 +28,7 @@ type Tile = {
 
 const MAIN: Tile[] = [
   { label: "TV AO VIVO", icon: Tv, to: "/live" },
-  { label: "EPG", icon: CalendarDays, to: "/live" },
+  { label: "EPG", icon: CalendarDays, to: "/guide" },
   { label: "FILMES", icon: Film, to: "/movies" },
   { label: "SÉRIES", icon: Clapperboard, to: "/series" },
 ];
