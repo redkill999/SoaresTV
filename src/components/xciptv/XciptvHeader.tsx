@@ -39,10 +39,10 @@ export function XciptvHeader({
         <Link
           to="/home"
           aria-label="Voltar"
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/15 bg-black/40 px-2.5 text-white/90 transition-all touch-manipulation hover:border-[#1FB6FF]/60 hover:text-[#1FB6FF] active:scale-95 focus:outline-none focus-visible:border-[#1FB6FF] focus-visible:ring-2 focus-visible:ring-[#1FB6FF] sm:h-10"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#1FB6FF]/55 bg-black/60 px-2.5 text-white shadow-[0_0_18px_rgba(31,182,255,0.22)] transition-all touch-manipulation hover:border-[#1FB6FF] hover:text-[#1FB6FF] active:scale-95 focus:outline-none focus-visible:border-[#1FB6FF] focus-visible:ring-2 focus-visible:ring-[#1FB6FF] sm:h-10 sm:px-3"
         >
           <ArrowLeft className="size-5" />
-          <span className="hidden text-[11px] font-bold uppercase tracking-wide md:inline">Voltar</span>
+          <span className="text-[11px] font-bold uppercase tracking-wide">Voltar</span>
         </Link>
         <div className="min-w-0 flex flex-col">
           <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
