@@ -154,7 +154,7 @@ function HomePage() {
 
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
       {/* Background image — stretched to fill so toda a arte aparece igual ao desktop,
           sem corte nas bordas em celular/TV (cover cortaria as laterais ou topo/base). */}
       <div
@@ -190,8 +190,8 @@ function HomePage() {
       </header>
 
       {/* Main 4 tiles */}
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-4">
-        <div className="grid w-full grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
+        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4">
           {MAIN.map((t) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
@@ -199,7 +199,7 @@ function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-5 pt-2 sm:px-6">
+      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-3 pt-1 sm:px-6 sm:pb-5">
         <div className="flex items-end gap-2 sm:gap-3">
           {BOTTOM_LEFT.map((t) => (
             <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
@@ -244,10 +244,10 @@ function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-2 rounded-xl border border-white/70 bg-white/[0.04] px-4 py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
+      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
     >
-      <Icon className="size-10 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
-      <span className="text-sm font-semibold tracking-[0.18em] sm:text-base">{tile.label}</span>
+      <Icon className="size-8 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
+      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em]">{tile.label}</span>
     </button>
   );
 }
