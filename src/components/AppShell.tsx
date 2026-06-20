@@ -75,16 +75,16 @@ export function AppShell({
   return (
     <div className="min-h-dvh flex">
       {/* Sidebar — desktop */}
-      <aside className="w-52 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-3 sticky top-0 h-dvh">
-        <Link to="/home" className="flex items-center gap-2 mb-6">
-          <div className="size-8 rounded-lg bg-brand-gradient shadow-glow grid place-items-center">
-            <Tv className="size-4 text-primary-foreground" strokeWidth={2.25} />
+      <aside className="w-40 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-2 sticky top-0 h-dvh">
+        <Link to="/home" className="flex items-center gap-1.5 mb-4">
+          <div className="size-7 rounded-md bg-brand-gradient shadow-glow grid place-items-center">
+            <Tv className="size-3.5 text-primary-foreground" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
-            <div className="font-display font-bold text-sm tracking-tight leading-none">
+            <div className="font-display font-bold text-xs tracking-tight leading-none">
               SoaresTV
             </div>
-            <div className="mt-0.5 text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="mt-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
               IPTV Player
             </div>
           </div>
@@ -177,13 +177,13 @@ function NavItem({
       to={to}
       data-nav-item="true"
       data-active={active ? "true" : "false"}
-      className={`flex items-center gap-2 px-2.5 py-2 rounded-md text-xs transition-all outline-none ${
+      className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] transition-all outline-none ${
         active
           ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
           : "text-muted-foreground hover:text-foreground"
       }`}
     >
-      <Icon className="size-3.5 shrink-0" />
+      <Icon className="size-3 shrink-0" />
       <span className="truncate">{label}</span>
     </Link>
   );
