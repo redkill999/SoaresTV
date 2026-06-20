@@ -111,6 +111,12 @@ function pickNearest(current: HTMLElement, dir: Dir): HTMLElement | null {
 }
 
 function focusFirst(): boolean {
+  // 1) Respeita um alvo explícito marcado pela página (ex.: tile principal da home)
+  const preferred = document.querySelector<HTMLElement>("[data-tv-default-focus]");
+  if (preferred && isVisible(preferred)) {
+    preferred.focus({ preventScroll: false });
+    return true;
+  }
   const list = visibleFocusables();
   // Prefere o primeiro elemento visível "acima da dobra"
   const inView = list.find((el) => {
@@ -226,8 +232,12 @@ function handleKey(e: KeyboardEvent) {
   if (isEnter) {
     const active = document.activeElement as HTMLElement | null;
     if (active && active !== document.body) {
-      // Deixa o comportamento nativo (click/submit). Para <a>, garante click.
-      if (active.tagName === "A" || active.getAttribute("role") === "link") {
+      // Em alguns controles de Android TV / Fire TV, o Enter chega como keydown
+      // mas o browser não sintetiza o click para <button>/[role=button]. Disparamos
+      // manualmente para garantir ativação consistente.
+      const tagA = active.tagName;
+      const role = active.getAttribute("role");
+      if (tagA === "A" || tagA === "BUTTON" || role === "button" || role === "link" || role === "menuitem" || role === "tab" || role === "option") {
         e.preventDefault();
         active.click();
       }
