@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/")({
@@ -30,6 +31,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [splash, setSplash] = useState(true);
+  const [nativeSplash, setNativeSplash] = useState(false);
 
   // Xtream state
   const [server, setServer] = useState("");
@@ -54,8 +56,22 @@ function LoginPage() {
       navigate({ to: "/loading", replace: true });
       return;
     }
-    const splashTimer = setTimeout(() => setSplash(false), 600);
-    return () => clearTimeout(splashTimer);
+    // Splash animado estilo XCIPTV: ~2.8s no APK Android (celular/TV),
+    // splash curto de 600ms na web (sem mudar o que já funciona).
+    let cancelled = false;
+    void isNativeApp().then((native) => {
+      if (cancelled) return;
+      if (native) {
+        setNativeSplash(true);
+        setSplash(false);
+      } else {
+        const t = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
+        // store timer ref on closure cleanup
+        (cleanupRef as { t?: ReturnType<typeof setTimeout> }).t = t;
+      }
+    });
+    const cleanupRef: { t?: ReturnType<typeof setTimeout> } = {};
+    return () => { cancelled = true; if (cleanupRef.t) clearTimeout(cleanupRef.t); };
   }, [navigate]);
 
   const onXtream = async (e: React.FormEvent) => {
