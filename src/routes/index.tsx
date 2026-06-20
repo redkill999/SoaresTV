@@ -30,8 +30,9 @@ export const Route = createFileRoute("/")({
 function LoginPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [splash, setSplash] = useState(true);
+  const [splash, setSplash] = useState(false);
   const [nativeSplash, setNativeSplash] = useState(false);
+  const [splashReady, setSplashReady] = useState(false);
 
   // Xtream state
   const [server, setServer] = useState("");
@@ -64,10 +65,11 @@ function LoginPage() {
       if (cancelled) return;
       if (native) {
         setNativeSplash(true);
-        setSplash(false);
       } else {
+        setSplash(true);
         timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
       }
+      setSplashReady(true);
     });
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [navigate]);
@@ -199,6 +201,10 @@ function LoginPage() {
     setM3uName("IPTV-Org (teste)");
     setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
+
+  if (!splashReady) {
+    return <div className="min-h-screen bg-background" />;
+  }
 
   if (nativeSplash) {
     return <NativeSplash onDone={() => setNativeSplash(false)} />;
