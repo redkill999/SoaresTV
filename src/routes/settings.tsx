@@ -521,14 +521,50 @@ function ParentalDialog({ open, onClose }: { open: boolean; onClose: () => void 
 function PlayerSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [s, set] = useAppSettings();
   const ratios: AspectRatio[] = ["default", "16:9", "4:3", "fill", "stretch"];
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void import("@/lib/xtream").then(({ isNativeApp }) =>
+      isNativeApp().then((n) => { if (alive) setIsNative(n); }),
+    );
+    return () => { alive = false; };
+  }, []);
+
+  const playerOptions: { v: PlayerChoice; t: string; d: string }[] = [
+    { v: "exo", t: "ExoPlayer", d: "Player nativo do Android — melhor para HLS/DASH ao vivo." },
+    { v: "vlc", t: "VLC Player", d: "Abre o stream no app VLC (instale na Play Store)." },
+    { v: "internal", t: "Player interno", d: "Reprodutor embutido do app." },
+    { v: "external", t: "Outro player externo", d: "Deixa o Android escolher (MX Player, etc)." },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Player Settings</DialogTitle>
           <DialogDescription>Ajustes do reprodutor de vídeo.</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
+          {isNative && (
+            <div>
+              <Label className="text-xs text-muted-foreground">Menu Player</Label>
+              <div className="mt-2 space-y-2">
+                {playerOptions.map((o) => (
+                  <button
+                    key={o.v}
+                    onClick={() => { set({ defaultPlayer: o.v }); toast.success(`Player: ${o.t}`); }}
+                    className={`w-full text-left rounded-lg p-3 border transition ${s.defaultPlayer === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{o.t}</span>
+                      {s.defaultPlayer === o.v && <CheckCircle2 className="size-4 text-primary" />}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <Label className="text-xs text-muted-foreground">Proporção</Label>
             <div className="mt-2 grid grid-cols-5 gap-2">
@@ -555,37 +591,16 @@ function PlayerSettingsDialog({ open, onClose }: { open: boolean; onClose: () =>
 
 function PlayerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [s, set] = useAppSettings();
-  const [isNative, setIsNative] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void import("@/lib/xtream").then(({ isNativeApp }) =>
-      isNativeApp().then((n) => { if (alive) setIsNative(n); }),
-    );
-    return () => { alive = false; };
-  }, []);
-
-  const webOptions: { v: PlayerChoice; t: string; d: string }[] = [
+  const options: { v: PlayerChoice; t: string; d: string }[] = [
     { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
     { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
   ];
-  // Em Android (celular/TV) mostra opções nativas: ExoPlayer (interno do Android,
-  // ótimo para HLS) e VLC Player (suporta praticamente qualquer codec/container).
-  const nativeOptions: { v: PlayerChoice; t: string; d: string }[] = [
-    { v: "exo", t: "ExoPlayer", d: "Player nativo do Android — melhor para HLS/DASH ao vivo." },
-    { v: "vlc", t: "VLC Player", d: "Abre o stream no app VLC (instale na Play Store)." },
-    { v: "internal", t: "Player interno", d: "Reprodutor embutido do app." },
-    { v: "external", t: "Outro player externo", d: "Deixa o Android escolher (MX Player, etc)." },
-  ];
-  const options = isNative ? nativeOptions : webOptions;
-
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Player</DialogTitle>
-          <DialogDescription>
-            {isNative ? "Escolha o reprodutor padrão do Android." : "Escolha o reprodutor padrão."}
-          </DialogDescription>
+          <DialogDescription>Escolha o reprodutor padrão.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           {options.map((o) => (
