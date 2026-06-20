@@ -127,6 +127,24 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border: 1px solid oklch(1 0 0 / 0.07);
 }
 
+@utility xciptv-bg {
+  background:
+    radial-gradient(ellipse 60% 80% at 0% 50%, rgba(60, 110, 220, 0.18), transparent 60%),
+    radial-gradient(ellipse 70% 70% at 100% 0%, rgba(80, 140, 240, 0.10), transparent 55%),
+    linear-gradient(110deg, transparent 35%, rgba(180, 215, 255, 0.06) 45%, transparent 55%),
+    linear-gradient(110deg, transparent 55%, rgba(180, 215, 255, 0.05) 62%, transparent 68%),
+    linear-gradient(135deg, #061230 0%, #08193f 45%, #050d24 100%);
+}
+
+@utility xciptv-tile {
+  background: #000;
+  border: 2px solid transparent;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+@utility xciptv-tile-active {
+  border-color: #ffcf2e;
+}
+
 /* Focus ring for TV/D-pad navigation */
 *:focus-visible {
   outline: 2px solid var(--primary);

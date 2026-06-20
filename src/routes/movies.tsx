@@ -1,18 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { MediaCard } from "@/components/MediaCard";
-import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
-import { CategorySidebar } from "@/components/CategorySidebar";
-import { SortMenu, type SortKey } from "@/components/SectionTabs";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
+import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
+import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
-import { ArrowLeft, Film } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
-import { emptyHint, emptyTitle } from "@/lib/empty-states";
-import { useTranslation } from "react-i18next";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
+import { Film } from "lucide-react";
 
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
@@ -33,25 +30,18 @@ export const Route = createFileRoute("/movies")({
 });
 
 function MoviesPage() {
-  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState("all");
-  const [sort, setSort] = useState<SortKey>("default");
+  const [sort, setSort] = useState<"az" | "za" | "default">("default");
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `vod-cats:${acct}`;
   const listCacheKey = `vod-list:${acct}:all`;
-  const catsPersisted = useMemo(
-    () => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null),
-    [catsCacheKey, acct],
-  );
-  const listPersisted = useMemo(
-    () => (acct ? loadPersisted<VodStream[]>(listCacheKey) : null),
-    [listCacheKey, acct],
-  );
+  const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
+  const listPersisted = useMemo(() => (acct ? loadPersisted<VodStream[]>(listCacheKey) : null), [listCacheKey, acct]);
   const catsQ = useQuery({
     queryKey: ["vod-cats", acct],
     enabled: !!creds,
@@ -71,14 +61,8 @@ function MoviesPage() {
 
   const favs = useFavorites();
   const history = useHistory();
-  const favIds = useMemo(
-    () => new Set(favs.filter((f) => f.type === "movie").map((f) => f.id)),
-    [favs],
-  );
-  const recentIds = useMemo(
-    () => history.filter((h) => h.type === "movie").map((h) => h.id),
-    [history],
-  );
+  const favIds = useMemo(() => new Set(favs.filter((f) => f.type === "movie").map((f) => f.id)), [favs]);
+  const recentIds = useMemo(() => history.filter((h) => h.type === "movie").map((h) => h.id), [history]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -90,12 +74,7 @@ function MoviesPage() {
   }, [listQ.data]);
 
   const sidebarCats = useMemo(
-    () =>
-      (catsQ.data ?? []).map((c) => ({
-        id: c.category_id,
-        name: c.category_name,
-        count: counts.get(c.category_id) ?? 0,
-      })),
+    () => (catsQ.data ?? []).map((c) => ({ id: c.category_id, name: c.category_name, count: counts.get(c.category_id) ?? 0 })),
     [catsQ.data, counts],
   );
 
@@ -105,8 +84,7 @@ function MoviesPage() {
     if (cat === "favorites") list = list.filter((m) => favIds.has(idOf(m)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
-      list = list.filter((m) => order.has(idOf(m)))
-        .sort((a, b) => order.get(idOf(a))! - order.get(idOf(b))!);
+      list = list.filter((m) => order.has(idOf(m))).sort((a, b) => order.get(idOf(a))! - order.get(idOf(b))!);
     } else if (cat !== "all") {
       list = list.filter((m) => String(m.category_id) === cat);
     }
@@ -120,30 +98,10 @@ function MoviesPage() {
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
-    <AppShell search={search} onSearch={setSearch}>
-      <div className="mb-4">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3">
-          <Link
-            to="/home"
-            aria-label={t("common.back")}
-            className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-              {t("pages.movies.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{t("pages.movies.subtitle")}</p>
-          </div>
-          <div className="shrink-0">
-            <SortMenu value={sort} onChange={setSort} />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <CategorySidebar
+    <AppShell><div className="-m-4 sm:-m-6 min-h-[calc(100dvh-3rem)] xciptv-bg text-white">
+      <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
+      <div className="flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-6">
+        <XciptvCategoryList
           categories={sidebarCats}
           value={cat}
           onChange={setCat}
@@ -152,30 +110,33 @@ function MoviesPage() {
           recentCount={recentIds.length}
           totalCount={listQ.data?.length ?? 0}
         />
-
-        <div className="min-w-0 flex-1">
-          <VirtualMediaGrid
-            items={filtered}
-            loading={!creds || (listQ.isLoading && filtered.length === 0)}
-            empty={!!creds && !listQ.isLoading && filtered.length === 0}
-            aspect="square"
-            emptyIcon={<Film className="size-7" />}
-            emptyTitle={emptyTitle(cat, "movie")}
-            emptyHint={emptyHint(cat, search)}
-            getKey={(m) => m.stream_id}
-            renderItem={(m) => (
-              <MediaCard
-                type="movie"
-                id={`${m.stream_id}.${m.container_extension || "mp4"}`}
-                name={m.name}
-                image={m.stream_icon}
-                badge={m.rating || undefined}
-                aspect="square"
-              />
-            )}
-          />
+        <div className="flex-1 min-w-0">
+          {!creds || (listQ.isLoading && filtered.length === 0) ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+              {Array.from({ length: 18 }).map((_, i) => (
+                <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-white/60">
+              <Film className="size-10 mx-auto mb-3 opacity-40" />
+              Nenhum filme encontrado.
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+              {filtered.map((m) => (
+                <XciptvTile
+                  key={m.stream_id}
+                  type="movie"
+                  id={`${m.stream_id}.${m.container_extension || "mp4"}`}
+                  name={m.name}
+                  image={m.stream_icon}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </AppShell>
+    </div></AppShell>
   );
 }

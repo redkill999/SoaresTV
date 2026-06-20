@@ -1,18 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { MediaCard } from "@/components/MediaCard";
-import { VirtualMediaGrid } from "@/components/VirtualMediaGrid";
-import { CategorySidebar } from "@/components/CategorySidebar";
-import { SortMenu, type SortKey } from "@/components/SectionTabs";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
+import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
+import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
-import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
-import { emptyHint, emptyTitle } from "@/lib/empty-states";
-import { useTranslation } from "react-i18next";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
+import { Clapperboard } from "lucide-react";
 
 export const Route = createFileRoute("/series")({
   head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
@@ -20,9 +17,7 @@ export const Route = createFileRoute("/series")({
     let creds = store.getCreds();
     if (!creds) {
       const firstList = store.getM3U()[0];
-      const recovered = firstList
-        ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
-        : null;
+      const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
       if (recovered) creds = recovered;
     }
     if (!creds) return;
@@ -40,39 +35,24 @@ export const Route = createFileRoute("/series")({
 });
 
 function SeriesPage() {
-  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState("all");
-  const [sort, setSort] = useState<SortKey>("default");
+  const [sort, setSort] = useState<"az" | "za" | "default">("default");
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   useEffect(() => {
     const saved = store.getCreds();
-    if (saved) {
-      setCreds(saved);
-      return;
-    }
+    if (saved) { setCreds(saved); return; }
     const firstList = store.getM3U()[0];
-    const recovered = firstList
-      ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password)
-      : null;
-    if (recovered) {
-      store.setCreds(recovered);
-      setCreds(recovered);
-    }
+    const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
+    if (recovered) { store.setCreds(recovered); setCreds(recovered); }
   }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `series-cats:${acct}`;
   const listCacheKey = `series-list:${acct}:all`;
-  const catsPersisted = useMemo(
-    () => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null),
-    [catsCacheKey, acct],
-  );
-  const listPersisted = useMemo(
-    () => (acct ? loadPersisted<Series[]>(listCacheKey) : null),
-    [listCacheKey, acct],
-  );
+  const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
+  const listPersisted = useMemo(() => (acct ? loadPersisted<Series[]>(listCacheKey) : null), [listCacheKey, acct]);
   const catsQ = useQuery({
     queryKey: ["series-cats", acct],
     enabled: !!creds,
@@ -92,14 +72,8 @@ function SeriesPage() {
 
   const favs = useFavorites();
   const history = useHistory();
-  const favIds = useMemo(
-    () => new Set(favs.filter((f) => f.type === "series").map((f) => f.id)),
-    [favs],
-  );
-  const recentIds = useMemo(
-    () => history.filter((h) => h.type === "series").map((h) => h.id),
-    [history],
-  );
+  const favIds = useMemo(() => new Set(favs.filter((f) => f.type === "series").map((f) => f.id)), [favs]);
+  const recentIds = useMemo(() => history.filter((h) => h.type === "series").map((h) => h.id), [history]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -111,12 +85,7 @@ function SeriesPage() {
   }, [listQ.data]);
 
   const sidebarCats = useMemo(
-    () =>
-      (catsQ.data ?? []).map((c) => ({
-        id: c.category_id,
-        name: c.category_name,
-        count: counts.get(c.category_id) ?? 0,
-      })),
+    () => (catsQ.data ?? []).map((c) => ({ id: c.category_id, name: c.category_name, count: counts.get(c.category_id) ?? 0 })),
     [catsQ.data, counts],
   );
 
@@ -125,9 +94,7 @@ function SeriesPage() {
     if (cat === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
-      list = list
-        .filter((s) => order.has(String(s.series_id)))
-        .sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
+      list = list.filter((s) => order.has(String(s.series_id))).sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
     } else if (cat !== "all") {
       list = list.filter((s) => String(s.category_id) === cat);
     }
@@ -141,30 +108,10 @@ function SeriesPage() {
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
-    <AppShell search={search} onSearch={setSearch}>
-      <div className="mb-4">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-3">
-          <Link
-            to="/home"
-            aria-label={t("common.back")}
-            className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
-          >
-            <ArrowLeft className="size-5" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate">
-              {t("pages.series.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{t("pages.series.subtitle")}</p>
-          </div>
-          <div className="shrink-0">
-            <SortMenu value={sort} onChange={setSort} />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <CategorySidebar
+    <AppShell><div className="-m-4 sm:-m-6 min-h-[calc(100dvh-3rem)] xciptv-bg text-white">
+      <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="SERIES" />
+      <div className="flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-6">
+        <XciptvCategoryList
           categories={sidebarCats}
           value={cat}
           onChange={setCat}
@@ -173,29 +120,33 @@ function SeriesPage() {
           recentCount={recentIds.length}
           totalCount={listQ.data?.length ?? 0}
         />
-
-        <div className="min-w-0 flex-1">
-          <VirtualMediaGrid
-            items={filtered}
-            loading={!creds || (listQ.isLoading && filtered.length === 0)}
-            empty={!!creds && !listQ.isLoading && filtered.length === 0}
-            aspect="square"
-            emptyIcon={<Clapperboard className="size-7" />}
-            emptyTitle={emptyTitle(cat, "series")}
-            emptyHint={emptyHint(cat, search)}
-            getKey={(s) => s.series_id}
-            renderItem={(s) => (
-              <MediaCard
-                type="series"
-                id={s.series_id}
-                name={s.name}
-                image={s.cover}
-                aspect="square"
-              />
-            )}
-          />
+        <div className="flex-1 min-w-0">
+          {!creds || (listQ.isLoading && filtered.length === 0) ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+              {Array.from({ length: 18 }).map((_, i) => (
+                <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-white/60">
+              <Clapperboard className="size-10 mx-auto mb-3 opacity-40" />
+              Nenhuma série encontrada.
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+              {filtered.map((s) => (
+                <XciptvTile
+                  key={s.series_id}
+                  type="series"
+                  id={String(s.series_id)}
+                  name={s.name}
+                  image={s.cover}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </AppShell>
+    </div></AppShell>
   );
 }
