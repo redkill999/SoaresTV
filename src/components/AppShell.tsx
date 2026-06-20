@@ -80,7 +80,7 @@ export function AppShell({
 
       <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* Top bar */}
-        <div className="sticky top-0 z-20 glass border-b border-border/50">
+        {!fixedViewport && <div className="sticky top-0 z-20 glass border-b border-border/50">
           <div className="flex items-center gap-2 px-2 sm:px-4 py-1.5">
             <Link to="/live" className="lg:hidden flex items-center gap-1.5 shrink-0">
               <div className="size-6 rounded-md bg-brand-gradient shadow-glow grid place-items-center">
@@ -113,10 +113,10 @@ export function AppShell({
               <ThemeSwitcher />
             </div>
           </div>
-        </div>
+        </div>}
 
 
-        <div className="p-4 sm:p-6 flex-1 min-w-0 min-h-0 flex flex-col">{children}</div>
+        <div className="p-4 sm:p-6 flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>
       </main>
 
     </div>

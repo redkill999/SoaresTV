@@ -33,15 +33,16 @@ export function XciptvHeader({
   };
 
   return (
-    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6 py-3">
+    <header className="relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 px-4 sm:px-6 py-3">
       {/* Left: back + time + date */}
       <div className="min-w-0 flex items-center gap-2 sm:gap-3">
         <Link
           to="/home"
           aria-label="Voltar"
-          className="shrink-0 grid place-items-center size-9 sm:size-10 rounded-md bg-black/40 border border-white/15 text-white/90 hover:text-[#1FB6FF] hover:border-[#1FB6FF]/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1FB6FF] focus-visible:border-[#1FB6FF] active:scale-95 transition-all touch-manipulation"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/15 bg-black/40 px-2.5 text-white/90 transition-all touch-manipulation hover:border-[#1FB6FF]/60 hover:text-[#1FB6FF] active:scale-95 focus:outline-none focus-visible:border-[#1FB6FF] focus-visible:ring-2 focus-visible:ring-[#1FB6FF] sm:h-10"
         >
           <ArrowLeft className="size-5" />
+          <span className="hidden text-[11px] font-bold uppercase tracking-wide md:inline">Voltar</span>
         </Link>
         <div className="min-w-0 flex flex-col">
           <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
