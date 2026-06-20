@@ -80,7 +80,7 @@ export function XciptvHeader({
                 onSearch("");
                 setSearchOpen(false);
               }}
-              className="text-white/60 hover:text-white"
+              className="text-white/60 hover:text-white tv-hide"
               aria-label="Fechar busca"
             >
               <X className="size-3.5" />
