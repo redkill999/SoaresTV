@@ -239,11 +239,12 @@ function HomePage() {
 
 
 
-function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
+function MainTile({ tile, onClick, defaultFocus }: { tile: Tile; onClick: () => void; defaultFocus?: boolean }) {
   const Icon = tile.icon;
   return (
     <button
       onClick={onClick}
+      data-tv-default-focus={defaultFocus ? "" : undefined}
       className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
     >
       <Icon className="size-8 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
