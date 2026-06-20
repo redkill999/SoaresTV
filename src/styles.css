@@ -269,3 +269,21 @@ div[style*="Edit with Lovable"],
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* ===== Menu: destaque azul para item selecionado/focado ===== */
+[data-nav-item]:focus,
+[data-nav-item]:focus-visible,
+[data-nav-item]:hover {
+  outline: 3px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  background-color: rgba(59, 130, 246, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.35), 0 0 24px rgba(59, 130, 246, 0.45) !important;
+  border-radius: 10px;
+  transition: background-color 120ms ease, box-shadow 120ms ease, outline-offset 120ms ease;
+}
+[data-nav-item][data-active="true"] {
+  background-color: rgba(59, 130, 246, 0.22) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 18px rgba(59, 130, 246, 0.35) !important;
+}

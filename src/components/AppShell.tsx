@@ -170,7 +170,9 @@ export function AppShell({
               <li key={n.to}>
                 <Link
                   to={n.to}
-                  className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
+                  data-nav-item="true"
+                  data-active={active ? "true" : "false"}
+                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors outline-none ${
                     active
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
@@ -210,10 +212,12 @@ function NavItem({
   return (
     <Link
       to={to}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+      data-nav-item="true"
+      data-active={active ? "true" : "false"}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all outline-none ${
         active
           ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
-          : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+          : "text-muted-foreground hover:text-foreground"
       }`}
     >
       <Icon className="size-4 shrink-0" />
