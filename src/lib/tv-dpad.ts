@@ -317,5 +317,5 @@ export function destroyTvDpad() {
 export function isSmartTvEnv(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
-  return /Tizen|Web0S|WebOS|SmartTV|SMART-TV|HbbTV|NetCast|VIDAA|AFT[A-Z]|AndroidTV|GoogleTV|BRAVIA|Hisense|Roku/i.test(ua);
+  return /Tizen|Web0S|WebOS|SmartTV|SMART-TV|HbbTV|NetCast|VIDAA|AFT[A-Z]|AndroidTV|Android TV|GoogleTV|BRAVIA|Hisense|Roku|TCL|MiBOX|MiTV|Chromecast|CrKey|AOSP on IAT|Linux;\s?Android[^)]*;\s?(?:TV|ATV|MiBOX|TCL)/i.test(ua);
 }
