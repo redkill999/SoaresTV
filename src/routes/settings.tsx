@@ -172,7 +172,7 @@ function SettingsPage() {
       <BackupDialog       open={open === "backup"}         onClose={() => setOpen(null)} />
       <RemoteDialog       open={open === "remoto"}         onClose={() => setOpen(null)} />
       <LanguageDialog     open={open === "language"}       onClose={() => setOpen(null)} />
-      <AboutDialog        open={open === "socorro"}        onClose={() => setOpen(null)} kind="socorro" />
+      <AboutDialog        open={open === "socorro"}        onClose={() => setOpen(null)} />
       <OutrasDialog       open={open === "outras"}         onClose={() => setOpen(null)} />
     </div>
   );
@@ -342,7 +342,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
       }
     })();
     return () => { alive = false; };
-  }, [open, creds]);
+  }, [open]);
 
   const isTrial = (() => {
     const v = info?.is_trial;
@@ -467,7 +467,7 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-function AboutDialog({ open, onClose, kind }: { open: boolean; onClose: () => void; kind: "socorro" }) {
+function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -478,7 +478,6 @@ function AboutDialog({ open, onClose, kind }: { open: boolean; onClose: () => vo
         <div className="space-y-2 text-sm">
           <p>Suporte: <a className="text-primary underline" href="mailto:suporte@soarestv.app">suporte@soarestv.app</a></p>
           <p>Site: <a className="text-primary underline" href="https://soarestv.app" target="_blank" rel="noreferrer">soarestv.app</a></p>
-          <p className="text-muted-foreground text-xs">{kind}</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -749,26 +748,37 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<{ mbps: number; ms: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const run = async () => {
+  const run = async (signal?: AbortSignal) => {
     setRunning(true); setError(null); setResult(null);
     try {
       // Baixa ~2MB de um endpoint de teste pra medir vazão real.
       const url = "https://speed.cloudflare.com/__down?bytes=2000000&t=" + Date.now();
       const t0 = performance.now();
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-store", signal });
       const buf = await res.arrayBuffer();
       const t1 = performance.now();
       const ms = t1 - t0;
       const bits = buf.byteLength * 8;
       const mbps = bits / (ms / 1000) / 1_000_000;
-      setResult({ mbps, ms });
+      if (!signal?.aborted) setResult({ mbps, ms });
     } catch (e) {
+      if ((e as { name?: string })?.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Falha no teste");
-    } finally { setRunning(false); }
+    } finally {
+      if (!signal?.aborted) setRunning(false);
+    }
   };
 
-  useEffect(() => { if (open) { setResult(null); setError(null); void run(); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setResult(null); setError(null);
+    void run(ctrl.signal);
+    return () => { ctrl.abort(); };
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -787,7 +797,7 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           )}
         </div>
-        <Button onClick={run} disabled={running} className="bg-brand-gradient w-full">
+        <Button onClick={() => void run()} disabled={running} className="bg-brand-gradient w-full">
           {running ? "Testando…" : "Refazer teste"}
         </Button>
       </DialogContent>

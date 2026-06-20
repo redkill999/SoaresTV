@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tv, Loader2, PlayCircle, PlayCircle as PlayIcon } from "lucide-react";
+import { Tv, Loader2, PlayCircle } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
@@ -33,6 +33,7 @@ function LoginPage() {
   const [splash, setSplash] = useState(false);
   const [nativeSplash, setNativeSplash] = useState(false);
   const [splashReady, setSplashReady] = useState(false);
+  const handleNativeSplashDone = useCallback(() => setNativeSplash(false), []);
 
   // Xtream state
   const [server, setServer] = useState("");
@@ -207,7 +208,7 @@ function LoginPage() {
   }
 
   if (nativeSplash) {
-    return <NativeSplash onDone={() => setNativeSplash(false)} />;
+    return <NativeSplash onDone={handleNativeSplashDone} />;
   }
 
   if (splash) {
@@ -261,9 +262,9 @@ function LoginPage() {
             </p>
           </div>
           <ul className="space-y-2.5 text-sm text-white/95">
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat1")}</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat2")}</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat3")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat1")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat2")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat3")}</li>
           </ul>
         </div>
 
