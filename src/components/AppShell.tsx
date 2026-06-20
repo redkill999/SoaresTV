@@ -120,32 +120,32 @@ export function AppShell({
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
         <div className="sticky top-0 z-20 glass border-b border-border/50">
-          <div className="flex items-center gap-3 px-4 sm:px-6 py-3">
-            <Link to="/live" className="lg:hidden flex items-center gap-2 shrink-0">
-              <div className="size-8 rounded-lg bg-brand-gradient shadow-glow grid place-items-center">
-                <Tv className="size-4 text-primary-foreground" strokeWidth={2.25} />
+          <div className="flex items-center gap-2 px-2 sm:px-4 py-1.5">
+            <Link to="/live" className="lg:hidden flex items-center gap-1.5 shrink-0">
+              <div className="size-6 rounded-md bg-brand-gradient shadow-glow grid place-items-center">
+                <Tv className="size-3.5 text-primary-foreground" strokeWidth={2.25} />
               </div>
-              <span className="font-display font-bold tracking-tight">SoaresTV</span>
+              <span className="font-display font-bold text-xs tracking-tight">SoaresTV</span>
             </Link>
             {onSearch && (
               <div className="flex-1 max-w-md relative ml-auto lg:ml-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <Input
                   value={search ?? ""}
                   onChange={(e) => onSearch(e.target.value)}
                   placeholder={t("common.search")}
-                  className="pl-9 bg-white/5 border-white/10 rounded-full h-9"
+                  className="pl-8 bg-white/5 border-white/10 rounded-full h-7 text-xs"
                 />
               </div>
             )}
-            <div className="ml-auto shrink-0 flex items-center gap-1.5">
+            <div className="ml-auto shrink-0 flex items-center gap-1">
               <Link
                 to="/home"
                 title={t("common.home")}
                 aria-label={t("common.home")}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
               >
-                <Home className="size-4" />
+                <Home className="size-3.5" />
                 <span className="hidden sm:inline">{t("common.home")}</span>
               </Link>
               <LanguageSwitcher />
@@ -153,6 +153,7 @@ export function AppShell({
             </div>
           </div>
         </div>
+
 
         <div className="p-4 sm:p-6 flex-1 min-w-0">{children}</div>
       </main>
