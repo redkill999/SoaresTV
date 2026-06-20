@@ -305,7 +305,7 @@ function PlayerPage() {
             className="pointer-events-auto bg-player/45 backdrop-blur min-h-11 px-3 sm:px-4 text-sm sm:text-base"
           >
             <ArrowLeft className="size-4 sm:size-5" />
-            <span className="hidden xs:inline sm:inline">Voltar</span>
+            <span className="hidden sm:inline">Voltar</span>
           </Button>
         </div>
 
