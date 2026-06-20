@@ -340,3 +340,21 @@ export async function getShortEpg(c: XtreamCreds, streamId: number | string, lim
     description: e.description ? b64decode(e.description) : undefined,
   }));
 }
+
+/**
+ * Full EPG (24h+) for a single channel — uses Xtream `get_simple_data_table`.
+ * Each listing has start/stop in seconds (Unix epoch, as string).
+ */
+export async function getFullEpg(c: XtreamCreds, streamId: number | string): Promise<EpgListing[]> {
+  const r = await api<{ epg_listings?: Array<{ id: string; title: string; description?: string; start_timestamp: string; stop_timestamp: string }> }>(
+    c,
+    "get_simple_data_table",
+    { stream_id: streamId },
+  );
+  const list = r?.epg_listings ?? [];
+  return list.map((e) => ({
+    ...e,
+    title: b64decode(e.title),
+    description: e.description ? b64decode(e.description) : undefined,
+  }));
+}
