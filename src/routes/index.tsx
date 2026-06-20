@@ -200,6 +200,10 @@ function LoginPage() {
     setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
 
+  if (nativeSplash) {
+    return <NativeSplash onDone={() => setNativeSplash(false)} />;
+  }
+
   if (splash) {
     return (
       <div className="min-h-screen flex items-center justify-center">
