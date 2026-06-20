@@ -26,19 +26,12 @@
     Depois copie resources/tv-banner.png para
       android/app/src/main/res/drawable/tv_banner.png
 
-  • ANDROID STUDIO PURO: substitua o conteúdo do seu
-    AndroidManifest.xml pelo arquivo abaixo (ajustando o package e
-    o nome da Activity).
-
-  • MEDIAN.co: em "App Settings → Android → Manifest customizations"
-    adicione o <intent-filter> de LEANBACK_LAUNCHER e o atributo
-    android:banner. O Median expõe esses campos no painel.
-
-  • PWA BUILDER: ele lê automaticamente public/manifest.webmanifest.
-    Já configurado com display=standalone, categories=entertainment
-    e orientation=landscape. Após gerar o APK pelo PWA Builder,
-    abra o projeto baixado e cole o intent-filter de LEANBACK abaixo
-    no AndroidManifest.xml gerado.
+  IMPORTANTE — REMOVER SPLASH ESTÁTICO
+  ------------------------------------
+  A MainActivity usa `android:theme="@style/AppTheme.NoActionBar"` (sem
+  `Launch`) para que o Android NÃO mostre a imagem `@drawable/splash`
+  antes da WebView carregar. Se quiser mostrar uma logo estática de
+  novo, volte para `AppTheme.NoActionBarLaunch`.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.soarestv.app">
@@ -84,7 +77,7 @@
             android:screenOrientation="landscape"
             android:resizeableActivity="false"
             android:exported="true"
-            android:theme="@style/AppTheme.NoActionBarLaunch">
+            android:theme="@style/AppTheme.NoActionBar">
 
             <!-- Launcher de celular/tablet -->
             <intent-filter>

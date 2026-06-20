@@ -24,6 +24,18 @@ const config: CapacitorConfig = {
     ScreenOrientation: {
       orientation: 'landscape',
     },
+    // Desativa o splash nativo do Android (a logo estática que aparecia
+    // antes da animação React). Agora o APK abre direto numa tela preta
+    // e a animação splash/login da WebView entra em seguida.
+    SplashScreen: {
+      launchShowDuration: 0,
+      launchAutoHide: true,
+      showSpinner: false,
+      androidSplashResourceName: 'splash',
+      splashFullScreen: true,
+      splashImmersive: true,
+      backgroundColor: '#000000',
+    },
   },
 };
 
