@@ -116,7 +116,7 @@ export function AppShell({
         </button>
       </aside>
 
-      <main className="flex-1 min-w-0 flex flex-col pb-24 lg:pb-0">
+      <main className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
         <div className="sticky top-0 z-20 glass border-b border-border/50">
           <div className="flex items-center gap-3 px-4 sm:px-6 py-3">
