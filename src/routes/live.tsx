@@ -9,6 +9,7 @@ import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
+import { useProgressive } from "@/hooks/use-progressive";
 import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
@@ -119,18 +120,34 @@ function LivePage() {
                 Nenhum canal encontrado.
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-                {filtered.map((s) => (
-                  <XciptvTile
-                    key={s.stream_id}
-                    type="live"
-                    id={String(s.stream_id)}
-                    name={s.name}
-                    image={s.stream_icon}
-                  />
-                ))}
-              </div>
+              <LiveGrid filtered={filtered} />
             )}
+          </div>
+        </div>
+      )}
+    </div></AppShell>
+  );
+}
+
+function LiveGrid({ filtered }: { filtered: LiveStream[] }) {
+  const { visible, sentinelRef, hasMore } = useProgressive(filtered);
+  return (
+    <>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+        {visible.map((s) => (
+          <XciptvTile
+            key={s.stream_id}
+            type="live"
+            id={String(s.stream_id)}
+            name={s.name}
+            image={s.stream_icon}
+          />
+        ))}
+      </div>
+      {hasMore && <div ref={sentinelRef} className="h-8" />}
+    </>
+  );
+}
           </div>
         </div>
       )}
