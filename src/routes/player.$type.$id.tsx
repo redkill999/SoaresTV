@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
-import { store, type XtreamCreds, type FavItem } from "@/lib/storage";
+import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl, getShortEpg, isNativeApp, type EpgListing } from "@/lib/xtream";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import { Clock, ExternalLink } from "lucide-react";
