@@ -202,6 +202,10 @@ function LoginPage() {
     setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
 
+  if (!splashReady) {
+    return <div className="min-h-screen bg-background" />;
+  }
+
   if (nativeSplash) {
     return <NativeSplash onDone={() => setNativeSplash(false)} />;
   }
