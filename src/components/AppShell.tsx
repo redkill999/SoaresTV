@@ -172,20 +172,20 @@ export function AppShell({
                   to={n.to}
                   data-nav-item="true"
                   data-active={active ? "true" : "false"}
-                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors outline-none ${
+                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 min-h-[56px] text-[10px] font-medium transition-colors outline-none ${
                     active
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span
-                    className={`grid place-items-center size-9 rounded-xl transition-all ${
+                    className={`grid place-items-center size-10 rounded-xl transition-all ${
                       active
                         ? "bg-brand-gradient shadow-glow text-primary-foreground"
                         : ""
                     }`}
                   >
-                    <Icon className="size-[18px]" />
+                    <Icon className="size-5" />
                   </span>
                   <span className="tracking-wide">{t(n.labelKey)}</span>
                 </Link>
