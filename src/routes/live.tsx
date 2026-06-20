@@ -91,7 +91,7 @@ function LivePage() {
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
 
   return (
-    <div className="min-h-dvh xciptv-bg text-white">
+    <AppShell><div className="-m-4 sm:-m-6 min-h-[calc(100dvh-3rem)] xciptv-bg text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
