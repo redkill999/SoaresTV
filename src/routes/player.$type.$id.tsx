@@ -38,6 +38,8 @@ function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
+  const router = useRouter();
+
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
