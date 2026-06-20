@@ -136,8 +136,9 @@ const TV_MODE_SCRIPT = `(function(){
       var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox/.test(ua);
       // Dentro do APK (Capacitor) sempre tratamos como TV pra replicar o layout do XCIPTV.
       var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-      // TV mode: smart TV UA, app nativo, OU tela grande landscape sem touch.
-      var isTV = isNative || isSmartTV || (!isPhoneOrTablet && maxDim >= 1280 && minDim >= 720);
+      // TV mode: somente app nativo (APK) ou Smart TV real via UA.
+      // Navegador desktop fica em layout responsivo normal (igual ao do celular).
+      var isTV = isNative || isSmartTV;
       var html = document.documentElement;
       if (isSmartTV) html.setAttribute && document.documentElement.setAttribute('data-smart-tv','');
 
