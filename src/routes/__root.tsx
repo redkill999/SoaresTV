@@ -78,6 +78,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
+      // Anti-cache: WebView do APK (Website 2 APK Builder, Median, etc.) NAO deve
+      // guardar codigo-fonte antigo. Forca buscar HTML/JS/CSS sempre frescos.
+      { httpEquiv: "Cache-Control", content: "no-cache, no-store, must-revalidate, max-age=0" },
+      { httpEquiv: "Pragma", content: "no-cache" },
+      { httpEquiv: "Expires", content: "0" },
       // viewport is set dynamically by TV_MODE_SCRIPT (mobile -> width=1280, else width=device-width)
       { title: "SoaresTV — IPTV Player" },
       { name: "description", content: "Player IPTV web com Xtream Codes, M3U, EPG, filmes e séries." },
