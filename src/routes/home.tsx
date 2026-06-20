@@ -192,8 +192,8 @@ function HomePage() {
       {/* Main 4 tiles */}
       <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
         <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4">
-          {MAIN.map((t) => (
-            <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
+          {MAIN.map((t, i) => (
+            <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
         </div>
       </main>
