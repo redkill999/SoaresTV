@@ -59,19 +59,17 @@ function LoginPage() {
     // Splash animado estilo XCIPTV: ~2.8s no APK Android (celular/TV),
     // splash curto de 600ms na web (sem mudar o que já funciona).
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     void isNativeApp().then((native) => {
       if (cancelled) return;
       if (native) {
         setNativeSplash(true);
         setSplash(false);
       } else {
-        const t = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
-        // store timer ref on closure cleanup
-        (cleanupRef as { t?: ReturnType<typeof setTimeout> }).t = t;
+        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
       }
     });
-    const cleanupRef: { t?: ReturnType<typeof setTimeout> } = {};
-    return () => { cancelled = true; if (cleanupRef.t) clearTimeout(cleanupRef.t); };
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [navigate]);
 
   const onXtream = async (e: React.FormEvent) => {
