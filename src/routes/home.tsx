@@ -75,7 +75,7 @@ function HomePage() {
     const body = document.body;
     const prevHtmlBg = html.style.background;
     const prevBodyBg = body.style.background;
-    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    const bg = `url(${homeBg.url}) center/100% 100% no-repeat #082968`;
     html.style.background = bg;
     body.style.background = bg;
     return () => {
@@ -155,11 +155,12 @@ function HomePage() {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Background image */}
+      {/* Background image — stretched to fill so toda a arte aparece igual ao desktop,
+          sem corte nas bordas em celular/TV (cover cortaria as laterais ou topo/base). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${homeBg.url})` }}
+        className="pointer-events-none absolute inset-0 bg-no-repeat bg-center"
+        style={{ backgroundImage: `url(${homeBg.url})`, backgroundSize: "100% 100%" }}
       />
       {/* Subtle darken to keep tiles readable */}
       <div
