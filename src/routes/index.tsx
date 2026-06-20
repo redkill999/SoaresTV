@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/")({
@@ -30,6 +31,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [splash, setSplash] = useState(true);
+  const [nativeSplash, setNativeSplash] = useState(false);
 
   // Xtream state
   const [server, setServer] = useState("");
@@ -54,8 +56,20 @@ function LoginPage() {
       navigate({ to: "/loading", replace: true });
       return;
     }
-    const splashTimer = setTimeout(() => setSplash(false), 600);
-    return () => clearTimeout(splashTimer);
+    // Splash animado estilo XCIPTV: ~2.8s no APK Android (celular/TV),
+    // splash curto de 600ms na web (sem mudar o que já funciona).
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    void isNativeApp().then((native) => {
+      if (cancelled) return;
+      if (native) {
+        setNativeSplash(true);
+        setSplash(false);
+      } else {
+        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
+      }
+    });
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [navigate]);
 
   const onXtream = async (e: React.FormEvent) => {
@@ -185,6 +199,10 @@ function LoginPage() {
     setM3uName("IPTV-Org (teste)");
     setM3uUrl("https://iptv-org.github.io/iptv/index.m3u");
   };
+
+  if (nativeSplash) {
+    return <NativeSplash onDone={() => setNativeSplash(false)} />;
+  }
 
   if (splash) {
     return (
