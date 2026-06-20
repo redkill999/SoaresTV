@@ -591,32 +591,120 @@ function PlayerSettingsDialog({ open, onClose }: { open: boolean; onClose: () =>
 
 function PlayerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [s, set] = useAppSettings();
-  const options: { v: PlayerChoice; t: string; d: string }[] = [
-    { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
-    { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void import("@/lib/xtream").then(({ isNativeApp }) =>
+      isNativeApp().then((n) => { if (alive) setIsNative(n); }),
+    );
+    return () => { alive = false; };
+  }, []);
+
+  const [draft, setDraft] = useState(s.categoryPlayers);
+  useEffect(() => { if (open) setDraft(s.categoryPlayers); }, [open, s.categoryPlayers]);
+
+  const rows: { k: keyof typeof draft; label: string }[] = [
+    { k: "live",        label: "Live TV" },
+    { k: "vod",         label: "VOD" },
+    { k: "series",      label: "Series" },
+    { k: "catchup",     label: "Catchup" },
+    { k: "multiscreen", label: "Multi-Screen" },
   ];
+
+  // Fallback web: mantém o seletor original interno/externo.
+  if (!isNative) {
+    const options: { v: PlayerChoice; t: string; d: string }[] = [
+      { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
+      { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
+    ];
+    return (
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Player</DialogTitle>
+            <DialogDescription>Escolha o reprodutor padrão.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {options.map((o) => (
+              <button
+                key={o.v}
+                onClick={() => { set({ defaultPlayer: o.v }); toast.success(`Player: ${o.t}`); onClose(); }}
+                className={`w-full text-left rounded-lg p-3 border transition ${s.defaultPlayer === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{o.t}</span>
+                  {s.defaultPlayer === o.v && <CheckCircle2 className="size-4 text-primary" />}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const Radio = ({ checked, color }: { checked: boolean; color: string }) => (
+    <span
+      className={`inline-flex size-5 items-center justify-center rounded-full border-2 transition`}
+      style={{ borderColor: color }}
+      aria-hidden
+    >
+      {checked && <span className="size-2.5 rounded-full" style={{ background: color }} />}
+    </span>
+  );
+
+  const save = () => {
+    set({ categoryPlayers: draft });
+    toast.success("Player atualizado");
+    onClose();
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Player</DialogTitle>
-          <DialogDescription>Escolha o reprodutor padrão.</DialogDescription>
+      <DialogContent className="max-w-md border-white/10 bg-[#0b1220] p-0 text-white">
+        <DialogHeader className="px-5 pt-5">
+          <DialogTitle className="text-sm font-semibold tracking-[0.25em] text-white/90">
+            PLAYER
+          </DialogTitle>
+          <DialogDescription className="text-white/60">
+            Escolha o player por categoria.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          {options.map((o) => (
-            <button
-              key={o.v}
-              onClick={() => { set({ defaultPlayer: o.v }); toast.success(`Player: ${o.t}`); onClose(); }}
-              className={`w-full text-left rounded-lg p-3 border transition ${s.defaultPlayer === o.v ? "bg-primary/15 border-primary" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{o.t}</span>
-                {s.defaultPlayer === o.v && <CheckCircle2 className="size-4 text-primary" />}
+
+        <div className="divide-y divide-white/5">
+          {rows.map((r) => (
+            <div key={r.k} className="flex items-center justify-between px-5 py-3">
+              <span className="text-sm text-white/85">{r.label}</span>
+              <div className="flex items-center gap-6">
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, [r.k]: "exo" })}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <Radio checked={draft[r.k] === "exo"} color="#22d3ee" />
+                  <span className="font-medium text-cyan-300">EXO Player</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, [r.k]: "vlc" })}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <Radio checked={draft[r.k] === "vlc"} color="#f97316" />
+                  <span className="font-medium text-orange-400">VLC Player</span>
+                </button>
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{o.d}</div>
-            </button>
+            </div>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={save}
+          className="w-full bg-[#b71c3a] py-3 text-center text-sm font-semibold tracking-[0.3em] text-white transition hover:bg-[#9e1632]"
+        >
+          OK
+        </button>
       </DialogContent>
     </Dialog>
   );
