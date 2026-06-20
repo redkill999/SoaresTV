@@ -244,10 +244,10 @@ function MainTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-2 rounded-xl border border-white/70 bg-white/[0.04] px-4 py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
+      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
     >
-      <Icon className="size-10 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
-      <span className="text-sm font-semibold tracking-[0.18em] sm:text-base">{tile.label}</span>
+      <Icon className="size-8 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
+      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em]">{tile.label}</span>
     </button>
   );
 }
