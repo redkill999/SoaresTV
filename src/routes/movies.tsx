@@ -98,7 +98,7 @@ function MoviesPage() {
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
-    <div className="min-h-dvh xciptv-bg text-white">
+    <AppShell><div className="-m-4 sm:-m-6 min-h-[calc(100dvh-3rem)] xciptv-bg text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
       <div className="flex flex-col sm:flex-row gap-3 px-3 sm:px-5 pb-6">
         <XciptvCategoryList
