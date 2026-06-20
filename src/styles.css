@@ -352,16 +352,17 @@ div[style*="Edit with Lovable"],
   box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 18px rgba(59, 130, 246, 0.35) !important;
 }
 
-/* Em TV mode o nav-item focado usa o amarelo, igual ao resto da TV */
+/* Em TV mode o nav-item focado usa o amarelo, igual ao resto da TV (inset p/ não ser cortado) */
 [data-tv-mode] [data-nav-item]:focus,
 [data-tv-mode] [data-nav-item]:focus-visible,
 [data-smart-tv] [data-nav-item]:focus,
 [data-smart-tv] [data-nav-item]:focus-visible {
   outline: 4px solid var(--tv-focus) !important;
-  background-color: rgba(255, 214, 10, 0.18) !important;
+  outline-offset: -4px !important;
+  background-color: rgba(255, 214, 10, 0.22) !important;
+  color: #000 !important;
   box-shadow:
-    0 0 0 2px #000,
-    0 0 0 8px var(--tv-focus-glow),
-    0 0 28px var(--tv-focus-glow) !important;
+    inset 0 0 0 2px #000,
+    inset 0 0 0 6px var(--tv-focus) !important;
 }
 
