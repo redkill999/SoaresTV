@@ -190,6 +190,10 @@ html[data-tv-mode] *::-webkit-scrollbar {
   height: 0;
   display: none;
 }
+html[data-smart-tv] .tv-hide,
+html[data-tv-mode] .tv-hide {
+  display: none !important;
+}
 @media (hover: none) {
   *:hover { transition: none !important; }
 }
