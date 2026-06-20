@@ -9,9 +9,16 @@ export function NativeSplash({ onDone, duration = 2800 }: { onDone: () => void; 
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setLeaving(true), duration - 350);
-    const t2 = setTimeout(onDone, duration);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    let t1: ReturnType<typeof setTimeout> | undefined;
+    let t2: ReturnType<typeof setTimeout> | undefined;
+    try {
+      t1 = setTimeout(() => { try { setLeaving(true); } catch {} }, Math.max(0, duration - 350));
+      t2 = setTimeout(() => { try { onDone(); } catch {} }, duration);
+    } catch {
+      // Em WebViews antigas qualquer falha aqui não pode segurar o app — libera na hora.
+      try { onDone(); } catch {}
+    }
+    return () => { if (t1) clearTimeout(t1); if (t2) clearTimeout(t2); };
   }, [duration, onDone]);
 
   return (
