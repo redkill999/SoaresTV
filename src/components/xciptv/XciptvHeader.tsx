@@ -48,9 +48,9 @@ export function XciptvHeader({
           type="button"
           onClick={handleBack}
           aria-label="Voltar"
-          className="shrink-0 grid place-items-center size-8 sm:size-9 rounded-md bg-black/40 border border-white/15 text-white/90 hover:text-[#1FB6FF] hover:border-[#1FB6FF]/60 transition-colors"
+          className="shrink-0 grid place-items-center size-9 sm:size-10 rounded-md bg-black/40 border border-white/15 text-white/90 hover:text-[#1FB6FF] hover:border-[#1FB6FF]/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1FB6FF] focus-visible:border-[#1FB6FF] active:scale-95 transition-all touch-manipulation"
         >
-          <ArrowLeft className="size-4 sm:size-5" />
+          <ArrowLeft className="size-5" />
         </button>
         <div className="min-w-0 flex flex-col">
           <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
