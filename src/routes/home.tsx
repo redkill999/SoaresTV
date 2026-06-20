@@ -170,17 +170,17 @@ function HomePage() {
 
 
       {/* Top bar */}
-      <header className="relative z-10 flex items-start justify-between px-6 pt-5">
-        <div className="w-40" />
-        <div className="flex flex-col items-center">
-          <div className="grid size-14 place-items-center rounded-full bg-white/10 ring-2 ring-white/30 backdrop-blur">
-            <Tv className="size-7 text-white" strokeWidth={2.2} />
+      <header className="relative z-10 flex items-start justify-between gap-2 px-3 pt-3 sm:px-6 sm:pt-5">
+        <div className="hidden sm:block w-40 shrink-0" />
+        <div className="flex flex-col items-center min-w-0">
+          <div className="grid size-11 sm:size-14 place-items-center rounded-full bg-white/10 ring-2 ring-white/30 backdrop-blur">
+            <Tv className="size-5 sm:size-7 text-white" strokeWidth={2.2} />
           </div>
-          <div className="mt-1 font-display text-[11px] font-bold tracking-[0.35em] text-white/90">
+          <div className="mt-1 font-display text-[10px] sm:text-[11px] font-bold tracking-[0.3em] sm:tracking-[0.35em] text-white/90">
             SOARES TV
           </div>
         </div>
-        <div className="flex w-40 items-start justify-end gap-2.5">
+        <div className="flex flex-wrap items-start justify-end gap-x-1.5 gap-y-1 sm:gap-2.5 sm:w-40 shrink-0 max-w-[55%]">
           <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
           <StatusIcon icon={Video}      label="REC"    active={recOn}        activeColor="bg-red-500"     onClick={() => handleStatus("rec")} />
           <StatusIcon icon={Lock}       label="VPN"                                                       onClick={() => handleStatus("vpn")} />
@@ -257,10 +257,10 @@ function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex aspect-square w-[68px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 sm:w-[78px]"
+      className="flex aspect-square w-[56px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 sm:w-[78px]"
     >
-      <Icon className="size-6 sm:size-7" strokeWidth={1.7} />
-      <span className="text-[9px] font-semibold tracking-widest sm:text-[10px]">{tile.label}</span>
+      <Icon className="size-5 sm:size-7" strokeWidth={1.7} />
+      <span className="text-[8px] font-semibold tracking-widest sm:text-[10px]">{tile.label}</span>
     </button>
   );
 }

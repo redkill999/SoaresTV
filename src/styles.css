@@ -254,6 +254,22 @@ html[data-tv-mode] body .min-h-dvh { min-height: 720px !important; }
 html[data-tv-mode] body .h-dvh { height: 720px !important; }
 html[data-tv-mode] body .w-dvw { width: 1280px !important; }
 
+/* Responsividade — diálogos shadcn não podem estourar a altura em landscape
+   de celular pequeno (≈360px). Aplica em todo DialogContent sem precisar
+   tocar em cada caller. Não afeta TV mode (canvas 1280x720 — sobra altura). */
+[role="dialog"][data-state="open"] {
+  max-height: calc(100dvh - 2rem) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+@media (max-height: 480px) {
+  [role="dialog"][data-state="open"] {
+    max-height: calc(100dvh - 0.75rem) !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+}
+
 
 
 
