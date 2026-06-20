@@ -207,6 +207,11 @@ function handleKey(e: KeyboardEvent) {
       window.dispatchEvent(new CustomEvent("soarestv:player-back"));
       return;
     }
+    if (["/live", "/movies", "/series"].includes(window.location.pathname)) {
+      window.history.pushState(null, "", "/home");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      return;
+    }
     if (window.history.length > 1) window.history.back();
     return;
   }

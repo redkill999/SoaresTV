@@ -222,6 +222,10 @@ function RootComponent() {
       void import("@capacitor/app")
         .then(({ App }) => {
           App.addListener("backButton", () => {
+            if (["/live", "/movies", "/series"].includes(window.location.pathname)) {
+              void router.navigate({ to: "/home" });
+              return;
+            }
             if (window.history.length > 1) {
               router.history.back();
             } else {
