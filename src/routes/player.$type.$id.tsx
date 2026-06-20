@@ -251,8 +251,8 @@ function PlayerPage() {
     };
   }, [closePlayer]);
 
-  const favType: FavItem["type"] = type ?? "movie";
-  const fav = useIsFavorite(favType, id) && !!type;
+  // (Favorito agora é gerenciado fora do player)
+  void useIsFavorite;
 
 
   return (
