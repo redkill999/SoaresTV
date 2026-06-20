@@ -30,8 +30,9 @@ export const Route = createFileRoute("/")({
 function LoginPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [splash, setSplash] = useState(true);
+  const [splash, setSplash] = useState(false);
   const [nativeSplash, setNativeSplash] = useState(false);
+  const [splashReady, setSplashReady] = useState(false);
 
   // Xtream state
   const [server, setServer] = useState("");
