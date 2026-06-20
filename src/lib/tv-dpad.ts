@@ -111,6 +111,12 @@ function pickNearest(current: HTMLElement, dir: Dir): HTMLElement | null {
 }
 
 function focusFirst(): boolean {
+  // 1) Respeita um alvo explícito marcado pela página (ex.: tile principal da home)
+  const preferred = document.querySelector<HTMLElement>("[data-tv-default-focus]");
+  if (preferred && isVisible(preferred)) {
+    preferred.focus({ preventScroll: false });
+    return true;
+  }
   const list = visibleFocusables();
   // Prefere o primeiro elemento visível "acima da dobra"
   const inView = list.find((el) => {
