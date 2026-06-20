@@ -177,13 +177,13 @@ function NavItem({
       to={to}
       data-nav-item="true"
       data-active={active ? "true" : "false"}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all outline-none ${
+      className={`flex items-center gap-2 px-2.5 py-2 rounded-md text-xs transition-all outline-none ${
         active
           ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
           : "text-muted-foreground hover:text-foreground"
       }`}
     >
-      <Icon className="size-4 shrink-0" />
+      <Icon className="size-3.5 shrink-0" />
       <span className="truncate">{label}</span>
     </Link>
   );
