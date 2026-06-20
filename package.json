@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "android:fix-splash": "bash scripts/fix-android-splash.sh",
+    "android:sync": "bunx cap sync android && bash scripts/fix-android-splash.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
