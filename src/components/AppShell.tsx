@@ -73,10 +73,10 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-dvh flex">
+    <div className="h-dvh overflow-hidden flex">
       {/* Sidebar removida — navegação principal acontece pelo header XCIPTV / topo */}
 
-      <main className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* Top bar */}
         <div className="sticky top-0 z-20 glass border-b border-border/50">
           <div className="flex items-center gap-2 px-2 sm:px-4 py-1.5">
