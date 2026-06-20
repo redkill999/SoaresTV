@@ -151,8 +151,3 @@ function MovieGrid({ filtered }: { filtered: VodStream[] }) {
     </>
   );
 }
-        </div>
-      </div>
-    </div></AppShell>
-  );
-}

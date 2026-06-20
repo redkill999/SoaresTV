@@ -161,8 +161,3 @@ function SeriesGrid({ filtered }: { filtered: Series[] }) {
     </>
   );
 }
-        </div>
-      </div>
-    </div></AppShell>
-  );
-}

@@ -148,9 +148,3 @@ function LiveGrid({ filtered }: { filtered: LiveStream[] }) {
     </>
   );
 }
-          </div>
-        </div>
-      )}
-    </div></AppShell>
-  );
-}
