@@ -75,7 +75,7 @@ function HomePage() {
     const body = document.body;
     const prevHtmlBg = html.style.background;
     const prevBodyBg = body.style.background;
-    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    const bg = `url(${homeBg.url}) center/100% 100% no-repeat #082968`;
     html.style.background = bg;
     body.style.background = bg;
     return () => {
