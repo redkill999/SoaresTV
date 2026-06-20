@@ -170,14 +170,16 @@ export function AppShell({
               <li key={n.to}>
                 <Link
                   to={n.to}
-                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors outline-none focus-visible:text-[#3b82f6] ${
+                  data-nav-item="true"
+                  data-active={active ? "true" : "false"}
+                  className={`group flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors outline-none ${
                     active
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span
-                    className={`grid place-items-center size-9 rounded-xl transition-all group-focus-visible:bg-[#3b82f6] group-focus-visible:text-white group-focus-visible:ring-2 group-focus-visible:ring-[#3b82f6]/60 ${
+                    className={`grid place-items-center size-9 rounded-xl transition-all ${
                       active
                         ? "bg-brand-gradient shadow-glow text-primary-foreground"
                         : ""
