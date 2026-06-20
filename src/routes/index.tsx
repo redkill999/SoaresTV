@@ -261,9 +261,9 @@ function LoginPage() {
             </p>
           </div>
           <ul className="space-y-2.5 text-sm text-white/95">
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat1")}</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat2")}</li>
-            <li className="flex items-center gap-2"><PlayIcon className="size-4" /> {t("auth.feat3")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat1")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat2")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat3")}</li>
           </ul>
         </div>
 

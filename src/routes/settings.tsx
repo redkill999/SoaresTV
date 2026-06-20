@@ -797,7 +797,7 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           )}
         </div>
-        <Button onClick={run} disabled={running} className="bg-brand-gradient w-full">
+        <Button onClick={() => void run()} disabled={running} className="bg-brand-gradient w-full">
           {running ? "Testando…" : "Refazer teste"}
         </Button>
       </DialogContent>
