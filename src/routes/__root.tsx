@@ -208,6 +208,17 @@ function RootComponent() {
       // eslint-disable-next-line no-new-func
       new Function(TV_MODE_SCRIPT)();
     } catch {}
+    // Global error guard — evita que uma exception não tratada derrube
+    // a WebView do APK em aparelhos Android antigos. Só loga (logcat captura).
+    if (!(window as any).__globalErrGuardBound) {
+      (window as any).__globalErrGuardBound = true;
+      window.addEventListener("error", (ev) => {
+        try { console.error("[GlobalError]", ev.message, ev.error); } catch {}
+      });
+      window.addEventListener("unhandledrejection", (ev) => {
+        try { console.error("[UnhandledRejection]", (ev as PromiseRejectionEvent).reason); } catch {}
+      });
+    }
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
