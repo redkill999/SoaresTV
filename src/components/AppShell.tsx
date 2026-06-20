@@ -75,34 +75,34 @@ export function AppShell({
   return (
     <div className="min-h-dvh flex">
       {/* Sidebar — desktop */}
-      <aside className="w-64 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-5 sticky top-0 h-dvh">
-        <Link to="/home" className="flex items-center gap-3 mb-10">
-          <div className="size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center">
-            <Tv className="size-5 text-primary-foreground" strokeWidth={2.25} />
+      <aside className="w-52 shrink-0 hidden lg:flex flex-col glass border-r border-border/50 p-3 sticky top-0 h-dvh">
+        <Link to="/home" className="flex items-center gap-2 mb-6">
+          <div className="size-8 rounded-lg bg-brand-gradient shadow-glow grid place-items-center">
+            <Tv className="size-4 text-primary-foreground" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
-            <div className="font-display font-bold text-lg tracking-tight leading-none">
+            <div className="font-display font-bold text-sm tracking-tight leading-none">
               SoaresTV
             </div>
-            <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="mt-0.5 text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
               IPTV Player
             </div>
           </div>
         </Link>
 
-        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-2 px-2">
+        <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70 mb-1 px-2">
           {t("nav.library")}
         </div>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-0.5">
           {PRIMARY_NAV.map((n) => (
             <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
           ))}
         </nav>
 
-        <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mt-6 mb-2 px-2">
+        <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground/70 mt-4 mb-1 px-2">
           {t("nav.general")}
         </div>
-        <nav className="flex flex-col gap-1 flex-1">
+        <nav className="flex flex-col gap-0.5 flex-1">
           {SECONDARY_NAV.map((n) => (
             <NavItem key={n.to} to={n.to} label={t(n.labelKey)} icon={n.icon} active={isActive(n.to)} />
           ))}
@@ -110,9 +110,9 @@ export function AppShell({
 
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-white/5 transition-colors"
         >
-          <LogOut className="size-4" />
+          <LogOut className="size-3.5" />
           {t("common.signOut")}
         </button>
       </aside>
@@ -177,13 +177,13 @@ function NavItem({
       to={to}
       data-nav-item="true"
       data-active={active ? "true" : "false"}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all outline-none ${
+      className={`flex items-center gap-2 px-2.5 py-2 rounded-md text-xs transition-all outline-none ${
         active
           ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
           : "text-muted-foreground hover:text-foreground"
       }`}
     >
-      <Icon className="size-4 shrink-0" />
+      <Icon className="size-3.5 shrink-0" />
       <span className="truncate">{label}</span>
     </Link>
   );
