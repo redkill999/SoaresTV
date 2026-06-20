@@ -210,7 +210,7 @@ function NavItem({
   return (
     <Link
       to={to}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all outline-none focus-visible:bg-[#3b82f6] focus-visible:text-white focus-visible:ring-2 focus-visible:ring-[#3b82f6]/70 focus-visible:shadow-[0_0_0_2px_rgba(59,130,246,0.35)] ${
         active
           ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
           : "text-muted-foreground hover:text-foreground hover:bg-white/5"
