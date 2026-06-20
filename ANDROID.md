@@ -66,3 +66,40 @@ O APK de debug serve para testar no seu celular. Para distribuir (Play Store ou 
 - **Tela branca ao abrir**: o app está tentando carregar o site mas está sem internet. Conecte e tente de novo.
 - **Vídeos não tocam**: o WebView do Android tem limitações com HLS. Se precisar player nativo, depois a gente instala `@capacitor-community/video-player`.
 - **Quer empacotar offline (sem depender do site)?** Edite `capacitor.config.ts` e remova o bloco `server`. Depois `bun run build && bunx cap sync android`. ⚠️ Isso quebra as server functions — precisaria refatorar o backend.
+
+---
+
+## 📺 Android TV (TCL, Sony, Xiaomi, Google TV, Fire TV)
+
+**Sintoma:** o app instala, abre na primeira vez, mas depois de fechar e
+ligar a TV de novo o ícone **some** do launcher (continua em
+*Configurações → Apps → Ver todos*, mas não na tela inicial).
+
+**Causa:** o APK não declara `LEANBACK_LAUNCHER` nem `banner`. Sem isso,
+o launcher de TV não cria atalho permanente.
+
+**Solução (vale para Capacitor, Android Studio puro, Median.co e PWA Builder):**
+
+Tudo pronto em `android-template/` na raiz do projeto:
+
+- `android-template/AndroidManifest.xml` — template comentado com
+  `LEANBACK_LAUNCHER`, `android:banner` e `uses-feature` corretos.
+- `resources/tv-banner.png` — banner 320×180 (já gerado).
+- `resources/icon.png` — ícone 1024×1024 (já gerado).
+- `public/manifest.webmanifest` — manifesto PWA com
+  `display: standalone`, `orientation: landscape` e
+  `categories: ["entertainment","video"]` (lido pelo PWA Builder e Median).
+
+Veja `android-template/README.md` para o passo-a-passo de **cada um dos
+4 caminhos de build**. Resumo:
+
+| Caminho           | O que fazer                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| Capacitor         | Colar `<intent-filter>` LEANBACK + `android:banner` no `AndroidManifest.xml` gerado por `cap add android`, copiar `tv-banner.png` para `res/drawable/`, rodar `capacitor-assets generate --android`. |
+| Android Studio    | Substituir o `AndroidManifest.xml` pelo template, copiar `tv-banner.png` para `res/drawable/`.        |
+| Median.co         | Painel: **Custom Manifest Entries** → colar intent-filter LEANBACK e `android:banner`. Upload do banner em **Branding → TV Banner**. |
+| PWA Builder       | Já lê o `manifest.webmanifest` automaticamente. No projeto Android baixado, colar o intent-filter LEANBACK no `AndroidManifest.xml`. |
+
+Depois de instalar o novo APK, reinicie a TV uma vez — o ícone aparece
+na linha "Seus apps" e **continua lá** nas próximas vezes.
+

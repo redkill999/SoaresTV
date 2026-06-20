@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  =====================================================================
+  TEMPLATE de AndroidManifest.xml pronto para Android TV (Leanback)
+  =====================================================================
+
+  Para que o app apareça e CONTINUE aparecendo no launcher das TVs
+  Android (TCL, Sony, Xiaomi, Google TV, Fire TV, etc.) é preciso:
+
+    1. <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+       na activity principal (além do LAUNCHER normal de celular).
+    2. android:banner="@drawable/tv_banner" no <application>.
+       Banner OBRIGATÓRIO de 320x180 px em res/drawable/tv_banner.png.
+    3. <uses-feature android:name="android.software.leanback" required="false" />
+       (required="false" para também rodar em celulares).
+    4. <uses-feature android:name="android.hardware.touchscreen" required="false" />
+       (TVs não têm touch — sem isso, alguns launchers escondem o app).
+
+  COMO USAR
+  ---------
+  • CAPACITOR: depois de `bunx cap add android`, abra
+    android/app/src/main/AndroidManifest.xml e copie:
+      - os <uses-feature> abaixo para dentro de <manifest>
+      - o atributo android:banner para dentro de <application>
+      - o segundo <intent-filter> (LEANBACK_LAUNCHER) para a MainActivity
+    Depois copie resources/tv-banner.png para
+      android/app/src/main/res/drawable/tv_banner.png
+
+  • ANDROID STUDIO PURO: substitua o conteúdo do seu
+    AndroidManifest.xml pelo arquivo abaixo (ajustando o package e
+    o nome da Activity).
+
+  • MEDIAN.co: em "App Settings → Android → Manifest customizations"
+    adicione o <intent-filter> de LEANBACK_LAUNCHER e o atributo
+    android:banner. O Median expõe esses campos no painel.
+
+  • PWA BUILDER: ele lê automaticamente public/manifest.webmanifest.
+    Já configurado com display=standalone, categories=entertainment
+    e orientation=landscape. Após gerar o APK pelo PWA Builder,
+    abra o projeto baixado e cole o intent-filter de LEANBACK abaixo
+    no AndroidManifest.xml gerado.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.soarestv.app">
+
+    <!-- Permissões básicas do player IPTV -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ===== TV compatibility ===== -->
+    <!-- Habilita o app no launcher Leanback das Android TVs -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <!-- TVs não têm touch — required=false mantém o app em celular E TV -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.faketouch"
+        android:required="false" />
+    <!-- Controle remoto / D-pad -->
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:banner="@drawable/tv_banner">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:exported="true"
+            android:theme="@style/AppTheme.NoActionBarLaunch">
+
+            <!-- Launcher de celular/tablet -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Launcher Android TV / Google TV / Fire TV (OBRIGATÓRIO) -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
