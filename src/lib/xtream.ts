@@ -46,13 +46,15 @@ type NativeHttpResponse = { status: number; data: unknown };
 
 function hasWindowNativeBridge(): boolean {
   if (typeof window === "undefined") return false;
-  const cap = (window as typeof window & {
-    Capacitor?: {
-      isNativePlatform?: () => boolean;
-      getPlatform?: () => string;
-      isPluginAvailable?: (name: string) => boolean;
-    };
-  }).Capacitor;
+  const cap = (
+    window as typeof window & {
+      Capacitor?: {
+        isNativePlatform?: () => boolean;
+        getPlatform?: () => string;
+        isPluginAvailable?: (name: string) => boolean;
+      };
+    }
+  ).Capacitor;
   return !!(
     cap?.isNativePlatform?.() ||
     cap?.getPlatform?.() === "android" ||
@@ -63,7 +65,10 @@ function hasWindowNativeBridge(): boolean {
 function isAndroidWebViewShell(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  return /android/i.test(ua) && (/\bwv\b/i.test(ua) || /version\/\d+(?:\.\d+)?.*chrome\/\d+.*mobile safari/i.test(ua));
+  return (
+    /android/i.test(ua) &&
+    (/\bwv\b/i.test(ua) || /version\/\d+(?:\.\d+)?.*chrome\/\d+.*mobile safari/i.test(ua))
+  );
 }
 
 async function canUseNativeHttp(): Promise<boolean> {
@@ -152,7 +157,20 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   const candidates = new Set<string>([base]);
   try {
     const u = new URL(base);
-    for (const port of ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"]) {
+    for (const port of [
+      "",
+      "80",
+      "8080",
+      "8081",
+      "8880",
+      "25461",
+      "2052",
+      "2082",
+      "2095",
+      "8000",
+      "8001",
+      "8088",
+    ]) {
       candidates.add(`http://${u.hostname}${port ? `:${port}` : ""}`);
     }
   } catch {
@@ -191,7 +209,8 @@ export async function api<T = unknown>(
   if (!r.ok) {
     // Erro estruturado vindo do server-fn (auth/rede/etc.) — relança no
     // cliente para a UI tratar via try/catch local (toast/estado).
-    const msg = "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
+    const msg =
+      "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
     throw new Error(msg);
   }
   return r.data as T;
@@ -199,16 +218,30 @@ export async function api<T = unknown>(
 
 export async function login(c: XtreamCreds) {
   // 1) Tenta autenticar pelo Android nativo (mesmo caminho do XCIPTV).
-  let nativeRes: Awaited<ReturnType<typeof nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>>> = null;
+  let nativeRes: Awaited<
+    ReturnType<
+      typeof nativeApiWithFallbackPorts<{
+        user_info?: { auth?: number | string; status?: string };
+        server_info?: unknown;
+      }>
+    >
+  > = null;
   try {
-    nativeRes = await nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+    nativeRes = await nativeApiWithFallbackPorts<{
+      user_info?: { auth?: number | string; status?: string };
+      server_info?: unknown;
+    }>(c);
   } catch {
     // ignora — vamos cair pro server-fn abaixo
   }
 
   // 2) Se nativo não trouxe nada (web OU APK com painel bloqueando UA/IP),
   //    usa o proxy do server-fn — que rotaciona UAs estilo Xciptv/Smarters.
-  const r = nativeRes?.data ?? await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+  const r =
+    nativeRes?.data ??
+    (await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
+      c,
+    ));
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
@@ -280,7 +313,13 @@ export function parseM3U(text: string): M3UEntry[] {
       const group = /group-title="([^"]+)"/.exec(line)?.[1];
       cur = { name, logo, group };
     } else if (line && !line.startsWith("#") && cur) {
-      out.push({ id: `m3u-${i++}`, url: line, name: cur.name || "Sem nome", logo: cur.logo, group: cur.group });
+      out.push({
+        id: `m3u-${i++}`,
+        url: line,
+        name: cur.name || "Sem nome",
+        logo: cur.logo,
+        group: cur.group,
+      });
       cur = null;
     }
   }
@@ -317,7 +356,11 @@ function buildClientM3UUrl(raw: string, username?: string, password?: string): s
   return target;
 }
 
-async function nativeLoadM3U(url: string, username?: string, password?: string): Promise<M3UEntry[] | null> {
+async function nativeLoadM3U(
+  url: string,
+  username?: string,
+  password?: string,
+): Promise<M3UEntry[] | null> {
   if (!(await canUseNativeHttp())) return null;
   const first = buildClientM3UUrl(url, username, password);
   const candidates = new Set<string>([first]);
@@ -325,8 +368,26 @@ async function nativeLoadM3U(url: string, username?: string, password?: string):
     const u = new URL(first);
     const user = u.searchParams.get("username") || username || "";
     const pass = u.searchParams.get("password") || password || "";
-    if (user && pass && !u.pathname.toLowerCase().endsWith(".m3u") && !u.pathname.toLowerCase().endsWith(".m3u8")) {
-      for (const port of ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"]) {
+    if (
+      user &&
+      pass &&
+      !u.pathname.toLowerCase().endsWith(".m3u") &&
+      !u.pathname.toLowerCase().endsWith(".m3u8")
+    ) {
+      for (const port of [
+        "",
+        "80",
+        "8080",
+        "8081",
+        "8880",
+        "25461",
+        "2052",
+        "2082",
+        "2095",
+        "8000",
+        "8001",
+        "8088",
+      ]) {
         for (const output of ["m3u8", "ts"]) {
           const out = new URL(`http://${u.hostname}${port ? `:${port}` : ""}/get.php`);
           out.searchParams.set("username", user);
@@ -403,11 +464,15 @@ function b64decode(s: string): string {
 }
 
 export async function getShortEpg(c: XtreamCreds, streamId: number | string, limit = 4) {
-  const r = await api<{ epg_listings?: Array<{ id: string; title: string; description?: string; start_timestamp: string; stop_timestamp: string }> }>(
-    c,
-    "get_short_epg",
-    { stream_id: streamId, limit },
-  );
+  const r = await api<{
+    epg_listings?: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      start_timestamp: string;
+      stop_timestamp: string;
+    }>;
+  }>(c, "get_short_epg", { stream_id: streamId, limit });
   const list = r?.epg_listings ?? [];
   return list.map((e) => ({
     ...e,
@@ -421,11 +486,15 @@ export async function getShortEpg(c: XtreamCreds, streamId: number | string, lim
  * Each listing has start/stop in seconds (Unix epoch, as string).
  */
 export async function getFullEpg(c: XtreamCreds, streamId: number | string): Promise<EpgListing[]> {
-  const r = await api<{ epg_listings?: Array<{ id: string; title: string; description?: string; start_timestamp: string; stop_timestamp: string }> }>(
-    c,
-    "get_simple_data_table",
-    { stream_id: streamId },
-  );
+  const r = await api<{
+    epg_listings?: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      start_timestamp: string;
+      stop_timestamp: string;
+    }>;
+  }>(c, "get_simple_data_table", { stream_id: streamId });
   const list = r?.epg_listings ?? [];
   return list.map((e) => ({
     ...e,
