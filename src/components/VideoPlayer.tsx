@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
 // Module-level cache do mpegts.js: a 1ª troca de canal paga o import, as
@@ -115,6 +116,10 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
+  // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
+  // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
+  // "web" = caminho clássico hls.js/mpegts.js.
+  const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -124,6 +129,61 @@ export function VideoPlayer({
     onProgressRef.current = onProgress;
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
+
+  // --- Decisão de player + ponte ExoPlayer ---------------------------------
+  // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
+  // que usa ExoPlayer/Media3 em overlay fullscreen, fora do WebView. Ganhos:
+  //  - codecs HEVC/AC3/EAC3 com decoder de hardware (canais que travam no MSE
+  //    do WebView geralmente rodam liso aqui)
+  //  - MPEG-TS sem demux JS (sem mpegts.js)
+  //  - headers customizados (User-Agent estilo XCIPTV) direto no request
+  //  - bypassa o proxy /api/stream (vai direto pro painel via http)
+  // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
+  // web (hls.js/mpegts) que continua existindo.
+  const openNative = useCallback(async () => {
+    const native = await isNativeApp();
+    if (!native) return false;
+    const compat = getCompatForUrl(src);
+    const ua =
+      compat.userAgent && compat.userAgent !== "auto"
+        ? USER_AGENT_STRINGS[compat.userAgent]
+        : "XCIPTV/7.0 (Linux; Android 13)";
+    return playNative({
+      url: src,
+      userAgent: ua,
+      startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
+      onExit: (pos) => {
+        if (kind !== "live" && pos > 0) {
+          // Duração real não vem do plugin; salvamos posição com duração
+          // best-effort para o store de "Continuar assistindo".
+          onProgressRef.current?.(pos, Math.max(pos + 1, pos));
+        }
+      },
+    });
+  }, [src, kind]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlayerMode("deciding");
+    (async () => {
+      const native = await isNativeApp();
+      if (cancelled) return;
+      if (!native) {
+        setPlayerMode("web");
+        return;
+      }
+      const ok = await openNative();
+      if (cancelled) {
+        if (ok) void stopNative();
+        return;
+      }
+      setPlayerMode(ok ? "native" : "web");
+    })();
+    return () => {
+      cancelled = true;
+      void stopNative();
+    };
+  }, [src, kind, openNative]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -137,6 +197,8 @@ export function VideoPlayer({
   }, [settings.aspectRatio]);
 
   useEffect(() => {
+    // No APK, o ExoPlayer nativo cuida do playback — pulamos MSE.
+    if (playerMode !== "web") return;
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
@@ -622,7 +684,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind]);
+  }, [src, kind, playerMode]);
 
   // No APK Android, força paisagem ao entrar em tela cheia e libera ao sair.
   useEffect(() => {
@@ -751,13 +813,26 @@ export function VideoPlayer({
           filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
         }}
         className={videoClass}
+        hidden={playerMode === "native"}
       />
+      {playerMode === "native" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-player text-foreground">
+          <p className="text-sm opacity-80">Reproduzindo no player nativo (ExoPlayer)</p>
+          <button
+            type="button"
+            onClick={() => { void openNative(); }}
+            className="rounded-full bg-primary px-5 py-2 text-sm text-primary-foreground shadow-glow"
+          >
+            ▶ Abrir player
+          </button>
+        </div>
+      )}
       {error && (
         <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       )}
-      {canManualPlay && !error && (
+      {canManualPlay && !error && playerMode === "web" && (
         <button
           type="button"
           onClick={() => videoRef.current?.play().then(() => setCanManualPlay(false)).catch(() => undefined)}
