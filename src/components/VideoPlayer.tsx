@@ -684,7 +684,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind]);
+  }, [src, kind, playerMode]);
 
   // No APK Android, força paisagem ao entrar em tela cheia e libera ao sair.
   useEffect(() => {
