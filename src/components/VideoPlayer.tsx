@@ -124,7 +124,7 @@ export function VideoPlayer({
     const forceDirect = compat.transport === "direct";
     const skipHls = compat.streamFormat === "ts" || compat.streamFormat === "mp4";
 
-    let hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
+    const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
@@ -203,6 +203,20 @@ export function VideoPlayer({
       }, 12_000);
     };
 
+    const bufferedAhead = () => {
+      try {
+        const t = video.currentTime;
+        for (let i = 0; i < video.buffered.length; i++) {
+          if (video.buffered.start(i) <= t && video.buffered.end(i) >= t) {
+            return video.buffered.end(i) - t;
+          }
+        }
+      } catch {
+        // ignore browser buffer read races
+      }
+      return 0;
+    };
+
     const playDirect = () => {
       if (hls) {
         hls.destroy();
@@ -249,14 +263,14 @@ export function VideoPlayer({
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Buffer-ahead generoso pra reduzir pausas por engasgo de rede/servidor.
-          // VOD/Series acumulam muito (~3min); live agora também guarda janela maior (~60s).
-          backBufferLength: isLive ? 60 : 90,
-          maxBufferLength: isLive ? 60 : 180,
-          maxMaxBufferLength: isLive ? 180 : 600,
-          maxBufferSize: isLive ? 180 * 1000 * 1000 : 240 * 1000 * 1000,
-          maxBufferHole: 0.5,
-          highBufferWatchdogPeriod: 3,
+          // Live precisa de buffer suficiente sem tentar carregar uma janela enorme.
+          // Janela moderada + ABR conservador evita picos de bitrate que causam travadas.
+          backBufferLength: isLive ? 30 : 90,
+          maxBufferLength: isLive ? 45 : 180,
+          maxMaxBufferLength: isLive ? 90 : 600,
+          maxBufferSize: isLive ? 120 * 1000 * 1000 : 240 * 1000 * 1000,
+          maxBufferHole: isLive ? 1.5 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
           fragLoadingMaxRetry: nativeDirect ? 2 : 8,
@@ -279,6 +293,11 @@ export function VideoPlayer({
           testBandwidth: false,
           startFragPrefetch: true,
           abrEwmaDefaultEstimate: 1_000_000,
+          abrBandWidthFactor: isLive ? 0.7 : 0.8,
+          abrBandWidthUpFactor: isLive ? 0.5 : 0.7,
+          maxStarvationDelay: isLive ? 3 : 4,
+          maxLoadingDelay: isLive ? 3 : 4,
+          capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
         hls.attachMedia(video);
@@ -295,36 +314,25 @@ export function VideoPlayer({
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
 
-        // Stall watchdog para LIVE: só age em starvação REAL (buffer à frente ~0)
-        // e por tempo prolongado. O hls.js já tem nudge/retry próprios; só
-        // intervimos quando ele realmente não consegue se recuperar sozinho.
-        // Sem alterar currentTime no live (pular pra frente joga pra fora do buffer
-        // e dispara outro stall — esse era o bug da "pausa+recarga" periódica).
+        // Stall watchdog para LIVE: recuperação rápida, sem destruir/recarregar o
+        // player. Se acabou o buffer, religamos o loader; se ainda tem buffer,
+        // só forçamos play(). Isso corta travadas sem voltar ao bug de reload.
         let stallTimer: ReturnType<typeof setTimeout> | null = null;
         const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
-        const onWaiting = () => {
+        const recoverLiveStall = () => {
           if (!isLive || cancelled) return;
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
-            // Checa buffer à frente — se ainda há dado, deixa o hls.js resolver.
-            let ahead = 0;
-            try {
-              const t = video.currentTime;
-              for (let i = 0; i < video.buffered.length; i++) {
-                if (video.buffered.start(i) <= t && video.buffered.end(i) >= t) {
-                  ahead = video.buffered.end(i) - t;
-                  break;
-                }
-              }
-            } catch { /* noop */ }
-            if (ahead > 1.5) return; // ainda tem buffer; é só engasgo do decoder
-            // Starvação real: pede ao hls.js pra retomar do live edge sem
-            // destruir o loader (startLoad(-1) recoloca no edge sem o "stop").
-            try { hls.startLoad(-1); } catch { /* noop */ }
+            const ahead = bufferedAhead();
+            if (ahead < 0.75) {
+              try { hls.startLoad(-1); } catch { /* noop */ }
+            }
             void video.play().catch(() => undefined);
-          }, 15_000);
+            if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
+          }, 3_000);
         };
+        const onWaiting = () => recoverLiveStall();
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
