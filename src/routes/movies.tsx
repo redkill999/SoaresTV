@@ -81,8 +81,9 @@ function MoviesPage() {
   );
 
   const filtered = useMemo(() => {
-    let list = listQ.data ?? [];
+    let list: VodStream[] = listQ.data ?? [];
     const idOf = (m: VodStream) => `${m.stream_id}.${m.container_extension || "mp4"}`;
+    if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((m) => favIds.has(idOf(m)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
@@ -90,12 +91,7 @@ function MoviesPage() {
     } else if (cat !== "all") {
       list = list.filter((m) => String(m.category_id) === cat);
     }
-    if (deferredSearch) {
-      const s = deferredSearch.toLowerCase();
-      list = list.filter((x) => x.name.toLowerCase().includes(s));
-    }
-    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
