@@ -1,5 +1,6 @@
 import { discoverPanelXtreamServer, xtreamApi, fetchM3U } from "./xtream.functions";
 import type { XtreamCreds } from "./storage";
+import { getUAHint, setUAHint } from "./ua-hint";
 
 export type LiveCategory = { category_id: string; category_name: string };
 export type LiveStream = {
@@ -100,7 +101,10 @@ export async function isNativeApp(): Promise<boolean> {
   }
 }
 
-async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
+async function nativeHttpGet(
+  url: string,
+  timeoutMs = 10_000,
+): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
@@ -114,8 +118,8 @@ async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
     return await CapacitorHttp.get({
       url,
       headers: IPTV_HEADERS,
-      connectTimeout: 20_000,
-      readTimeout: 20_000,
+      connectTimeout: timeoutMs,
+      readTimeout: timeoutMs,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -198,14 +202,18 @@ export async function api<T = unknown>(
     // segue para o fallback do server-fn
   }
 
-  const r = await xtreamApi({ data: { ...c, action, params } });
+  // Hint: UA que já funcionou para esse host — server-fn tenta esse primeiro.
+  const preferredUA = getUAHint(c.server);
+  const r = await xtreamApi({
+    data: { ...c, action, params, preferredUA },
+  });
   if (!r.ok) {
-    // Erro estruturado vindo do server-fn (auth/rede/etc.) — relança no
-    // cliente para a UI tratar via try/catch local (toast/estado).
     const msg =
       "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
     throw new Error(msg);
   }
+  // Persistir UA vencedor para acelerar próxima chamada ao mesmo servidor.
+  if ("ua" in r && typeof r.ua === "string") setUAHint(c.server, r.ua);
   return r.data as T;
 }
 
