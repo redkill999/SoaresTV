@@ -375,15 +375,27 @@ export function VideoPlayer({
       nativeDirect = native;
       // Para HLS ao vivo: mesmo em nativo (APK = casca https), o fetch do
       // hls.js para URL http é bloqueado pelo WebView por mixed content.
-      // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
-      // resolve o http e devolve o stream com headers de IPTV.
-      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
-      if (native) {
-        // APK/TV: tenta direto primeiro e mantém proxy como último recurso.
+      // Roteamos pelo proxy /api/stream (mesma origem https) quando preciso.
+      // forceProxy: sempre proxy; forceDirect: sempre direto (mesmo na web).
+      hlsProxied = hlsCandidate
+        ? forceProxy
+          ? proxiedX(hlsCandidate, kind)
+          : forceDirect
+            ? hlsCandidate
+            : native ? hlsCandidate : proxiedX(hlsCandidate, kind)
+        : null;
+      if (native && !forceProxy) {
+        // APK/TV: tenta direto primeiro e mantém proxy como último recurso
+        // (a menos que o usuário tenha escolhido forceProxy).
         playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          return Array.from(new Set([url, secure, proxied(url, kind)].filter(Boolean) as string[]));
+          const list = forceDirect
+            ? [url, secure]
+            : [url, secure, proxiedX(url, kind)];
+          return Array.from(new Set(list.filter(Boolean) as string[]));
         }));
+      } else if (native && forceProxy) {
+        playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.map((u) => proxiedX(u, kind)));
       }
       if (hlsProxied) attachHls(hlsProxied);
       else playDirect();
