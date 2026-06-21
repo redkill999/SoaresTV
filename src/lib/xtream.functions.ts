@@ -74,11 +74,11 @@ export const xtreamApi = createServerFn({ method: "POST" })
     let lastErr: unknown = null;
     let authBlocked = false; // 401/403 → não vale a pena probe outras portas
 
-    async function tryOrigin(origin: string): Promise<
+    type TryResult =
       | { ok: true; data: unknown }
-      | { ok: false; raw: string }
-      | null
-    > {
+      | { ok: false; raw: string };
+
+    async function tryOrigin(origin: string): Promise<TryResult | null> {
       const target = buildUrl(origin);
       for (let attempt = 0; attempt < XTREAM_UAS.length; attempt++) {
         const controller = new AbortController();
@@ -97,7 +97,7 @@ export const xtreamApi = createServerFn({ method: "POST" })
           if (res.ok) {
             const text = await res.text();
             try {
-              return { ok: true, data: JSON.parse(text) };
+              return { ok: true, data: JSON.parse(text) as unknown };
             } catch {
               return { ok: false, raw: text };
             }
@@ -121,14 +121,22 @@ export const xtreamApi = createServerFn({ method: "POST" })
 
     // 1) Tenta o origin original primeiro (preserva comportamento das listas que já funcionam).
     const first = await tryOrigin(base);
-    if (first) return first;
+    if (first) {
+      return first.ok
+        ? { ok: true as const, data: first.data as Record<string, unknown> | unknown[] | string | number | boolean | null }
+        : { ok: false as const, raw: first.raw };
+    }
 
     // 2) Se foi 401/403, não probe outras portas — credenciais inválidas.
     if (!authBlocked) {
       const candidates = buildOriginCandidates(base).filter((o) => o !== base);
       for (const origin of candidates) {
         const r = await tryOrigin(origin);
-        if (r) return r;
+        if (r) {
+          return r.ok
+            ? { ok: true as const, data: r.data as Record<string, unknown> | unknown[] | string | number | boolean | null }
+            : { ok: false as const, raw: r.raw };
+        }
         if (authBlocked) break;
       }
     }
