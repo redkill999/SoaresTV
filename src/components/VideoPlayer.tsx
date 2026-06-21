@@ -124,7 +124,7 @@ export function VideoPlayer({
     const forceDirect = compat.transport === "direct";
     const skipHls = compat.streamFormat === "ts" || compat.streamFormat === "mp4";
 
-    let hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
+    const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
