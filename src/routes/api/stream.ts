@@ -202,8 +202,14 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
+    if (isVod) {
+      return Response.json(
+        { error: `UPSTREAM_${upstream.status}`, fallback: true },
+        { status: 200, headers: respHeaders },
+      );
+    }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
-    return new Response(request.method === "HEAD" ? null : upstream.body, { status: upstream.status, headers: respHeaders });
+    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
   // forward useful headers
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
@@ -228,19 +234,22 @@ async function handle(request: Request) {
     finalCt = contentTypeForPath(path);
   }
   respHeaders.set("Content-Type", finalCt);
-  respHeaders.set("Content-Disposition", "inline");
   if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
-  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
+  if (isVod && status === 206 && effectiveVodRange) {
+    normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
+    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  }
+  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
       status = 206;
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  return new Response(upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
