@@ -13,8 +13,9 @@ const CORS = {
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
-function proxyUrl(absolute: string) {
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6`;
+function proxyUrl(absolute: string, ua?: string | null) {
+  const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
