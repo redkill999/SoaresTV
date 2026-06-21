@@ -11,6 +11,8 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
+const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
+
 function proxyUrl(absolute: string) {
   return `/api/stream?u=${encodeURIComponent(absolute)}`;
 }
@@ -33,6 +35,63 @@ function isVodPath(path: string): boolean {
 
 function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
+}
+
+function parseByteRange(range: string | null): { start: number; end?: number } | null {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : undefined;
+  if (!Number.isFinite(start) || start < 0) return null;
+  if (end !== undefined && (!Number.isFinite(end) || end < start)) return null;
+  return { start, end };
+}
+
+function parseContentRangeTotal(value: string | null): number | undefined {
+  const total = /bytes\s+\d+-\d+\/(\d+|\*)/i.exec(value ?? "")?.[1];
+  if (!total || total === "*") return undefined;
+  const n = Number(total);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function parseContentRange(value: string | null): { start: number; end: number; total?: number } | null {
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(value?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = match[3] === "*" ? undefined : Number(match[3]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  if (total !== undefined && (!Number.isFinite(total) || total <= 0)) return null;
+  return { start, end, total };
+}
+
+function vodRangeForUpstream(requestedRange: string | null, head = false): string {
+  if (head) return "bytes=0-0";
+  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
+  const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
+  return `bytes=${parsed.start}-${cappedEnd}`;
+}
+
+function numericHeader(headers: Headers, name: string): number | undefined {
+  const value = Number(headers.get(name));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: string) {
+  const parsed = parseByteRange(effectiveRange);
+  if (!parsed) return;
+
+  const upstreamRange = parseContentRange(headers.get("content-range"));
+  const total = upstreamRange?.total ?? parseContentRangeTotal(headers.get("content-range"));
+  const contentLength = numericHeader(headers, "content-length");
+  const start = upstreamRange?.start ?? parsed.start;
+  const end = upstreamRange?.end ?? parsed.end ?? (contentLength !== undefined ? start + contentLength - 1 : total !== undefined ? total - 1 : undefined);
+  if (end === undefined || end < start) return;
+
+  const bodyLength = end - start + 1;
+  headers.set("Content-Length", String(bodyLength));
+  headers.set("Content-Range", `bytes ${start}-${end}/${total ?? "*"}`);
+  headers.set("Accept-Ranges", "bytes");
 }
 
 function rewritePlaylist(text: string, baseUrl: string): string {
@@ -81,24 +140,17 @@ async function handle(request: Request) {
   const range = request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
   // UAs até obter algo que não seja 403/401.
-  const UA_CANDIDATES = isVod
-    ? [
-        "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
-        "IPTVSmartersPlayer",
-        "TiviMate/4.7.0",
-        "Lavf/58.76.100",
-        "VLC/3.0.20 LibVLC/3.0.20",
-      ]
-    : [
-        "IPTVSmartersPlayer",
-        "Lavf/58.76.100",
-        "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "VLC/3.0.20 LibVLC/3.0.20",
-      ];
+  const UA_CANDIDATES = [
+    "IPTVSmartersPlayer",
+    "Lavf/58.76.100",
+    "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "VLC/3.0.20 LibVLC/3.0.20",
+  ];
 
   const buildHeaders = (ua: string) => {
     const h = new Headers();
@@ -106,11 +158,10 @@ async function handle(request: Request) {
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
-    if (!isVod) {
-      h.set("Referer", `${upstreamUrl.origin}/`);
-      h.set("Origin", upstreamUrl.origin);
-    }
-    if (range) h.set("Range", range);
+    h.set("Referer", `${upstreamUrl.origin}/`);
+    h.set("Origin", upstreamUrl.origin);
+    if (isVod && effectiveVodRange) h.set("Range", effectiveVodRange);
+    else if (range) h.set("Range", range);
     return h;
   };
 
@@ -151,8 +202,14 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
+    if (isVod) {
+      return Response.json(
+        { error: `UPSTREAM_${upstream.status}`, fallback: true },
+        { status: 200, headers: respHeaders },
+      );
+    }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
-    return new Response(request.method === "HEAD" ? null : upstream.body, { status: upstream.status, headers: respHeaders });
+    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
   // forward useful headers
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
@@ -177,19 +234,22 @@ async function handle(request: Request) {
     finalCt = contentTypeForPath(path);
   }
   respHeaders.set("Content-Type", finalCt);
-  respHeaders.set("Content-Disposition", "inline");
   if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
-  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
+  if (isVod && status === 206 && effectiveVodRange) {
+    normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
+    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  }
+  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
       status = 206;
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  return new Response(upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
