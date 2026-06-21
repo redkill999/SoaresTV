@@ -148,6 +148,13 @@ async function handle(request: Request) {
   // UAs até obter algo que não seja 403/401. Se o cliente passar &ua=,
   // priorizamos esse UA (permite override por lista).
   const DEFAULT_UAS = [
+    "XCIPTV/7.0 (Linux; Android 13)",
+    "TiviMate/5.1.0",
+    "IPTV Smarters Pro/4.0",
+    "VLC/3.5.4",
+    "okhttp/4.12.0",
+    "Mozilla/5.0 (Linux; Android 14)",
+    // Fallback adicional (UAs antigos que ainda funcionam em painéis legados)
     "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
     "Xciptv/6.0",
     "IPTVSmartersPro/3.1.5",
