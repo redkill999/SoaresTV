@@ -146,6 +146,41 @@ function LoadingPage() {
         </div>
       </div>
 
+      {/* Spinner + mensagem */}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
+        {!finishedWithFailure ? (
+          <>
+            <Loader2 className="size-8 text-emerald-400 animate-spin" strokeWidth={2.2} />
+            <div className="mt-4 text-lg sm:text-xl text-white/90">
+              Por favor, aguarde........
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-lg sm:text-xl text-red-300 font-semibold">
+              Falha ao carregar a lista. Verifique sua conexão ou os dados de acesso.
+            </div>
+            <div className="mt-2 text-sm text-white/70">
+              Não vamos abrir o app enquanto algum conteúdo essencial estiver com falha.
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => { ran.current = false; setStatus({ live: "pending", vod: "pending", series: "pending", epg: "pending" }); window.location.reload(); }}
+                className="px-4 py-2 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold"
+              >
+                Tentar novamente
+              </button>
+              <button
+                onClick={() => navigate({ to: "/", replace: true })}
+                className="px-4 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
+              >
+                Voltar ao login
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Faixa rodapé */}
       <div className="relative z-10 mx-auto mb-4 w-[94%] max-w-5xl rounded-md border border-cyan-300/40 bg-teal-600/40 px-4 py-3 text-center tracking-[0.25em] text-white/80">
         POR FAVOR, AGUARDE........
