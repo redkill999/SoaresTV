@@ -352,13 +352,12 @@ export function VideoPlayer({
           lowLatencyMode: false,
           // Config estável (revertida da versão agressiva que travava abertura).
           // Live: buffer enxuto, como o player nativo do APK trabalha.
-          // Buffers grandes acumulavam memória e travavam o player web
-          // depois de alguns minutos. Mantemos o suficiente pra absorver
-          // hiccups (~30s) sem ficar inchando.
-          backBufferLength: isLive ? 10 : 90,
-          maxBufferLength: isLive ? 30 : 180,
-          maxMaxBufferLength: isLive ? 60 : 600,
-          maxBufferSize: isLive ? 60 * 1000 * 1000 : 240 * 1000 * 1000,
+          // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
+          // hls.js mantém ainda assim ~30-90s de buffer à frente — suficiente.
+          backBufferLength: isLive ? 10 : 30,
+          maxBufferLength: isLive ? 30 : 60,
+          maxMaxBufferLength: isLive ? 60 : 180,
+          maxBufferSize: isLive ? 60 * 1000 * 1000 : 90 * 1000 * 1000,
           maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
