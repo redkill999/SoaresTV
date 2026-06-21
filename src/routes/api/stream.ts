@@ -140,24 +140,17 @@ async function handle(request: Request) {
   const range = request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
   // UAs até obter algo que não seja 403/401.
-  const UA_CANDIDATES = isVod
-    ? [
-        "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
-        "IPTVSmartersPlayer",
-        "TiviMate/4.7.0",
-        "Lavf/58.76.100",
-        "VLC/3.0.20 LibVLC/3.0.20",
-      ]
-    : [
-        "IPTVSmartersPlayer",
-        "Lavf/58.76.100",
-        "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "VLC/3.0.20 LibVLC/3.0.20",
-      ];
+  const UA_CANDIDATES = [
+    "IPTVSmartersPlayer",
+    "Lavf/58.76.100",
+    "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "VLC/3.0.20 LibVLC/3.0.20",
+  ];
 
   const buildHeaders = (ua: string) => {
     const h = new Headers();
@@ -165,11 +158,10 @@ async function handle(request: Request) {
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
-    if (!isVod) {
-      h.set("Referer", `${upstreamUrl.origin}/`);
-      h.set("Origin", upstreamUrl.origin);
-    }
-    if (range) h.set("Range", range);
+    h.set("Referer", `${upstreamUrl.origin}/`);
+    h.set("Origin", upstreamUrl.origin);
+    if (isVod && effectiveVodRange) h.set("Range", effectiveVodRange);
+    else if (range) h.set("Range", range);
     return h;
   };
 
