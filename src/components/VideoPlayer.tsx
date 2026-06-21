@@ -10,10 +10,17 @@ let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
   if (!mpegtsLoading) {
-    mpegtsLoading = import("mpegts.js").then((m) => {
-      mpegtsModule = m.default;
-      return mpegtsModule;
-    });
+    mpegtsLoading = import("mpegts.js")
+      .then((m) => {
+        mpegtsModule = m.default;
+        return mpegtsModule;
+      })
+      .catch((err) => {
+        // Reseta para permitir nova tentativa na próxima troca de canal,
+        // em vez de manter uma Promise rejeitada para sempre.
+        mpegtsLoading = null;
+        throw err;
+      });
   }
   return mpegtsLoading;
 }
@@ -236,8 +243,14 @@ export function VideoPlayer({
       clearWatchdog();
       watchdog = setTimeout(() => {
         if (cancelled) return;
-        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) tryNextVod();
-      }, 12_000);
+        // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
+        // que o servidor respondeu — esperar mais 6s evita falso negativo em
+        // VOD de painel lento que demorou pra começar a entregar bytes.
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
+        else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
+        }
+      }, 18_000);
     };
 
     const bufferedAhead = () => {

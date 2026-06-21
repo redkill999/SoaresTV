@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { store, type XtreamCreds } from "@/lib/storage";
 import {
@@ -10,6 +10,7 @@ import {
   type LiveCategory,
   type LiveStream,
 } from "@/lib/xtream";
+import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
@@ -69,14 +70,69 @@ function GuidePage() {
     return filteredChannels.slice(start, start + CHANNELS_PER_PAGE);
   }, [filteredChannels, page]);
 
-  // Fetch EPG for each visible channel (parallel, cached individually)
+  // ---- EPG viewport-gating -----------------------------------------------
+  // Em vez de disparar 30 requests em paralelo (que derruba painel lento),
+  // só buscamos EPG quando a linha do canal entra na viewport do scroll.
+  // Uma vez buscado, mantemos o id no Set — evita flicker ao rolar.
+  const dayKey = useMemo(() => Math.floor(Date.now() / 86_400_000), []);
+  const [activeIds, setActiveIds] = useState<Set<number>>(() => new Set());
+  // Reset quando o conjunto base muda (página/categoria) — semeamos os 6
+  // primeiros já como ativos pra não esperar IntersectionObserver no 1º render.
+  useEffect(() => {
+    const seed = new Set<number>();
+    visibleChannels.slice(0, 6).forEach((s) => seed.add(s.stream_id));
+    setActiveIds(seed);
+  }, [visibleChannels]);
+
+  const rowRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const registerRow = useCallback((id: number, el: HTMLElement | null) => {
+    const map = rowRefs.current;
+    if (el) map.set(id, el);
+    else map.delete(id);
+  }, []);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const toAdd: number[] = [];
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const id = Number((e.target as HTMLElement).dataset.streamId);
+            if (Number.isFinite(id)) toAdd.push(id);
+          }
+        }
+        if (toAdd.length) {
+          setActiveIds((prev) => {
+            let changed = false;
+            const next = new Set(prev);
+            for (const id of toAdd) {
+              if (!next.has(id)) { next.add(id); changed = true; }
+            }
+            return changed ? next : prev;
+          });
+        }
+      },
+      { rootMargin: "400px 0px" },
+    );
+    for (const el of rowRefs.current.values()) io.observe(el);
+    return () => io.disconnect();
+  }, [visibleChannels]);
+
+  // Fetch EPG só para canais ativos; cada um é persistido por dia/servidor.
   const epgQueries = useQueries({
-    queries: visibleChannels.map((s) => ({
-      queryKey: ["epg-full", s.stream_id],
-      enabled: !!creds,
-      staleTime: 5 * 60_000,
-      queryFn: () => getFullEpg(creds!, s.stream_id),
-    })),
+    queries: visibleChannels.map((s) => {
+      const cacheKey = `epg-full:${acct}:${s.stream_id}:${dayKey}`;
+      const persisted = acct ? loadPersisted<EpgListing[]>(cacheKey) : null;
+      return {
+        queryKey: ["epg-full", acct, s.stream_id, dayKey],
+        enabled: !!creds && activeIds.has(s.stream_id),
+        staleTime: 30 * 60_000,
+        queryFn: withPersist(cacheKey, () => getFullEpg(creds!, s.stream_id)),
+        initialData: persisted?.data,
+        initialDataUpdatedAt: persisted?.updatedAt,
+      };
+    }),
   });
 
   // Timeline window
@@ -184,6 +240,8 @@ function GuidePage() {
                 <button
                   key={s.stream_id}
                   type="button"
+                  ref={(el) => registerRow(s.stream_id, el)}
+                  data-stream-id={s.stream_id}
                   onClick={() =>
                     navigate({
                       to: "/player/$type/$id",

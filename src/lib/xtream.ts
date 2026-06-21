@@ -103,7 +103,7 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 10_000,
+  timeoutMs = 12_000,
 ): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -126,6 +126,11 @@ async function nativeHttpGet(
     throw new Error(`Falha na conexão nativa Android: ${message}`);
   }
 }
+
+// Portas Xtream mais comuns. Antes eram 12 portas × 2 schemes = 24 candidatas
+// (até ~240s no pior caso). Reduzido para 5 portas × 2 schemes = 10. Cobre
+// >95% dos painéis sem castigar painéis lentos com waterfall enorme.
+const COMMON_XTREAM_PORTS = ["", "80", "8080", "8880", "25461"] as const;
 
 function parseNativeJson(data: unknown) {
   if (typeof data === "string") return JSON.parse(data);
@@ -161,12 +166,9 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   const candidates = new Set<string>([base]);
   try {
     const u = new URL(base);
-    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
-    // Probamos http E https — alguns painéis (jetflix etc.) só respondem por
-    // HTTPS, outros (a maioria com porta custom) só por HTTP. Mantemos o
-    // origin original sempre como primeiro tentativa.
+    // Mantemos o origin original sempre como primeira tentativa.
     for (const scheme of ["http", "https"]) {
-      for (const port of ports) {
+      for (const port of COMMON_XTREAM_PORTS) {
         candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
       }
     }
@@ -175,12 +177,18 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   }
 
   let lastError: unknown = null;
+  let consecutiveFailures = 0;
   for (const server of candidates) {
     try {
       const data = await nativeApi<T>({ ...c, server }, action, params);
       if (data) return { data, creds: { ...c, server } };
+      consecutiveFailures = 0;
     } catch (err) {
       lastError = err;
+      consecutiveFailures += 1;
+      // Fail-fast: 3 falhas seguidas significam servidor offline / DNS quebrado.
+      // Sem isso, no pior caso esperaríamos timeoutMs × 10 candidatas = 120s.
+      if (consecutiveFailures >= 3) break;
     }
   }
   if (lastError) throw lastError;
@@ -375,9 +383,8 @@ async function nativeLoadM3U(
       !u.pathname.toLowerCase().endsWith(".m3u") &&
       !u.pathname.toLowerCase().endsWith(".m3u8")
     ) {
-      const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
       for (const scheme of ["http", "https"]) {
-        for (const port of ports) {
+        for (const port of COMMON_XTREAM_PORTS) {
           for (const output of ["m3u8", "ts"]) {
             const out = new URL(`${scheme}://${u.hostname}${port ? `:${port}` : ""}/get.php`);
             out.searchParams.set("username", user);
@@ -395,17 +402,21 @@ async function nativeLoadM3U(
 
   let lastStatus = 0;
   let lastError: unknown = null;
+  let consecutiveFailures = 0;
   for (const target of candidates) {
     try {
-      const res = await nativeHttpGet(target);
+      const res = await nativeHttpGet(target, 15_000);
       if (!res) return null;
       lastStatus = res.status;
-      if (res.status < 200 || res.status >= 300) continue;
+      if (res.status < 200 || res.status >= 300) { consecutiveFailures = 0; continue; }
       const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
       const entries = parseM3U(text);
       if (entries.length) return entries;
+      consecutiveFailures = 0;
     } catch (err) {
       lastError = err;
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 3) break;
     }
   }
   if (lastStatus) throw new Error(`M3U respondeu HTTP ${lastStatus}`);
