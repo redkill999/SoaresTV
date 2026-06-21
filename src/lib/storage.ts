@@ -121,6 +121,19 @@ function read<T>(k: string, fallback: T): T {
     return fallback;
   }
 }
+// Avisos de quota são "throttled" por chave — uma lista cheia pode disparar
+// dezenas de writes seguidos e não queremos floodar o console nem virar
+// fonte de jank no APK.
+const lastQuotaWarn: Record<string, number> = {};
+function warnQuota(k: string, err: unknown) {
+  const now = Date.now();
+  if (now - (lastQuotaWarn[k] ?? 0) < 30_000) return;
+  lastQuotaWarn[k] = now;
+  const name = err instanceof Error ? err.name : "Error";
+  const msg = err instanceof Error ? err.message : String(err);
+  // eslint-disable-next-line no-console
+  console.warn(`[storage] write falhou em "${k}" (${name}): ${msg}`);
+}
 function write<T>(k: string, v: T) {
   if (!isBrowser()) return;
   try {
@@ -128,8 +141,9 @@ function write<T>(k: string, v: T) {
     localStorage.setItem(k, raw);
     snapshots[k] = { raw, value: v };
     emit(k);
-  } catch {
-    // Quota exceeded ou serialização falhou — não derruba o app.
+  } catch (err) {
+    // Quota exceeded ou serialização falhou — não derruba o app, mas avisa.
+    warnQuota(k, err);
   }
 }
 
