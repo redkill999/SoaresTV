@@ -152,7 +152,8 @@ function PlaylistPage() {
         <PlaylistSwitcher
           currentUrl={fallbackUrl}
           onPick={(p) => {
-            m3uCache.clear();
+            // Só descarta o cache da URL atual; o destino reutiliza o dele.
+            m3uCache.clear(fallbackUrl);
             setActive(null);
             navigate({ to: "/playlist", search: { url: p.url, name: p.name } });
           }}
@@ -161,7 +162,7 @@ function PlaylistPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            m3uCache.clear();
+            m3uCache.clear(fallbackUrl);
             qc.invalidateQueries({ queryKey: ["m3u"] });
             setActive(null);
             toast.success("Cache da lista limpo");
