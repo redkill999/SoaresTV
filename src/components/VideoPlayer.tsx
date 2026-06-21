@@ -265,14 +265,14 @@ export function VideoPlayer({
           lowLatencyMode: false,
           // Live precisa de buffer suficiente sem tentar carregar uma janela enorme.
           // Janela moderada + ABR conservador evita picos de bitrate que causam travadas.
-          backBufferLength: isLive ? 30 : 90,
-          maxBufferLength: isLive ? 45 : 180,
-          maxMaxBufferLength: isLive ? 90 : 600,
-          maxBufferSize: isLive ? 120 * 1000 * 1000 : 240 * 1000 * 1000,
-          maxBufferHole: isLive ? 1.5 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 2 : 3,
-          nudgeMaxRetry: 6,
-          nudgeOffset: 0.1,
+          backBufferLength: isLive ? 15 : 90,
+          maxBufferLength: isLive ? 75 : 180,
+          maxMaxBufferLength: isLive ? 150 : 600,
+          maxBufferSize: isLive ? 180 * 1000 * 1000 : 240 * 1000 * 1000,
+          maxBufferHole: isLive ? 3 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 1 : 3,
+          nudgeMaxRetry: isLive ? 12 : 6,
+          nudgeOffset: isLive ? 0.18 : 0.1,
           fragLoadingMaxRetry: nativeDirect ? 2 : 8,
           manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
           levelLoadingMaxRetry: nativeDirect ? 2 : 6,
@@ -284,19 +284,19 @@ export function VideoPlayer({
           // ultrapassava ~60s atrás do edge, o hls.js fazia seek pra frente
           // (a "pausa+recarga" periódica). Agora deixa o usuário ficar pra
           // trás do edge sem snap, mantendo playback contínuo.
-          liveSyncDurationCount: 6,
-          liveMaxLatencyDurationCount: 60,
+          liveSyncDurationCount: 10,
+          liveMaxLatencyDurationCount: 120,
           // Autoplay instantâneo: começa pelo nível mais baixo (start imediato,
           // sem teste de banda) e o ABR sobe a qualidade depois — evita o
           // engasgo inicial enquanto o player decide o bitrate.
           startLevel: 0,
           testBandwidth: false,
           startFragPrefetch: true,
-          abrEwmaDefaultEstimate: 1_000_000,
-          abrBandWidthFactor: isLive ? 0.7 : 0.8,
-          abrBandWidthUpFactor: isLive ? 0.5 : 0.7,
-          maxStarvationDelay: isLive ? 3 : 4,
-          maxLoadingDelay: isLive ? 3 : 4,
+          abrEwmaDefaultEstimate: isLive ? 650_000 : 1_000_000,
+          abrBandWidthFactor: isLive ? 0.55 : 0.8,
+          abrBandWidthUpFactor: isLive ? 0.35 : 0.7,
+          maxStarvationDelay: isLive ? 2 : 4,
+          maxLoadingDelay: isLive ? 2 : 4,
           capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
