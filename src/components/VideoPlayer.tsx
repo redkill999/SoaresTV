@@ -99,6 +99,28 @@ function httpsVariant(url: string): string | null {
   }
 }
 
+// Detecção automática do formato pela extensão da URL.
+//   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
+//   .ts           → "ts"    (mpegts.js no web, ExoPlayer nativo no APK)
+//   .mp4 / .m4v / .mov → "mp4" (<video> nativo do navegador)
+//   .mkv          → "mkv"   (ExoPlayer nativo no APK; web tenta <video> mas
+//                             a maioria dos browsers não decoda mkv)
+//   sem extensão  → "auto"  (deixa a heurística atual decidir)
+export type DetectedFormat = "hls" | "ts" | "mp4" | "mkv" | "auto";
+
+export function detectFormat(url: string): DetectedFormat {
+  try {
+    const path = new URL(url, "http://x").pathname.toLowerCase();
+    if (/\.m3u8?(?:$|\?)/.test(path)) return "hls";
+    if (/\.ts(?:$|\?)/.test(path)) return "ts";
+    if (/\.(mp4|m4v|mov)(?:$|\?)/.test(path)) return "mp4";
+    if (/\.mkv(?:$|\?)/.test(path)) return "mkv";
+    return "auto";
+  } catch {
+    return "auto";
+  }
+}
+
 export function VideoPlayer({
   src,
   poster,
@@ -217,7 +239,14 @@ export function VideoPlayer({
       forcedUA ? `${proxied(u, k)}&ua=${encodeURIComponent(forcedUA)}` : proxied(u, k);
     const forceProxy = compat.transport === "proxy";
     const forceDirect = compat.transport === "direct";
-    const skipHls = compat.streamFormat === "ts" || compat.streamFormat === "mp4";
+    // Detecção automática pelo sufixo da URL. Override do usuário (compat)
+    // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
+    const auto = detectFormat(workingSrc);
+    const skipHls =
+      compat.streamFormat === "ts" ||
+      compat.streamFormat === "mp4" ||
+      // Se a URL termina em .ts/.mp4/.mkv não faz sentido tentar HLS antes.
+      (compat.streamFormat == null && (auto === "ts" || auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
