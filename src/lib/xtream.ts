@@ -383,9 +383,8 @@ async function nativeLoadM3U(
       !u.pathname.toLowerCase().endsWith(".m3u") &&
       !u.pathname.toLowerCase().endsWith(".m3u8")
     ) {
-      const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
       for (const scheme of ["http", "https"]) {
-        for (const port of ports) {
+        for (const port of COMMON_XTREAM_PORTS) {
           for (const output of ["m3u8", "ts"]) {
             const out = new URL(`${scheme}://${u.hostname}${port ? `:${port}` : ""}/get.php`);
             out.searchParams.set("username", user);
@@ -403,17 +402,21 @@ async function nativeLoadM3U(
 
   let lastStatus = 0;
   let lastError: unknown = null;
+  let consecutiveFailures = 0;
   for (const target of candidates) {
     try {
-      const res = await nativeHttpGet(target);
+      const res = await nativeHttpGet(target, 15_000);
       if (!res) return null;
       lastStatus = res.status;
-      if (res.status < 200 || res.status >= 300) continue;
+      if (res.status < 200 || res.status >= 300) { consecutiveFailures = 0; continue; }
       const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
       const entries = parseM3U(text);
       if (entries.length) return entries;
+      consecutiveFailures = 0;
     } catch (err) {
       lastError = err;
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 3) break;
     }
   }
   if (lastStatus) throw new Error(`M3U respondeu HTTP ${lastStatus}`);
