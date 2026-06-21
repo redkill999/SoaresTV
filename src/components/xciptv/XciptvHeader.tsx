@@ -54,13 +54,10 @@ export function XciptvHeader({
         </div>
       </div>
 
-      {/* Center: logo */}
-      <Link to="/home" className="shrink-0 grid place-items-center" aria-label="Home">
-        <div className="size-12 sm:size-14 rounded-full bg-[#1FB6FF] grid place-items-center shadow-[0_0_24px_rgba(31,182,255,0.45)] ring-2 ring-white/10">
-          <Tv className="size-6 text-black" strokeWidth={2.5} />
-        </div>
-        {title && <div className="text-[10px] uppercase tracking-[0.2em] text-white/60 mt-1">{title}</div>}
-      </Link>
+      {/* Center: título opcional (logo removido a pedido) */}
+      <div className="shrink-0 grid place-items-center">
+        {title && <div className="text-[10px] uppercase tracking-[0.2em] text-white/60">{title}</div>}
+      </div>
 
       {/* Right: controls */}
       <div className="min-w-0 flex items-center justify-end gap-2 sm:gap-4">
