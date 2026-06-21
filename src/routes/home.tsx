@@ -191,7 +191,11 @@ function HomePage() {
 
       {/* Main 4 tiles */}
       <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
-        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4">
+        {/* landscape:grid-cols-4 garante que aparelhos como o Ulefone Armor 8
+            (que abre a WebView em paisagem sem disparar o TV-mode, portanto
+            sem largura >=768px) NAO empilhem os tiles em 2x2 — o que estourava
+            a altura e empurrava o rodape por cima do conteudo. */}
+        <div className="grid w-full grid-cols-2 landscape:grid-cols-4 gap-3 sm:gap-5 md:grid-cols-4">
           {MAIN.map((t, i) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
