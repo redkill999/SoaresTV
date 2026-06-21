@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
 // Module-level cache do mpegts.js: a 1ª troca de canal paga o import, as
