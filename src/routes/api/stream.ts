@@ -14,7 +14,7 @@ const CORS = {
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
 function proxyUrl(absolute: string) {
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=5`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -175,7 +175,9 @@ async function handle(request: Request) {
   let lastStatus = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, range, null]))
-    : [range];
+    : playlistPath
+      ? [range]
+      : Array.from(new Set([range, "bytes=0-", null]));
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
       for (const includeOriginHeaders of [false, true]) {

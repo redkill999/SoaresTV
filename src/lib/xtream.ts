@@ -188,7 +188,7 @@ export function xtreamCredsFromUrl(
 
 export const streamUrl = {
   live: (c: XtreamCreds, id: number | string) =>
-    `${normalizeServer(c.server)}/live/${c.username}/${c.password}/${id}.m3u8`,
+    `${normalizeServer(c.server)}/live/${c.username}/${c.password}/${id}.ts`,
   movie: (c: XtreamCreds, id: number | string, ext = "mp4") =>
     `${normalizeServer(c.server)}/movie/${c.username}/${c.password}/${id}.${ext}`,
   episode: (c: XtreamCreds, id: number | string, ext = "mp4") =>
