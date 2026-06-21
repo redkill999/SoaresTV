@@ -14,6 +14,36 @@ function normalizeServer(s: string) {
   }
 }
 
+// Origens alternativas para probing tipo XCIPTV/Smarters: muitos painéis
+// rodam em portas não-padrão (8080, 25461, 8880, etc.) e alguns só
+// respondem em HTTPS. O original é SEMPRE tentado primeiro — só caímos
+// nos alternativos quando o painel responde 5xx/0/timeout (não em 401/403).
+function buildOriginCandidates(base: string): string[] {
+  const out = new Set<string>([base]);
+  try {
+    const u = new URL(base);
+    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
+    for (const scheme of ["http", "https"]) {
+      for (const port of ports) {
+        out.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+      }
+    }
+  } catch {
+    // keep base only
+  }
+  return Array.from(out);
+}
+
+const XTREAM_UAS = [
+  "Xciptv/6.0",
+  "IPTVSmartersPro/3.1.5",
+  "TiviMate/4.7.0",
+  "okhttp/4.9.3",
+  "Lavf/58.76.100",
+  "VLC/3.0.20 LibVLC/3.0.20",
+  "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
+];
+
 export const xtreamApi = createServerFn({ method: "POST" })
   .inputValidator(
     (d: {
@@ -26,63 +56,81 @@ export const xtreamApi = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const base = normalizeServer(data.server);
-    const url = new URL(`${base}/player_api.php`);
-    url.searchParams.set("username", data.username);
-    url.searchParams.set("password", data.password);
-    if (data.action) url.searchParams.set("action", data.action);
-    if (data.params) {
-      for (const [k, v] of Object.entries(data.params)) {
-        url.searchParams.set(k, String(v));
+
+    function buildUrl(origin: string) {
+      const url = new URL(`${origin}/player_api.php`);
+      url.searchParams.set("username", data.username);
+      url.searchParams.set("password", data.password);
+      if (data.action) url.searchParams.set("action", data.action);
+      if (data.params) {
+        for (const [k, v] of Object.entries(data.params)) {
+          url.searchParams.set(k, String(v));
+        }
       }
+      return url.toString();
     }
 
-    // Some Xtream panels respond 502/503/504 transiently when overloaded,
-    // OR permanently reject requests whose User-Agent isn't on their allow-list.
-    // We try the most common IPTV-app UAs in order — if the panel works in
-    // Xciptv/Smarters/TiviMate, one of these will match.
-    const UAS = [
-      "Xciptv/6.0",
-      "IPTVSmartersPro/3.1.5",
-      "TiviMate/4.7.0",
-      "okhttp/4.9.3",
-      "Lavf/58.76.100",
-      "VLC/3.0.20 LibVLC/3.0.20",
-      "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
-    ];
     let lastStatus = 0;
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < UAS.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20_000);
-      try {
-        const res = await fetch(url.toString(), {
-          headers: {
-            "User-Agent": UAS[attempt],
-            Accept: "*/*",
-            "Accept-Encoding": "identity",
-            Connection: "keep-alive",
-          },
-          redirect: "follow",
-          signal: controller.signal,
-        });
-        if (res.ok) {
-          const text = await res.text();
-          try {
-            return { ok: true as const, data: JSON.parse(text) };
-          } catch {
-            return { ok: false as const, raw: text };
+    let authBlocked = false; // 401/403 → não vale a pena probe outras portas
+
+    async function tryOrigin(origin: string): Promise<
+      | { ok: true; data: unknown }
+      | { ok: false; raw: string }
+      | null
+    > {
+      const target = buildUrl(origin);
+      for (let attempt = 0; attempt < XTREAM_UAS.length; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const res = await fetch(target, {
+            headers: {
+              "User-Agent": XTREAM_UAS[attempt],
+              Accept: "*/*",
+              "Accept-Encoding": "identity",
+              Connection: "keep-alive",
+            },
+            redirect: "follow",
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const text = await res.text();
+            try {
+              return { ok: true, data: JSON.parse(text) };
+            } catch {
+              return { ok: false, raw: text };
+            }
           }
+          lastStatus = res.status;
+          if (res.status === 401 || res.status === 403) {
+            authBlocked = true;
+            return null;
+          }
+          // não-5xx → painel respondeu mas rejeitou esse UA. Vai pro próximo UA.
+          if (res.status < 500 && res.status !== 429) break;
+        } catch (e) {
+          lastErr = e;
+        } finally {
+          clearTimeout(timer);
         }
-        lastStatus = res.status;
-        // Don't retry on auth/permanent errors
-        if (res.status < 500 && res.status !== 429) break;
-      } catch (e) {
-        lastErr = e;
-      } finally {
-        clearTimeout(timer);
+        await new Promise((r) => setTimeout(r, 150));
       }
-      // Short backoff between UA attempts (200ms) — total ~1.4s for 7 tries
-      await new Promise((r) => setTimeout(r, 200));
+      return null;
+    }
+
+    // 1) Tenta o origin original primeiro (preserva comportamento das listas que já funcionam).
+    const first = await tryOrigin(base);
+    if (first) return first;
+
+    // 2) Se foi 401/403, não probe outras portas — credenciais inválidas.
+    if (!authBlocked) {
+      const candidates = buildOriginCandidates(base).filter((o) => o !== base);
+      for (const origin of candidates) {
+        const r = await tryOrigin(origin);
+        if (r) return r;
+        if (authBlocked) break;
+      }
     }
 
     // Em vez de lançar (o que vira "unhandled rejection" no boundary do
