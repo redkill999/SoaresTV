@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
-import { store, type AppSettings } from "@/lib/storage";
+import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
 async function lockLandscape() {
   try {
@@ -109,44 +109,65 @@ export function VideoPlayer({
     setError(null);
     setCanManualPlay(false);
 
-    let hlsCandidate = toHlsCandidate(src, kind);
+    // ---- Compatibilidade por lista ----------------------------------------
+    // Resolve overrides salvos para o host desta URL (UA, transporte, formato,
+    // upgrade HTTPS). Esses ajustes substituem o comportamento default.
+    const compat: ListCompat = getCompatForUrl(src);
+    const httpsSrc = compat.forceHttps ? httpsVariant(src) : null;
+    const workingSrc = httpsSrc ?? src;
+    const forcedUA = compat.userAgent && compat.userAgent !== "auto"
+      ? USER_AGENT_STRINGS[compat.userAgent]
+      : null;
+    const proxiedX = (u: string, k?: "live" | "vod") =>
+      forcedUA ? `${proxied(u, k)}&ua=${encodeURIComponent(forcedUA)}` : proxied(u, k);
+    const forceProxy = compat.transport === "proxy";
+    const forceDirect = compat.transport === "direct";
+    const skipHls = compat.streamFormat === "ts" || compat.streamFormat === "mp4";
+
+    let hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
-    const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src);
-    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(src);
+    const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
+    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const vodCandidates: string[] = [];
-    const vodMatch = src.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
+    const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
     if (vodMatch && (!hlsCandidate || isVod)) {
       const [, base, ext, qs = ""] = vodMatch;
       const currentExt = ext.toLowerCase();
-      const preferred = isVod
-        ? currentExt === "m3u8"
-          ? ["m3u8", "mp4", "m4v", "mkv"]
-          : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
-        : [currentExt, "mp4", "m4v", "mkv"];
+      // Quando o usuário força "mp4", prioriza containers progressivos.
+      const preferred = compat.streamFormat === "mp4"
+        ? ["mp4", "m4v", "mkv", currentExt]
+        : isVod
+          ? currentExt === "m3u8"
+            ? ["m3u8", "mp4", "m4v", "mkv"]
+            : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
+          : [currentExt, "mp4", "m4v", "mkv"];
       for (const alt of preferred) {
         const candidate = `${base}.${alt}${qs}`;
         if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
       }
     }
-    if (!vodCandidates.length) vodCandidates.push(src);
-    const directCandidates = isLive ? liveDirectCandidates(src) : vodCandidates;
+    if (!vodCandidates.length) vodCandidates.push(workingSrc);
+    const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          // Web desktop: proxy primeiro (https same-origin, sem mixed content).
-          // Tentativas diretas (https/http) ficam só como último recurso.
-          // O ramo isNativeApp() mais abaixo sobrescreve esta lista para o APK.
-          const candidates = [
-            proxied(url, "vod"),
-            secure ? proxied(secure, "vod") : null,
-            secure,
-          ].filter(Boolean) as string[];
-          return Array.from(new Set(candidates));
+          // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
+          // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
+          let candidates: (string | null)[];
+          if (forceDirect) {
+            candidates = [secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
+          } else if (forceProxy) {
+            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
+          } else {
+            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, secure];
+          }
+          return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : directCandidates.map((url) => proxied(url, kind));
+      : directCandidates.map((url) => proxiedX(url, kind));
+
 
     let hls: Hls | null = null;
     let cancelled = false;
@@ -188,7 +209,7 @@ export function VideoPlayer({
         hls = null;
       }
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? src : proxied(src, kind));
+      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
@@ -296,7 +317,7 @@ export function VideoPlayer({
                     detachStallListeners?.();
                     hls?.destroy();
                     hls = null;
-                    attachHls(proxied(hlsCandidate, kind));
+                    attachHls(proxiedX(hlsCandidate, kind));
                     return;
                   }
                   detachStallListeners?.();
@@ -354,15 +375,27 @@ export function VideoPlayer({
       nativeDirect = native;
       // Para HLS ao vivo: mesmo em nativo (APK = casca https), o fetch do
       // hls.js para URL http é bloqueado pelo WebView por mixed content.
-      // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
-      // resolve o http e devolve o stream com headers de IPTV.
-      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
-      if (native) {
-        // APK/TV: tenta direto primeiro e mantém proxy como último recurso.
+      // Roteamos pelo proxy /api/stream (mesma origem https) quando preciso.
+      // forceProxy: sempre proxy; forceDirect: sempre direto (mesmo na web).
+      hlsProxied = hlsCandidate
+        ? forceProxy
+          ? proxiedX(hlsCandidate, kind)
+          : forceDirect
+            ? hlsCandidate
+            : native ? hlsCandidate : proxiedX(hlsCandidate, kind)
+        : null;
+      if (native && !forceProxy) {
+        // APK/TV: tenta direto primeiro e mantém proxy como último recurso
+        // (a menos que o usuário tenha escolhido forceProxy).
         playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          return Array.from(new Set([url, secure, proxied(url, kind)].filter(Boolean) as string[]));
+          const list = forceDirect
+            ? [url, secure]
+            : [url, secure, proxiedX(url, kind)];
+          return Array.from(new Set(list.filter(Boolean) as string[]));
         }));
+      } else if (native && forceProxy) {
+        playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.map((u) => proxiedX(u, kind)));
       }
       if (hlsProxied) attachHls(hlsProxied);
       else playDirect();

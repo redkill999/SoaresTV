@@ -1,8 +1,59 @@
 // Single-user local storage helpers
-export type XtreamCreds = { server: string; username: string; password: string };
-export type M3UPlaylist = { name: string; url: string; username?: string; password?: string; mode?: "playlist" | "xtream" };
+
+// Compatibilidade por lista/servidor: opções que sobrescrevem o comportamento
+// padrão do player para uma origem específica.
+export type ListUserAgent =
+  | "auto" | "xciptv" | "smarters" | "tivimate" | "vlc" | "okhttp" | "lavf" | "chrome";
+export type ListTransport = "auto" | "proxy" | "direct";
+export type ListStreamFormat = "auto" | "hls" | "ts" | "mp4";
+export type ListCompat = {
+  userAgent?: ListUserAgent;        // default "auto"
+  streamFormat?: ListStreamFormat;  // default "auto"
+  transport?: ListTransport;        // default "auto"
+  forceHttps?: boolean;             // upgrade http->https antes de tudo
+};
+
+export type XtreamCreds = { server: string; username: string; password: string; compat?: ListCompat };
+export type M3UPlaylist = { name: string; url: string; username?: string; password?: string; mode?: "playlist" | "xtream"; compat?: ListCompat };
 export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
 export type HistItem = FavItem & { at: number; position?: number; duration?: number };
+
+/** Mapeia o User-Agent escolhido para a string real enviada ao provedor. */
+export const USER_AGENT_STRINGS: Record<Exclude<ListUserAgent, "auto">, string> = {
+  xciptv:   "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
+  smarters: "IPTVSmartersPro/3.1.5",
+  tivimate: "TiviMate/4.7.0",
+  vlc:      "VLC/3.0.20 LibVLC/3.0.20",
+  okhttp:   "okhttp/4.9.3",
+  lavf:     "Lavf/58.76.100",
+  chrome:   "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+};
+
+/** Resolve as opções de compatibilidade aplicáveis a uma URL de stream,
+ *  comparando o host com as credenciais Xtream e as listas M3U salvas. */
+export function getCompatForUrl(url: string): ListCompat {
+  if (!isBrowser()) return {};
+  let host = "";
+  try { host = new URL(url).host.toLowerCase(); } catch { return {}; }
+  if (!host) return {};
+  try {
+    const creds = read<XtreamCreds | null>(K.creds, null);
+    if (creds?.server) {
+      try {
+        const ch = new URL(creds.server).host.toLowerCase();
+        if (ch && ch === host && creds.compat) return creds.compat;
+      } catch { /* noop */ }
+    }
+    const lists = read<M3UPlaylist[]>(K.m3u, []);
+    for (const l of lists) {
+      try {
+        const lh = new URL(l.url).host.toLowerCase();
+        if (lh && lh === host && l.compat) return l.compat;
+      } catch { /* noop */ }
+    }
+  } catch { /* noop */ }
+  return {};
+}
 export type ParentalConfig = { pin: string | null; lockedCategories: string[] };
 export type AspectRatio = "default" | "16:9" | "4:3" | "fill" | "stretch";
 export type StreamFormat = "auto" | "hls" | "ts" | "mp4";

@@ -13,8 +13,9 @@ const CORS = {
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
-function proxyUrl(absolute: string) {
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6`;
+function proxyUrl(absolute: string, ua?: string | null) {
+  const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -94,7 +95,7 @@ function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: stri
   headers.set("Accept-Ranges", "bytes");
 }
 
-function rewritePlaylist(text: string, baseUrl: string): string {
+function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
   const base = new URL(baseUrl);
   return text
     .split(/\r?\n/)
@@ -104,7 +105,7 @@ function rewritePlaylist(text: string, baseUrl: string): string {
       // URI="..." attributes (EXT-X-KEY, EXT-X-MAP, etc.)
       const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
         try {
-          return `URI="${proxyUrl(new URL(uri, base).toString())}"`;
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua)}"`;
         } catch {
           return `URI="${uri}"`;
         }
@@ -112,7 +113,7 @@ function rewritePlaylist(text: string, baseUrl: string): string {
       if (withUri.startsWith("#")) return withUri;
       // bare URL line (segment / sub-playlist)
       try {
-        return proxyUrl(new URL(withUri, base).toString());
+        return proxyUrl(new URL(withUri, base).toString(), ua);
       } catch {
         return withUri;
       }
@@ -144,8 +145,9 @@ async function handle(request: Request) {
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
-  // UAs até obter algo que não seja 403/401.
-  const UA_CANDIDATES = [
+  // UAs até obter algo que não seja 403/401. Se o cliente passar &ua=,
+  // priorizamos esse UA (permite override por lista).
+  const DEFAULT_UAS = [
     "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
     "Xciptv/6.0",
     "IPTVSmartersPro/3.1.5",
@@ -155,6 +157,11 @@ async function handle(request: Request) {
     "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "VLC/3.0.20 LibVLC/3.0.20",
   ];
+  const forcedUA = url.searchParams.get("ua");
+  const UA_CANDIDATES = forcedUA
+    ? Array.from(new Set([forcedUA, ...DEFAULT_UAS]))
+    : DEFAULT_UAS;
+
 
   const buildHeaders = (ua: string, rangeValue: string | null, includeOriginHeaders: boolean) => {
     const h = new Headers();
@@ -237,7 +244,7 @@ async function handle(request: Request) {
 
   if (isPlaylist && upstream.ok) {
     const text = await upstream.text();
-    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString());
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
     respHeaders.delete("content-length");
     return new Response(rewritten, { status: upstream.status, headers: respHeaders });
