@@ -149,25 +149,57 @@ async function handle(request: Request) {
     return new Response("bad protocol", { status: 400, headers: CORS });
   }
 
-  const headers = new Headers();
-  headers.set("User-Agent", "VLC/3.0.20 LibVLC/3.0.20");
-  headers.set("Accept", "*/*");
-  headers.set("Icy-MetaData", "0");
+  // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
+  // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
+  // UAs até obter algo que não seja 403/401.
+  const UA_CANDIDATES = [
+    "IPTVSmartersPlayer",
+    "Lavf/58.76.100",
+    "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "VLC/3.0.20 LibVLC/3.0.20",
+  ];
+
+  const buildHeaders = (ua: string) => {
+    const h = new Headers();
+    h.set("User-Agent", ua);
+    h.set("Accept", "*/*");
+    h.set("Icy-MetaData", "0");
+    h.set("Referer", `${upstreamUrl.origin}/`);
+    h.set("Origin", upstreamUrl.origin);
+    const range = request.headers.get("range");
+    if (isVod && effectiveVodRange) h.set("Range", effectiveVodRange);
+    else if (range) h.set("Range", range);
+    return h;
+  };
+
   const range = request.headers.get("range");
   const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
-  if (isVod && effectiveVodRange) headers.set("Range", effectiveVodRange);
-  else if (range) headers.set("Range", range);
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(upstreamUrl.toString(), {
-      method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
-      headers,
-      redirect: "follow",
-    });
-  } catch (e) {
-    return new Response(`upstream fetch failed: ${e instanceof Error ? e.message : "err"}`, {
+  let upstream: Response | null = null;
+  let lastError: unknown = null;
+  for (const ua of UA_CANDIDATES) {
+    try {
+      const res = await fetch(upstreamUrl.toString(), {
+        method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+        headers: buildHeaders(ua),
+        redirect: "follow",
+      });
+      // Aceita qualquer resposta que não seja bloqueio explícito; para 401/403
+      // tentamos o próximo UA, pois costuma ser anti-bot por User-Agent.
+      if (res.status !== 401 && res.status !== 403) {
+        upstream = res;
+        break;
+      }
+      // descarta o body para liberar conexão antes de retentar
+      try { await res.body?.cancel(); } catch { /* noop */ }
+      upstream = res; // mantém o último, caso todos falhem
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (!upstream) {
+    return new Response(`upstream fetch failed: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: 502,
       headers: CORS,
     });
