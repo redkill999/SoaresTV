@@ -263,16 +263,15 @@ export function VideoPlayer({
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Live precisa de buffer suficiente sem tentar carregar uma janela enorme.
-          // Janela moderada + ABR conservador evita picos de bitrate que causam travadas.
-          backBufferLength: isLive ? 15 : 90,
-          maxBufferLength: isLive ? 75 : 180,
-          maxMaxBufferLength: isLive ? 150 : 600,
-          maxBufferSize: isLive ? 180 * 1000 * 1000 : 240 * 1000 * 1000,
-          maxBufferHole: isLive ? 3 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 1 : 3,
-          nudgeMaxRetry: isLive ? 12 : 6,
-          nudgeOffset: isLive ? 0.18 : 0.1,
+          // Config estável (revertida da versão agressiva que travava abertura).
+          backBufferLength: isLive ? 30 : 90,
+          maxBufferLength: isLive ? 45 : 180,
+          maxMaxBufferLength: isLive ? 90 : 600,
+          maxBufferSize: isLive ? 120 * 1000 * 1000 : 240 * 1000 * 1000,
+          maxBufferHole: isLive ? 1.5 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 2 : 3,
+          nudgeMaxRetry: 6,
+          nudgeOffset: 0.1,
           fragLoadingMaxRetry: nativeDirect ? 2 : 8,
           manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
           levelLoadingMaxRetry: nativeDirect ? 2 : 6,
@@ -280,23 +279,16 @@ export function VideoPlayer({
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
-          // Live: tolerância grande pra latência. Sem isso, quando o buffer
-          // ultrapassava ~60s atrás do edge, o hls.js fazia seek pra frente
-          // (a "pausa+recarga" periódica). Agora deixa o usuário ficar pra
-          // trás do edge sem snap, mantendo playback contínuo.
-          liveSyncDurationCount: 10,
-          liveMaxLatencyDurationCount: 120,
-          // Autoplay instantâneo: começa pelo nível mais baixo (start imediato,
-          // sem teste de banda) e o ABR sobe a qualidade depois — evita o
-          // engasgo inicial enquanto o player decide o bitrate.
-          startLevel: 0,
-          testBandwidth: false,
+          liveSyncDurationCount: 6,
+          liveMaxLatencyDurationCount: 60,
+          startLevel: -1,
+          testBandwidth: true,
           startFragPrefetch: true,
-          abrEwmaDefaultEstimate: isLive ? 650_000 : 1_000_000,
-          abrBandWidthFactor: isLive ? 0.55 : 0.8,
-          abrBandWidthUpFactor: isLive ? 0.35 : 0.7,
-          maxStarvationDelay: isLive ? 2 : 4,
-          maxLoadingDelay: isLive ? 2 : 4,
+          abrEwmaDefaultEstimate: 1_000_000,
+          abrBandWidthFactor: 0.8,
+          abrBandWidthUpFactor: 0.7,
+          maxStarvationDelay: 4,
+          maxLoadingDelay: 4,
           capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
@@ -357,36 +349,31 @@ export function VideoPlayer({
           lockLowQuality();
         };
 
+        let manifestReady = false;
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
+
         const recoverLiveStall = () => {
-          if (!isLive || cancelled) return;
+          if (!isLive || cancelled || !manifestReady) return;
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
-            if (ahead < 1.5) {
-              try { hls.startLoad(-1); } catch { /* noop */ }
-              const livePos = hls.liveSyncPosition;
-              if (typeof livePos === "number" && Number.isFinite(livePos) && Math.abs(livePos - video.currentTime) > 4) {
-                try { video.currentTime = livePos; } catch { /* noop */ }
-              }
+            if (ahead < 0.75) {
+              try { hls.startLoad(); } catch { /* noop */ }
             }
             void video.play().catch(() => undefined);
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
-          }, 1_000);
+          }, 3_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
-        video.addEventListener("stalled", onWaiting);
         video.addEventListener("playing", onResumed);
-        video.addEventListener("canplay", onResumed);
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
-          video.removeEventListener("stalled", onWaiting);
           video.removeEventListener("playing", onResumed);
-          video.removeEventListener("canplay", onResumed);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
