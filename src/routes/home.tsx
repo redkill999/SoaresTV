@@ -50,7 +50,6 @@ type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
 function HomePage() {
   const navigate = useNavigate();
-  const [mounted, setMounted] = useState(false);
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
   const [openConta, setOpenConta] = useState(false);
 
@@ -61,7 +60,6 @@ function HomePage() {
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMounted(true);
     const hasCreds = !!store.getCreds();
     const playlists = store.getM3U();
     setM3uList(playlists[0] ?? null);
@@ -89,7 +87,6 @@ function HomePage() {
     if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
   }, []);
 
-  if (!mounted) return <HomeSkeleton />;
 
   const openTile = (to: string, label?: string) => {
     if (label === "CONTA") { setOpenConta(true); return; }
