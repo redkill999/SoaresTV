@@ -191,7 +191,11 @@ function HomePage() {
 
       {/* Main 4 tiles */}
       <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
-        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 md:grid-cols-4">
+        {/* landscape:grid-cols-4 garante que aparelhos como o Ulefone Armor 8
+            (que abre a WebView em paisagem sem disparar o TV-mode, portanto
+            sem largura >=768px) NAO empilhem os tiles em 2x2 — o que estourava
+            a altura e empurrava o rodape por cima do conteudo. */}
+        <div className="grid w-full grid-cols-2 landscape:grid-cols-4 gap-3 sm:gap-5 md:grid-cols-4">
           {MAIN.map((t, i) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
@@ -245,10 +249,10 @@ function MainTile({ tile, onClick, defaultFocus }: { tile: Tile; onClick: () => 
     <button
       onClick={onClick}
       data-tv-default-focus={defaultFocus ? "" : undefined}
-      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60"
+      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60 landscape:max-h-[120px] landscape:py-2 landscape:gap-1 sm:landscape:max-h-none sm:landscape:py-5 sm:landscape:gap-1.5"
     >
-      <Icon className="size-8 sm:size-12 transition group-hover:scale-105" strokeWidth={1.6} />
-      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em]">{tile.label}</span>
+      <Icon className="size-8 sm:size-12 transition group-hover:scale-105 landscape:size-6 sm:landscape:size-12" strokeWidth={1.6} />
+      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em] landscape:text-[10px] sm:landscape:text-base">{tile.label}</span>
     </button>
   );
 }
