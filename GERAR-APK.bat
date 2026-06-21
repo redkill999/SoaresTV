@@ -47,6 +47,21 @@ if "%ANDROID_HOME%"=="" if "%ANDROID_SDK_ROOT%"=="" (
   )
 )
 
+REM ---------- 0b. Preferir JDK compativel com Android/Gradle ----------
+if exist "%ProgramFiles%\Android\Android Studio\jbr\bin\java.exe" (
+  set "JAVA_HOME=%ProgramFiles%\Android\Android Studio\jbr"
+  set "PATH=!JAVA_HOME!\bin;!PATH!"
+  echo  [info] Java do Android Studio detectado: !JAVA_HOME!
+) else if exist "%ProgramFiles%\Eclipse Adoptium\jdk-21*" (
+  for /d %%J in ("%ProgramFiles%\Eclipse Adoptium\jdk-21*") do set "JAVA_HOME=%%~fJ"
+  set "PATH=!JAVA_HOME!\bin;!PATH!"
+  echo  [info] JDK 21 detectado: !JAVA_HOME!
+) else if exist "%ProgramFiles%\Eclipse Adoptium\jdk-17*" (
+  for /d %%J in ("%ProgramFiles%\Eclipse Adoptium\jdk-17*") do set "JAVA_HOME=%%~fJ"
+  set "PATH=!JAVA_HOME!\bin;!PATH!"
+  echo  [info] JDK 17 detectado: !JAVA_HOME!
+)
+
 REM ---------- 1. Checagens basicas ----------
 where bun >nul 2>nul || (
   echo  [ERRO] 'bun' nao encontrado. Instale em https://bun.sh
@@ -54,6 +69,14 @@ where bun >nul 2>nul || (
 )
 where java >nul 2>nul || (
   echo  [ERRO] 'java' nao encontrado. Instale o JDK 17+ em https://adoptium.net
+  goto :fail
+)
+for /f "tokens=2 delims=\"" %%V in ('java -version 2^>^&1 ^| findstr /i "version"') do set "JAVA_VERSION=%%V"
+for /f "tokens=1 delims=." %%M in ("!JAVA_VERSION!") do set "JAVA_MAJOR=%%M"
+if not "!JAVA_MAJOR!"=="" if !JAVA_MAJOR! GEQ 25 (
+  echo  [ERRO] Java !JAVA_VERSION! detectado, mas o Gradle/Android nao suporta Java 25+.
+  echo         Instale JDK 21 ou JDK 17 e rode este arquivo novamente.
+  echo         Link recomendado: https://adoptium.net/temurin/releases/?version=21
   goto :fail
 )
 
