@@ -83,13 +83,17 @@ where java >nul 2>nul || (
   echo  [ERRO] 'java' nao encontrado. Instale o JDK 17+ em https://adoptium.net
   goto :fail
 )
-for /f "tokens=2 delims=\"" %%V in ('java -version 2^>^&1 ^| findstr /i "version"') do set "JAVA_VERSION=%%V"
+set "JAVA_VERSION="
+set "JAVA_MAJOR="
+for /f "tokens=3" %%V in ('java -version 2^>^&1 ^| findstr /i "version"') do if not defined JAVA_VERSION set "JAVA_VERSION=%%~V"
 for /f "tokens=1 delims=." %%M in ("!JAVA_VERSION!") do set "JAVA_MAJOR=%%M"
-if not "!JAVA_MAJOR!"=="" if !JAVA_MAJOR! GEQ 25 (
-  echo  [ERRO] Java !JAVA_VERSION! detectado, mas o Gradle/Android nao suporta Java 25+.
-  echo         Instale JDK 21 ou JDK 17 e rode este arquivo novamente.
-  echo         Link recomendado: https://adoptium.net/temurin/releases/?version=21
-  goto :fail
+if defined JAVA_MAJOR (
+  if !JAVA_MAJOR! GEQ 25 (
+    echo  [ERRO] Java !JAVA_VERSION! detectado, mas o Gradle/Android nao suporta Java 25+.
+    echo         Instale JDK 21 ou JDK 17 e rode este arquivo novamente.
+    echo         Link recomendado: https://adoptium.net/temurin/releases/?version=21
+    goto :fail
+  )
 )
 
 REM ---------- Modo "so abrir Android Studio" ----------
