@@ -138,13 +138,6 @@ function LoadingPage() {
         ))}
       </div>
 
-      {/* Spinner + mensagem */}
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
-        <Loader2 className="size-8 text-emerald-400 animate-spin" strokeWidth={2.2} />
-        <div className="mt-4 text-lg sm:text-xl text-white/90">
-          Por favor, aguarde........
-        </div>
-      </div>
 
       {/* Spinner + mensagem */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
