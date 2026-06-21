@@ -272,11 +272,23 @@ export function VideoPlayer({
           // trás do edge sem snap, mantendo playback contínuo.
           liveSyncDurationCount: 6,
           liveMaxLatencyDurationCount: 60,
-          startLevel: -1,
+          // Autoplay instantâneo: começa pelo nível mais baixo (start imediato,
+          // sem teste de banda) e o ABR sobe a qualidade depois — evita o
+          // engasgo inicial enquanto o player decide o bitrate.
+          startLevel: 0,
+          testBandwidth: false,
+          startFragPrefetch: true,
           abrEwmaDefaultEstimate: 1_000_000,
         });
         hls.loadSource(url);
         hls.attachMedia(video);
+
+        // Dispara play() assim que o manifest é parseado — não espera o
+        // autoPlay do browser engatar, reduz delay até primeiro frame.
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (cancelled) return;
+          video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+        });
 
         let netRetries = 0;
         const MAX_NET_RETRIES = nativeDirect ? 2 : 5;
