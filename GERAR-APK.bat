@@ -1,4 +1,9 @@
 @echo off
+if /I not "%~1"=="__run" (
+  start "SoaresTV - Gerar APK" cmd /k ""%~f0" __run %*"
+  exit /b
+)
+shift /1
 REM ============================================================
 REM  GERAR-APK.bat  -  SoaresTV 3.0
 REM  Script automatico de compilacao do APK Android.
@@ -26,6 +31,11 @@ REM ============================================================
 setlocal ENABLEDELAYEDEXPANSION
 cd /d "%~dp0"
 title SoaresTV - Gerar APK
+set "LOG_FILE=%CD%\GERAR-APK.log"
+echo ============================================================ > "%LOG_FILE%"
+echo SoaresTV - Gerar APK - %DATE% %TIME% >> "%LOG_FILE%"
+echo Pasta: %CD% >> "%LOG_FILE%"
+echo ============================================================ >> "%LOG_FILE%"
 
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=debug"
@@ -36,6 +46,8 @@ echo  ============================================================
 echo    SOARESTV 3.0  -  Gerador automatico de APK Android
 echo    Modo: %MODE%
 echo  ============================================================
+echo.
+echo  [info] Log desta execucao: %LOG_FILE%
 echo.
 
 REM ---------- 0. Detectar Android SDK automaticamente ----------
@@ -93,34 +105,34 @@ if "%ANDROID_HOME%"=="" if "%ANDROID_SDK_ROOT%"=="" (
 REM ---------- 2. Instalar deps ----------
 echo.
 echo  [1/5] Instalando dependencias (bun install)...
-call bun install || goto :fail
+call bun install >> "%LOG_FILE%" 2>&1 || goto :fail
 
 REM ---------- 3. Build do site ----------
 echo.
 echo  [2/5] Buildando frontend (bun run build)...
-call bun run build || goto :fail
+call bun run build >> "%LOG_FILE%" 2>&1 || goto :fail
 
 REM ---------- 4. Adicionar plataforma Android se nao existir ----------
 if not exist "android" (
   echo.
   echo  [extra] Plataforma Android ausente - rodando: bunx cap add android
-  call bunx cap add android || goto :fail
+  call bunx cap add android >> "%LOG_FILE%" 2>&1 || goto :fail
 )
 
 REM ---------- 5. Sync Capacitor ----------
 echo.
 echo  [3/5] Sincronizando Capacitor (bunx cap sync android)...
-call bunx cap sync android || goto :fail
+call bunx cap sync android >> "%LOG_FILE%" 2>&1 || goto :fail
 
 REM ---------- 6. Compilar APK ----------
 echo.
 echo  [4/5] Compilando APK %MODE% com Gradle (pode demorar varios minutos na 1a vez)...
 pushd android
 if /I "%MODE%"=="release" (
-  call gradlew.bat assembleRelease || (popd & goto :fail)
+  call gradlew.bat assembleRelease >> "%LOG_FILE%" 2>&1 || (popd & goto :fail)
   set "APK_PATH=app\build\outputs\apk\release\app-release-unsigned.apk"
 ) else (
-  call gradlew.bat assembleDebug || (popd & goto :fail)
+  call gradlew.bat assembleDebug >> "%LOG_FILE%" 2>&1 || (popd & goto :fail)
   set "APK_PATH=app\build\outputs\apk\debug\app-debug.apk"
 )
 popd
@@ -181,6 +193,16 @@ echo  ============================================================
 echo    [FALHA] Build interrompido. Leia a mensagem acima.
 echo  ============================================================
 echo.
+echo  O arquivo com o erro completo foi salvo aqui:
+echo  %LOG_FILE%
+echo.
+if exist "%LOG_FILE%" (
+  echo  Ultimas linhas do erro:
+  echo  ------------------------------------------------------------
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -LiteralPath '%LOG_FILE%' -Tail 40" 2>nul
+  echo  ------------------------------------------------------------
+  echo.
+)
 pause
 endlocal
 exit /b 1
