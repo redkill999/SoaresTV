@@ -309,28 +309,58 @@ export type M3UEntry = {
   group?: string;
 };
 
+// Limite de segurança para evitar OOM em listas absurdamente grandes
+// (~250k canais cobre praticamente qualquer painel real).
+const MAX_M3U_ENTRIES = 250_000;
+const RE_LOGO = /tvg-logo="([^"]+)"/;
+const RE_GROUP = /group-title="([^"]+)"/;
+
+/**
+ * Parser incremental: percorre o texto via indexOf("\n") em vez de
+ * `text.split(...)`, evitando alocar um array gigante com todas as linhas
+ * (em listas de 60-80 MB o split chega a dobrar o uso de memória e
+ * derruba o WebView do APK). Cada linha é processada e descartada.
+ */
 export function parseM3U(text: string): M3UEntry[] {
-  const lines = text.split(/\r?\n/);
   const out: M3UEntry[] = [];
   let cur: Partial<M3UEntry> | null = null;
   let i = 0;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.startsWith("#EXTINF")) {
-      const name = line.split(",").slice(1).join(",").trim();
-      const logo = /tvg-logo="([^"]+)"/.exec(line)?.[1];
-      const group = /group-title="([^"]+)"/.exec(line)?.[1];
-      cur = { name, logo, group };
-    } else if (line && !line.startsWith("#") && cur) {
-      out.push({
-        id: `m3u-${i++}`,
-        url: line,
-        name: cur.name || "Sem nome",
-        logo: cur.logo,
-        group: cur.group,
-      });
-      cur = null;
+  const len = text.length;
+  let start = 0;
+  while (start <= len) {
+    let end = text.indexOf("\n", start);
+    if (end === -1) end = len;
+    // strip \r final e espaços
+    let lineEnd = end;
+    while (lineEnd > start && (text.charCodeAt(lineEnd - 1) === 13 /* \r */ || text.charCodeAt(lineEnd - 1) === 32)) lineEnd--;
+    let lineStart = start;
+    while (lineStart < lineEnd && text.charCodeAt(lineStart) === 32) lineStart++;
+    if (lineEnd > lineStart) {
+      const first = text.charCodeAt(lineStart);
+      if (first === 35 /* # */) {
+        // só nos importa #EXTINF
+        if (text.startsWith("#EXTINF", lineStart)) {
+          const line = text.slice(lineStart, lineEnd);
+          const comma = line.indexOf(",");
+          const name = comma >= 0 ? line.slice(comma + 1).trim() : "";
+          const logo = RE_LOGO.exec(line)?.[1];
+          const group = RE_GROUP.exec(line)?.[1];
+          cur = { name, logo, group };
+        }
+      } else if (cur) {
+        const url = text.slice(lineStart, lineEnd);
+        out.push({
+          id: `m3u-${i++}`,
+          url,
+          name: cur.name || "Sem nome",
+          logo: cur.logo,
+          group: cur.group,
+        });
+        cur = null;
+        if (out.length >= MAX_M3U_ENTRIES) break;
+      }
     }
+    start = end + 1;
   }
   return out;
 }
