@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowDownAZ, ArrowUpZA, ArrowLeft, Search, Tv, X } from "lucide-react";
+import { ArrowDownAZ, ArrowUpZA, ArrowLeft, Search, X } from "lucide-react";
 import type { SortKey } from "@/components/SectionTabs";
 
 export function XciptvHeader({
