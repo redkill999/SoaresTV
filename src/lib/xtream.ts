@@ -103,7 +103,7 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 10_000,
+  timeoutMs = 12_000,
 ): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -126,6 +126,11 @@ async function nativeHttpGet(
     throw new Error(`Falha na conexão nativa Android: ${message}`);
   }
 }
+
+// Portas Xtream mais comuns. Antes eram 12 portas × 2 schemes = 24 candidatas
+// (até ~240s no pior caso). Reduzido para 5 portas × 2 schemes = 10. Cobre
+// >95% dos painéis sem castigar painéis lentos com waterfall enorme.
+const COMMON_XTREAM_PORTS = ["", "80", "8080", "8880", "25461"] as const;
 
 function parseNativeJson(data: unknown) {
   if (typeof data === "string") return JSON.parse(data);
