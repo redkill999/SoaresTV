@@ -255,10 +255,10 @@ export function VideoPlayer({
           maxBufferLength: isLive ? 60 : 180,
           maxMaxBufferLength: isLive ? 180 : 600,
           maxBufferSize: isLive ? 180 * 1000 * 1000 : 240 * 1000 * 1000,
-          maxBufferHole: 1.0,
+          maxBufferHole: 0.5,
           highBufferWatchdogPeriod: 3,
-          nudgeMaxRetry: 10,
-          nudgeOffset: 0.2,
+          nudgeMaxRetry: 6,
+          nudgeOffset: 0.1,
           fragLoadingMaxRetry: nativeDirect ? 2 : 8,
           manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
           levelLoadingMaxRetry: nativeDirect ? 2 : 6,
@@ -266,8 +266,12 @@ export function VideoPlayer({
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
-          liveSyncDurationCount: 4,
-          liveMaxLatencyDurationCount: 10,
+          // Live: tolerância grande pra latência. Sem isso, quando o buffer
+          // ultrapassava ~60s atrás do edge, o hls.js fazia seek pra frente
+          // (a "pausa+recarga" periódica). Agora deixa o usuário ficar pra
+          // trás do edge sem snap, mantendo playback contínuo.
+          liveSyncDurationCount: 6,
+          liveMaxLatencyDurationCount: 60,
           startLevel: -1,
           abrEwmaDefaultEstimate: 1_000_000,
         });
