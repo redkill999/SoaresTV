@@ -95,7 +95,7 @@ function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: stri
   headers.set("Accept-Ranges", "bytes");
 }
 
-function rewritePlaylist(text: string, baseUrl: string): string {
+function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
   const base = new URL(baseUrl);
   return text
     .split(/\r?\n/)
@@ -105,7 +105,7 @@ function rewritePlaylist(text: string, baseUrl: string): string {
       // URI="..." attributes (EXT-X-KEY, EXT-X-MAP, etc.)
       const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
         try {
-          return `URI="${proxyUrl(new URL(uri, base).toString())}"`;
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua)}"`;
         } catch {
           return `URI="${uri}"`;
         }
@@ -113,7 +113,7 @@ function rewritePlaylist(text: string, baseUrl: string): string {
       if (withUri.startsWith("#")) return withUri;
       // bare URL line (segment / sub-playlist)
       try {
-        return proxyUrl(new URL(withUri, base).toString());
+        return proxyUrl(new URL(withUri, base).toString(), ua);
       } catch {
         return withUri;
       }
