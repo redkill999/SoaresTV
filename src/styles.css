@@ -386,3 +386,17 @@ div[style*="Edit with Lovable"],
     inset 0 0 0 6px var(--tv-focus) !important;
 }
 
+
+/* Esconde o badge "Edit with Lovable" no APK/site publicado.
+   O usuario pediu para remover esse "X" que aparece no canto inferior direito. */
+#lovable-badge,
+[id^="lovable-badge"],
+[data-lovable-badge],
+a[href*="lovable.dev"][target="_blank"],
+iframe[src*="lovable.dev/badge"],
+iframe[src*="gpteng.co"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
