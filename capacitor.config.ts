@@ -18,6 +18,12 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
     // XCIPTV-like: landscape travado e fullscreen imersivo
     backgroundColor: '#000000',
+    // Permite debug remoto via chrome://inspect só em builds dev.
+    webContentsDebuggingEnabled: false,
+    // Trata navegação para domínios diferentes do host como link externo
+    // em vez de carregar dentro do WebView (evita ficar "preso" se um
+    // anúncio/redirect aparecer).
+    captureInput: true,
   },
   plugins: {
     CapacitorHttp: {
