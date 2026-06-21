@@ -136,7 +136,7 @@ function LoginPage() {
         toast.success("Conectado ao Xtream!");
       }
 
-      setResult(info ? JSON.stringify(info, null, 2) : `${entries.length} itens carregados via lista M3U`);
+      setResult("");
       setTimeout(() => navigate({ to: "/loading" }), 400);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro";
