@@ -319,6 +319,43 @@ export function VideoPlayer({
         // só forçamos play(). Isso corta travadas sem voltar ao bug de reload.
         let stallTimer: ReturnType<typeof setTimeout> | null = null;
         const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
+
+        // Fallback automático de qualidade: se travar 2+ vezes em 30s,
+        // fixa no nível mais baixo (loadLevel=0) por 60s para parar de
+        // engasgar. Depois libera o ABR pra voltar a subir naturalmente.
+        const stallTimestamps: number[] = [];
+        let lockedLow = false;
+        let unlockTimer: ReturnType<typeof setTimeout> | null = null;
+        const lockLowQuality = () => {
+          if (!hls || lockedLow) return;
+          lockedLow = true;
+          try {
+            hls.nextLevel = 0;
+            hls.loadLevel = 0;
+            hls.autoLevelCapping = 0;
+          } catch { /* noop */ }
+          if (unlockTimer) clearTimeout(unlockTimer);
+          unlockTimer = setTimeout(() => {
+            if (!hls) return;
+            try {
+              hls.autoLevelCapping = -1;
+              hls.nextLevel = -1;
+              hls.loadLevel = -1;
+            } catch { /* noop */ }
+            lockedLow = false;
+            stallTimestamps.length = 0;
+          }, 60_000);
+        };
+        const registerStall = () => {
+          const now = Date.now();
+          stallTimestamps.push(now);
+          // mantém só os últimos 30s
+          while (stallTimestamps.length && now - stallTimestamps[0] > 30_000) {
+            stallTimestamps.shift();
+          }
+          if (stallTimestamps.length >= 2) lockLowQuality();
+        };
+
         const recoverLiveStall = () => {
           if (!isLive || cancelled) return;
           clearStall();
@@ -332,13 +369,14 @@ export function VideoPlayer({
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
           }, 3_000);
         };
-        const onWaiting = () => recoverLiveStall();
+        const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
         video.addEventListener("canplay", onResumed);
         detachStallListeners = () => {
           clearStall();
+          if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
           video.removeEventListener("canplay", onResumed);
