@@ -356,7 +356,7 @@ export function VideoPlayer({
       // hls.js para URL http é bloqueado pelo WebView por mixed content.
       // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
       // resolve o http e devolve o stream com headers de IPTV.
-      hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
+      hlsProxied = hlsCandidate && !native ? proxied(hlsCandidate, kind) : null;
       if (native) {
         // APK/TV: tenta direto primeiro e mantém proxy como último recurso.
         playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
