@@ -74,9 +74,8 @@ export const xtreamApi = createServerFn({ method: "POST" })
     let lastErr: unknown = null;
     let authBlocked = false; // 401/403 → não vale a pena probe outras portas
 
-    type TryResult =
-      | { ok: true; data: unknown }
-      | { ok: false; raw: string };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type TryResult = { ok: true; data: any } | { ok: false; raw: string };
 
     async function tryOrigin(origin: string): Promise<TryResult | null> {
       const target = buildUrl(origin);
@@ -97,7 +96,7 @@ export const xtreamApi = createServerFn({ method: "POST" })
           if (res.ok) {
             const text = await res.text();
             try {
-              return { ok: true, data: JSON.parse(text) as unknown };
+              return { ok: true, data: JSON.parse(text) };
             } catch {
               return { ok: false, raw: text };
             }
@@ -107,7 +106,6 @@ export const xtreamApi = createServerFn({ method: "POST" })
             authBlocked = true;
             return null;
           }
-          // não-5xx → painel respondeu mas rejeitou esse UA. Vai pro próximo UA.
           if (res.status < 500 && res.status !== 429) break;
         } catch (e) {
           lastErr = e;
@@ -123,7 +121,7 @@ export const xtreamApi = createServerFn({ method: "POST" })
     const first = await tryOrigin(base);
     if (first) {
       return first.ok
-        ? { ok: true as const, data: first.data as Record<string, unknown> | unknown[] | string | number | boolean | null }
+        ? { ok: true as const, data: first.data }
         : { ok: false as const, raw: first.raw };
     }
 
@@ -134,7 +132,7 @@ export const xtreamApi = createServerFn({ method: "POST" })
         const r = await tryOrigin(origin);
         if (r) {
           return r.ok
-            ? { ok: true as const, data: r.data as Record<string, unknown> | unknown[] | string | number | boolean | null }
+            ? { ok: true as const, data: r.data }
             : { ok: false as const, raw: r.raw };
         }
         if (authBlocked) break;
