@@ -464,11 +464,30 @@ export function VideoPlayer({
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
+
+        // Page visibility: quando a aba/tela perde foco, paramos o download
+        // (hls.stopLoad) para liberar memória — buffer atual mantém o playback
+        // se voltar logo. Retomamos no foco. Live: só pausa loader se estiver
+        // explicitamente pausado (canal em background continua "ao vivo").
+        const onVisibility = () => {
+          if (!hls) return;
+          const hidden = document.visibilityState === "hidden";
+          try {
+            if (hidden) {
+              if (!isLive || video.paused) hls.stopLoad();
+            } else {
+              hls.startLoad();
+            }
+          } catch { /* noop */ }
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
+          document.removeEventListener("visibilitychange", onVisibility);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
