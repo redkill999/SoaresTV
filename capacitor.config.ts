@@ -10,7 +10,9 @@ const config: CapacitorConfig = {
   // garantindo que APKs instalados não quebrem após mudança de slug.
   // Se um dia quiser empacotar offline, remova o bloco `server` e rode `bun run build` antes de `cap sync`.
   server: {
-    url: 'https://project--7e27fbd1-c4eb-4da3-b3cd-6957171df823.lovable.app',
+    // URL publicada do app. Se você renomear o projeto no Lovable,
+    // atualize esta URL e gere um novo APK.
+    url: 'https://tv-magica-brasa-soarestv.lovable.app',
     cleartext: true,
     androidScheme: 'https',
   },
