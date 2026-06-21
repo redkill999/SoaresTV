@@ -209,7 +209,7 @@ export function VideoPlayer({
         hls = null;
       }
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? src : proxied(src, kind));
+      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
