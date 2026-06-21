@@ -249,10 +249,12 @@ export function VideoPlayer({
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 60,
-          maxBufferLength: 60,
-          maxMaxBufferLength: 120,
-          maxBufferSize: 120 * 1000 * 1000,
+          // Buffer-ahead aumentado para reduzir pausas por engasgo de rede/servidor.
+          // VOD acumula muito mais (~3min); live mantém janela menor pra não atrasar.
+          backBufferLength: isLive ? 30 : 90,
+          maxBufferLength: isLive ? 30 : 180,
+          maxMaxBufferLength: isLive ? 60 : 600,
+          maxBufferSize: isLive ? 120 * 1000 * 1000 : 240 * 1000 * 1000,
           maxBufferHole: 1.0,
           highBufferWatchdogPeriod: 3,
           nudgeMaxRetry: 10,
