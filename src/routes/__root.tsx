@@ -236,21 +236,28 @@ function RootComponent() {
         .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
         .catch(() => {});
       // Hardware back button (Android/AndroidTV): volta na história ou sai do app.
-      void import("@capacitor/app")
-        .then(({ App }) => {
-          App.addListener("backButton", () => {
-            if (["/live", "/movies", "/series"].includes(window.location.pathname)) {
-              void router.navigate({ to: "/home" });
-              return;
-            }
-            if (window.history.length > 1) {
-              router.history.back();
-            } else {
-              App.exitApp();
-            }
+      // Guard contra múltiplos binds — sem isso um re-render do RootComponent
+      // empilhava listeners e o "voltar" disparava várias navegações de uma vez.
+      if (!w.__backButtonBound) {
+        w.__backButtonBound = true;
+        void import("@capacitor/app")
+          .then(({ App }) => {
+            App.addListener("backButton", () => {
+              if (["/live", "/movies", "/series"].includes(window.location.pathname)) {
+                void router.navigate({ to: "/home" });
+                return;
+              }
+              if (window.history.length > 1) {
+                router.history.back();
+              } else {
+                App.exitApp();
+              }
+            });
+          })
+          .catch(() => {
+            w.__backButtonBound = false;
           });
-        })
-        .catch(() => {});
+      }
     }
     // Controle remoto / teclado (D-pad). Funciona em Smart TV (Tizen,
     // WebOS, AndroidTV, FireTV), Capacitor (Android) e também desktop —
