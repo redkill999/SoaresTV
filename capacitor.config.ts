@@ -28,8 +28,11 @@ const config: CapacitorConfig = {
     captureInput: true,
   },
   plugins: {
+    // IMPORTANTE: manter desabilitado. Quando `enabled: true`, o plugin
+    // intercepta fetch/XHR da WebView e quebra streaming HLS (.m3u8/.ts),
+    // fazendo a lista carregar mas os canais não rodarem.
     CapacitorHttp: {
-      enabled: true,
+      enabled: false,
     },
     ScreenOrientation: {
       orientation: 'landscape',
