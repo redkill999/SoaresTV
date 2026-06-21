@@ -43,9 +43,9 @@ function PlaylistPage() {
   const [active, setActive] = useState<M3UEntry | null>(null);
   const [group, setGroup] = useState<string>("all");
   const [mounted, setMounted] = useState(false);
+  // Hidratação assíncrona do IndexedDB (persistente entre reloads).
+  const [hydrated, setHydrated] = useState(false);
 
-  // Prefer in-memory cache (just loaded from login flow). Fall back to URL
-  // param if user landed here directly (deep link / reload).
   const cached = mounted ? m3uCache.get() : null;
   const [savedLists, setSavedLists] = useState<M3UPlaylist[]>([]);
   useEffect(() => {
@@ -56,15 +56,36 @@ function PlaylistPage() {
   const fallbackUrl = urlParam || cached?.url || savedList?.url || "";
   const displayName = name || cached?.name || savedList?.name || "Lista M3U";
 
+  // Tenta hidratar do disco quando não há cache em memória (reload / deep-link).
+  useEffect(() => {
+    if (!fallbackUrl || cached) {
+      setHydrated(true);
+      return;
+    }
+    let cancelled = false;
+    void m3uCache.loadPersisted(fallbackUrl).then(() => {
+      if (!cancelled) setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackUrl, cached]);
+
   useEffect(() => {
     if (!fallbackUrl) return;
     const xtreamCreds = xtreamCredsFromUrl(fallbackUrl, savedList?.username, savedList?.password);
     if (xtreamCreds && !store.getCreds()) store.setCreds(xtreamCreds);
   }, [fallbackUrl, savedList?.username, savedList?.password]);
 
+  // Após hidratar, releitura do snapshot em memória.
+  const hydratedCached = hydrated ? m3uCache.get() : null;
+  const effectiveCached =
+    hydratedCached && hydratedCached.url === fallbackUrl ? hydratedCached : null;
+
   const q = useQuery({
     queryKey: ["m3u", fallbackUrl, savedList?.username, savedList?.password],
-    enabled: !cached && !!fallbackUrl,
+    // Busca quando: não há cache válido OU cache existe mas está velho (revalidação em background).
+    enabled: hydrated && !!fallbackUrl && (!effectiveCached || m3uCache.isStale()),
     queryFn: async () => {
       const entries = await loadM3U(fallbackUrl, savedList?.username, savedList?.password);
       m3uCache.set(fallbackUrl, displayName, entries);
@@ -74,7 +95,7 @@ function PlaylistPage() {
     staleTime: Infinity,
   });
 
-  const entries: M3UEntry[] = cached?.entries ?? q.data ?? [];
+  const entries: M3UEntry[] = q.data ?? effectiveCached?.entries ?? [];
 
   const groups = useMemo(() => {
     const set = new Set<string>();
