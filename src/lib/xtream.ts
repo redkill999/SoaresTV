@@ -44,13 +44,55 @@ const IPTV_HEADERS = {
 
 type NativeHttpResponse = { status: number; data: unknown };
 
-export async function isNativeApp(): Promise<boolean> {
+function hasWindowNativeBridge(): boolean {
   if (typeof window === "undefined") return false;
+  const cap = (window as typeof window & {
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+      getPlatform?: () => string;
+      isPluginAvailable?: (name: string) => boolean;
+    };
+  }).Capacitor;
+  return !!(
+    cap?.isNativePlatform?.() ||
+    cap?.getPlatform?.() === "android" ||
+    cap?.isPluginAvailable?.("CapacitorHttp")
+  );
+}
+
+function isAndroidWebViewShell(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /android/i.test(ua) && (/\bwv\b/i.test(ua) || /version\/\d+(?:\.\d+)?.*chrome\/\d+.*mobile safari/i.test(ua));
+}
+
+async function canUseNativeHttp(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (hasWindowNativeBridge()) return true;
   try {
     const { Capacitor } = await import("@capacitor/core");
-    return Capacitor.isNativePlatform();
+    return !!(
+      Capacitor.isNativePlatform() ||
+      Capacitor.getPlatform?.() === "android" ||
+      Capacitor.isPluginAvailable?.("CapacitorHttp")
+    );
   } catch {
     return false;
+  }
+}
+
+export async function isNativeApp(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (hasWindowNativeBridge() || isAndroidWebViewShell()) return true;
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return !!(
+      Capacitor.isNativePlatform() ||
+      Capacitor.getPlatform?.() === "android" ||
+      Capacitor.isPluginAvailable?.("CapacitorHttp")
+    );
+  } catch {
+    return isAndroidWebViewShell();
   }
 }
 
@@ -58,7 +100,12 @@ async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
-    if (!Capacitor.isNativePlatform()) return null;
+    const canUseHttp =
+      Capacitor.isNativePlatform() ||
+      Capacitor.getPlatform?.() === "android" ||
+      Capacitor.isPluginAvailable?.("CapacitorHttp") ||
+      hasWindowNativeBridge();
+    if (!canUseHttp) return null;
     return await CapacitorHttp.get({
       url,
       headers: IPTV_HEADERS,
@@ -100,7 +147,7 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<{ data: T; creds: XtreamCreds } | null> {
-  if (!(await isNativeApp())) return null;
+  if (!(await canUseNativeHttp())) return null;
   let base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
   try {
@@ -271,7 +318,7 @@ function buildClientM3UUrl(raw: string, username?: string, password?: string): s
 }
 
 async function nativeLoadM3U(url: string, username?: string, password?: string): Promise<M3UEntry[] | null> {
-  if (!(await isNativeApp())) return null;
+  if (!(await canUseNativeHttp())) return null;
   const first = buildClientM3UUrl(url, username, password);
   const candidates = new Set<string>([first]);
   try {
@@ -295,14 +342,19 @@ async function nativeLoadM3U(url: string, username?: string, password?: string):
   }
 
   let lastStatus = 0;
+  let lastError: unknown = null;
   for (const target of candidates) {
-    const res = await nativeHttpGet(target);
-    if (!res) return null;
-    lastStatus = res.status;
-    if (res.status < 200 || res.status >= 300) continue;
-    const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
-    const entries = parseM3U(text);
-    if (entries.length) return entries;
+    try {
+      const res = await nativeHttpGet(target);
+      if (!res) return null;
+      lastStatus = res.status;
+      if (res.status < 200 || res.status >= 300) continue;
+      const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
+      const entries = parseM3U(text);
+      if (entries.length) return entries;
+    } catch (err) {
+      lastError = err;
+    }
   }
   throw new Error(lastStatus ? `M3U respondeu HTTP ${lastStatus}` : "Lista M3U vazia");
 }
