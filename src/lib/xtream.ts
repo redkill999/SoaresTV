@@ -157,21 +157,14 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   const candidates = new Set<string>([base]);
   try {
     const u = new URL(base);
-    for (const port of [
-      "",
-      "80",
-      "8080",
-      "8081",
-      "8880",
-      "25461",
-      "2052",
-      "2082",
-      "2095",
-      "8000",
-      "8001",
-      "8088",
-    ]) {
-      candidates.add(`http://${u.hostname}${port ? `:${port}` : ""}`);
+    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
+    // Probamos http E https — alguns painéis (jetflix etc.) só respondem por
+    // HTTPS, outros (a maioria com porta custom) só por HTTP. Mantemos o
+    // origin original sempre como primeiro tentativa.
+    for (const scheme of ["http", "https"]) {
+      for (const port of ports) {
+        candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+      }
     }
   } catch {
     // keep normalized base only
