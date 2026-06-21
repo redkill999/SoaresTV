@@ -151,12 +151,13 @@ function HomePage() {
 
   return (
     <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Background image — stretched to fill so toda a arte aparece igual ao desktop,
-          sem corte nas bordas em celular/TV (cover cortaria as laterais ou topo/base). */}
+      {/* Background image — `cover` mantem proporcao em qualquer aspect
+          (celular portrait, tablet, TV 16:9) sem distorcer nem duplicar.
+          A cor #082968 do container preenche eventuais bordas. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-no-repeat bg-center"
-        style={{ backgroundImage: `url(${homeBg.url})`, backgroundSize: "100% 100%" }}
+        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${homeBg.url})` }}
       />
       {/* Subtle darken to keep tiles readable */}
       <div
