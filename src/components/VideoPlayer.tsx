@@ -197,6 +197,8 @@ export function VideoPlayer({
   }, [settings.aspectRatio]);
 
   useEffect(() => {
+    // No APK, o ExoPlayer nativo cuida do playback — pulamos MSE.
+    if (playerMode !== "web") return;
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
