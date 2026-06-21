@@ -37,7 +37,20 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=5`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
+}
+
+function liveDirectCandidates(src: string): string[] {
+  const out: string[] = [];
+  const add = (url: string | null) => {
+    if (url && !out.includes(url)) out.push(url);
+  };
+  if (/\.m3u8(\?|$)/i.test(src)) {
+    add(src.replace(/\.m3u8(\?|$)/i, ".ts$1"));
+  } else {
+    add(src);
+  }
+  return out;
 }
 
 function httpsVariant(url: string): string | null {
@@ -119,6 +132,7 @@ export function VideoPlayer({
       }
     }
     if (!vodCandidates.length) vodCandidates.push(src);
+    const directCandidates = isLive ? liveDirectCandidates(src) : vodCandidates;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -132,7 +146,7 @@ export function VideoPlayer({
           ].filter(Boolean) as string[];
           return Array.from(new Set(candidates));
         })
-      : vodCandidates.map((url) => proxied(url, kind));
+      : directCandidates.map((url) => proxied(url, kind));
 
     let hls: Hls | null = null;
     let cancelled = false;
