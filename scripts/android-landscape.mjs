@@ -47,9 +47,31 @@ xml = xml.replace(
   },
 );
 
+// Garante android:banner="@drawable/tv_banner" no <application> (icone TV Leanback).
+xml = xml.replace(/<application\b([^>]*)>/, (m, attrs) => {
+  if (/android:banner=/.test(attrs)) return m;
+  return `<application${attrs} android:banner="@drawable/tv_banner">`;
+});
+
+// Garante intent-filter LEANBACK_LAUNCHER na MainActivity (icone na grade da TV).
+if (!/android\.intent\.category\.LEANBACK_LAUNCHER/.test(xml)) {
+  xml = xml.replace(
+    /(<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>)/,
+    `$1\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />`,
+  );
+}
+
+// Declara suporte a TV (touchscreen e leanback opcionais para nao bloquear celular nem TV).
+if (!/uses-feature[^>]*android\.software\.leanback/.test(xml)) {
+  xml = xml.replace(
+    /(<manifest\b[^>]*>)/,
+    `$1\n    <uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />`,
+  );
+}
+
 if (xml === before) {
   console.log("ℹ️  Nada a alterar — AndroidManifest já está em landscape.");
 } else {
   writeFileSync(manifestPath, xml);
-  console.log("✅ AndroidManifest.xml patchado: MainActivity agora abre em landscape.");
+  console.log("✅ AndroidManifest.xml patchado: landscape + icone TV (banner/leanback).");
 }

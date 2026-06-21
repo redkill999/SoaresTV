@@ -128,6 +128,22 @@ echo.
 echo  [3/5] Sincronizando Capacitor (bunx cap sync android)...
 call bunx cap sync android >> "%LOG_FILE%" 2>&1 || goto :fail
 
+REM ---------- 5b. Gerar icones (celular + TV banner) a partir de resources/ ----------
+echo.
+echo  [3b/5] Gerando icones do APK (a partir da pasta resources\)...
+call bunx @capacitor/assets generate --android --assetPath resources >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+  echo  [aviso] Falha ao gerar icones automaticamente - seguindo com os icones atuais.
+)
+
+REM ---------- 5c. Patch AndroidManifest (landscape + banner TV + leanback) ----------
+echo.
+echo  [3c/5] Aplicando patches no AndroidManifest (landscape + icone TV)...
+call node scripts/android-landscape.mjs >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+  echo  [aviso] Falha ao patchar AndroidManifest - veja o log.
+)
+
 REM ---------- 6. Compilar APK ----------
 echo.
 echo  [4/5] Compilando APK %MODE% com Gradle (pode demorar varios minutos na 1a vez)...
