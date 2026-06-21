@@ -14,6 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   store, type M3UPlaylist, type ParentalConfig, type AppSettings,
   type AspectRatio, type StreamFormat, type PlayerChoice, type RemoteLayout,
+  type ListCompat, type ListUserAgent, type ListTransport, type ListStreamFormat,
 } from "@/lib/storage";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
