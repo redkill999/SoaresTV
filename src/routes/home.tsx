@@ -66,16 +66,15 @@ function HomePage() {
     if (!hasCreds && playlists.length === 0) navigate({ to: "/" });
   }, [navigate]);
 
-  // Pinta o "letterbox" do TV-mode com a mesma imagem da home,
-  // pra não sobrar barra preta em cima/embaixo no preview.
+  // Pinta o "letterbox" do TV-mode com a cor de fundo da home (sem a imagem,
+  // pra nao duplicar o papel de parede — a imagem fica so no div interno).
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlBg = html.style.background;
     const prevBodyBg = body.style.background;
-    const bg = `url(${homeBg.url}) center/100% 100% no-repeat #082968`;
-    html.style.background = bg;
-    body.style.background = bg;
+    html.style.background = "#082968";
+    body.style.background = "#082968";
     return () => {
       html.style.background = prevHtmlBg;
       body.style.background = prevBodyBg;
@@ -152,12 +151,13 @@ function HomePage() {
 
   return (
     <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Background image — stretched to fill so toda a arte aparece igual ao desktop,
-          sem corte nas bordas em celular/TV (cover cortaria as laterais ou topo/base). */}
+      {/* Background image — `cover` mantem proporcao em qualquer aspect
+          (celular portrait, tablet, TV 16:9) sem distorcer nem duplicar.
+          A cor #082968 do container preenche eventuais bordas. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-no-repeat bg-center"
-        style={{ backgroundImage: `url(${homeBg.url})`, backgroundSize: "100% 100%" }}
+        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${homeBg.url})` }}
       />
       {/* Subtle darken to keep tiles readable */}
       <div
