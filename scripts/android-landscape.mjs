@@ -22,6 +22,17 @@ if (!existsSync(manifestPath)) {
 let xml = readFileSync(manifestPath, "utf8");
 const before = xml;
 
+// Permissões básicas para WebView + streaming IPTV.
+for (const permission of ["INTERNET", "ACCESS_NETWORK_STATE", "WAKE_LOCK"]) {
+  const full = `android.permission.${permission}`;
+  if (!xml.includes(full)) {
+    xml = xml.replace(
+      /(<manifest\b[^>]*>)/,
+      `$1\n    <uses-permission android:name="${full}" />`,
+    );
+  }
+}
+
 // Garante android:screenOrientation="landscape" e configChanges incluindo orientation/screenSize
 xml = xml.replace(
   /<activity\b([^>]*?)\bandroid:name="\.MainActivity"([^>]*)>/,
@@ -49,8 +60,12 @@ xml = xml.replace(
 
 // Garante android:banner="@drawable/tv_banner" no <application> (icone TV Leanback).
 xml = xml.replace(/<application\b([^>]*)>/, (m, attrs) => {
-  if (/android:banner=/.test(attrs)) return m;
-  return `<application${attrs} android:banner="@drawable/tv_banner">`;
+  let next = attrs;
+  if (!/android:banner=/.test(next)) next += ' android:banner="@drawable/tv_banner"';
+  if (!/android:usesCleartextTraffic=/.test(next)) next += ' android:usesCleartextTraffic="true"';
+  if (!/android:hardwareAccelerated=/.test(next)) next += ' android:hardwareAccelerated="true"';
+  if (!/android:largeHeap=/.test(next)) next += ' android:largeHeap="true"';
+  return `<application${next}>`;
 });
 
 // Garante intent-filter LEANBACK_LAUNCHER na MainActivity (icone na grade da TV).
