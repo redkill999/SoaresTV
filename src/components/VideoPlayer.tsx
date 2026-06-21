@@ -239,7 +239,14 @@ export function VideoPlayer({
       forcedUA ? `${proxied(u, k)}&ua=${encodeURIComponent(forcedUA)}` : proxied(u, k);
     const forceProxy = compat.transport === "proxy";
     const forceDirect = compat.transport === "direct";
-    const skipHls = compat.streamFormat === "ts" || compat.streamFormat === "mp4";
+    // Detecção automática pelo sufixo da URL. Override do usuário (compat)
+    // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
+    const auto = detectFormat(workingSrc);
+    const skipHls =
+      compat.streamFormat === "ts" ||
+      compat.streamFormat === "mp4" ||
+      // Se a URL termina em .ts/.mp4/.mkv não faz sentido tentar HLS antes.
+      (compat.streamFormat == null && (auto === "ts" || auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
