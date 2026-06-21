@@ -373,7 +373,7 @@ function buildM3UCandidateUrls(raw: string, username?: string, password?: string
 
 type CategoryMap = Map<string, string>;
 
-async function fetchJson(url: string, timeoutMs = 12_000): Promise<unknown> {
+async function fetchJson(url: string, timeoutMs = 30_000): Promise<unknown> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
