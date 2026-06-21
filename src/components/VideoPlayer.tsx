@@ -3,6 +3,21 @@ import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
+// Module-level cache do mpegts.js: a 1ª troca de canal paga o import, as
+// seguintes reusam a mesma referência (sem reparse de bundle nem nova Promise).
+let mpegtsModule: typeof import("mpegts.js").default | null = null;
+let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
+async function loadMpegts() {
+  if (mpegtsModule) return mpegtsModule;
+  if (!mpegtsLoading) {
+    mpegtsLoading = import("mpegts.js").then((m) => {
+      mpegtsModule = m.default;
+      return mpegtsModule;
+    });
+  }
+  return mpegtsLoading;
+}
+
 type MpegTsPlayer = {
   destroy(): void;
   unload(): void;
@@ -242,7 +257,7 @@ export function VideoPlayer({
     const playMpegTs = async (url: string) => {
       if (!isLive) return false;
       try {
-        const mpegts = (await import("mpegts.js")).default;
+        const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
         destroyTsPlayer();
         video.pause();
@@ -337,13 +352,12 @@ export function VideoPlayer({
           lowLatencyMode: false,
           // Config estável (revertida da versão agressiva que travava abertura).
           // Live: buffer enxuto, como o player nativo do APK trabalha.
-          // Buffers grandes acumulavam memória e travavam o player web
-          // depois de alguns minutos. Mantemos o suficiente pra absorver
-          // hiccups (~30s) sem ficar inchando.
-          backBufferLength: isLive ? 10 : 90,
-          maxBufferLength: isLive ? 30 : 180,
-          maxMaxBufferLength: isLive ? 60 : 600,
-          maxBufferSize: isLive ? 60 * 1000 * 1000 : 240 * 1000 * 1000,
+          // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
+          // hls.js mantém ainda assim ~30-90s de buffer à frente — suficiente.
+          backBufferLength: isLive ? 10 : 30,
+          maxBufferLength: isLive ? 30 : 60,
+          maxMaxBufferLength: isLive ? 60 : 180,
+          maxBufferSize: isLive ? 60 * 1000 * 1000 : 90 * 1000 * 1000,
           maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
@@ -450,11 +464,30 @@ export function VideoPlayer({
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
+
+        // Page visibility: quando a aba/tela perde foco, paramos o download
+        // (hls.stopLoad) para liberar memória — buffer atual mantém o playback
+        // se voltar logo. Retomamos no foco. Live: só pausa loader se estiver
+        // explicitamente pausado (canal em background continua "ao vivo").
+        const onVisibility = () => {
+          if (!hls) return;
+          const hidden = document.visibilityState === "hidden";
+          try {
+            if (hidden) {
+              if (!isLive || video.paused) hls.stopLoad();
+            } else {
+              hls.startLoad();
+            }
+          } catch { /* noop */ }
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
+          document.removeEventListener("visibilitychange", onVisibility);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
