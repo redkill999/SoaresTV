@@ -100,9 +100,19 @@ function LoadingPage() {
       if (creds) await runXtream();
       else await runM3U();
       await wait(700);
-      navigate({ to: "/home", replace: true });
+      // Só avança para /home se TODOS os testes passarem.
+      // Se qualquer um falhar, mantém o usuário aqui com botões de ação.
+      setStatus((p) => {
+        const allOk = (Object.keys(p) as TestKey[]).every((k) => p[k] === "ok");
+        if (allOk) navigate({ to: "/home", replace: true });
+        return p;
+      });
     })();
   }, [navigate]);
+
+  const anyFail = (Object.keys(status) as TestKey[]).some((k) => status[k] === "fail");
+  const anyPending = (Object.keys(status) as TestKey[]).some((k) => status[k] === "pending");
+  const finishedWithFailure = !anyPending && anyFail;
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
@@ -128,12 +138,40 @@ function LoadingPage() {
         ))}
       </div>
 
+
       {/* Spinner + mensagem */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
-        <Loader2 className="size-8 text-emerald-400 animate-spin" strokeWidth={2.2} />
-        <div className="mt-4 text-lg sm:text-xl text-white/90">
-          Por favor, aguarde........
-        </div>
+        {!finishedWithFailure ? (
+          <>
+            <Loader2 className="size-8 text-emerald-400 animate-spin" strokeWidth={2.2} />
+            <div className="mt-4 text-lg sm:text-xl text-white/90">
+              Por favor, aguarde........
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-lg sm:text-xl text-red-300 font-semibold">
+              Falha ao carregar a lista. Verifique sua conexão ou os dados de acesso.
+            </div>
+            <div className="mt-2 text-sm text-white/70">
+              Não vamos abrir o app enquanto algum conteúdo essencial estiver com falha.
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => { ran.current = false; setStatus({ live: "pending", vod: "pending", series: "pending", epg: "pending" }); window.location.reload(); }}
+                className="px-4 py-2 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold"
+              >
+                Tentar novamente
+              </button>
+              <button
+                onClick={() => navigate({ to: "/", replace: true })}
+                className="px-4 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
+              >
+                Voltar ao login
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Faixa rodapé */}
