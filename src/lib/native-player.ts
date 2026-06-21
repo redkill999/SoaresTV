@@ -95,10 +95,17 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
 
     if (opts.onExit) {
       const cb = opts.onExit;
-      exitHandle = await mod.addListener("jeepCapVideoPlayerExit", (data: unknown) => {
+      const listenable = mod as unknown as {
+        addListener: (
+          ev: string,
+          handler: (data: unknown) => void,
+        ) => Promise<{ remove: () => void }> | { remove: () => void };
+      };
+      const h = await listenable.addListener("jeepCapVideoPlayerExit", (data: unknown) => {
         const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
         cb(Number.isFinite(pos) ? pos : 0);
       });
+      exitHandle = h;
     }
     return true;
   } catch {
