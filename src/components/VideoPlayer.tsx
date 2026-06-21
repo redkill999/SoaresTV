@@ -109,7 +109,7 @@ export function VideoPlayer({
       const [, base, ext, qs = ""] = vodMatch;
       const currentExt = ext.toLowerCase();
       const preferred = isVod
-        ? [currentExt, "mp4", "m4v", "mkv", "m3u8"]
+        ? ["m3u8", currentExt, "mp4", "m4v", "mkv"]
         : [currentExt, "mp4", "m4v", "mkv"];
       for (const alt of preferred) {
         const candidate = `${base}.${alt}${qs}`;
@@ -120,13 +120,13 @@ export function VideoPlayer({
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          // VOD em web desktop: tentar HTTPS direto primeiro usa a conexão/IP
-          // do usuário, igual players nativos fazem. O proxy fica como fallback
-          // para listas que não suportam HTTPS direto.
+          // Web desktop: proxy primeiro (https same-origin, sem mixed content).
+          // Tentativas diretas (https/http) ficam só como último recurso.
+          // O ramo isNativeApp() mais abaixo sobrescreve esta lista para o APK.
           const candidates = [
-            secure,
-            secure ? proxied(secure, "vod") : null,
             proxied(url, "vod"),
+            secure ? proxied(secure, "vod") : null,
+            secure,
           ].filter(Boolean) as string[];
           return Array.from(new Set(candidates));
         })
@@ -153,9 +153,7 @@ export function VideoPlayer({
       }
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) playDirect();
-      else if (isVod && !nativeDirect && /^https?:\/\//i.test(src)) {
-        window.location.href = src;
-      } else setError("Não foi possível reproduzir esta mídia.");
+      else setError("Não foi possível reproduzir esta mídia.");
     };
 
     const armVodWatchdog = () => {
@@ -164,7 +162,7 @@ export function VideoPlayer({
       watchdog = setTimeout(() => {
         if (cancelled) return;
         if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) tryNextVod();
-      }, 5_000);
+      }, 12_000);
     };
 
     const playDirect = () => {
