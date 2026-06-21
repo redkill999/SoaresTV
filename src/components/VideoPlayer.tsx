@@ -3,6 +3,21 @@ import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
+// Module-level cache do mpegts.js: a 1ª troca de canal paga o import, as
+// seguintes reusam a mesma referência (sem reparse de bundle nem nova Promise).
+let mpegtsModule: typeof import("mpegts.js").default | null = null;
+let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
+async function loadMpegts() {
+  if (mpegtsModule) return mpegtsModule;
+  if (!mpegtsLoading) {
+    mpegtsLoading = import("mpegts.js").then((m) => {
+      mpegtsModule = m.default;
+      return mpegtsModule;
+    });
+  }
+  return mpegtsLoading;
+}
+
 type MpegTsPlayer = {
   destroy(): void;
   unload(): void;
