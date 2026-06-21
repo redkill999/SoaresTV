@@ -279,8 +279,11 @@ export function VideoPlayer({
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
 
-        // Stall watchdog para LIVE: se ficar travado em "waiting" > 8s,
-        // força recarga do segmento (recupera congelamentos típicos de IPTV).
+        // Stall watchdog para LIVE: só age em starvação REAL (buffer à frente ~0)
+        // e por tempo prolongado. O hls.js já tem nudge/retry próprios; só
+        // intervimos quando ele realmente não consegue se recuperar sozinho.
+        // Sem alterar currentTime no live (pular pra frente joga pra fora do buffer
+        // e dispara outro stall — esse era o bug da "pausa+recarga" periódica).
         let stallTimer: ReturnType<typeof setTimeout> | null = null;
         const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
         const onWaiting = () => {
@@ -288,14 +291,23 @@ export function VideoPlayer({
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
+            // Checa buffer à frente — se ainda há dado, deixa o hls.js resolver.
+            let ahead = 0;
             try {
-              hls.stopLoad();
-              hls.startLoad();
-              // Pequeno nudge pra destravar buffer hole
-              try { video.currentTime = video.currentTime + 0.1; } catch { /* noop */ }
-              void video.play().catch(() => undefined);
+              const t = video.currentTime;
+              for (let i = 0; i < video.buffered.length; i++) {
+                if (video.buffered.start(i) <= t && video.buffered.end(i) >= t) {
+                  ahead = video.buffered.end(i) - t;
+                  break;
+                }
+              }
             } catch { /* noop */ }
-          }, 8_000);
+            if (ahead > 1.5) return; // ainda tem buffer; é só engasgo do decoder
+            // Starvação real: pede ao hls.js pra retomar do live edge sem
+            // destruir o loader (startLoad(-1) recoloca no edge sem o "stop").
+            try { hls.startLoad(-1); } catch { /* noop */ }
+            void video.play().catch(() => undefined);
+          }, 15_000);
         };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
