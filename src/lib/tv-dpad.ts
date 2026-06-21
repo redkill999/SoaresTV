@@ -6,6 +6,48 @@ let bound = false;
 let lastInteractionWasKeyboard = false;
 let routeWatchId: ReturnType<typeof setInterval> | null = null;
 
+// Anti-clique-fantasma do controle remoto / teclado:
+// - Debounce: ignora Enters repetidos em < 300ms (botão OK com repeat).
+// - Confirmação dupla: ativar um <Link> que abre o player exige 2 Enters
+//   no mesmo item dentro de 2s. Evita abertura acidental do filme.
+let lastEnterAt = 0;
+let pendingActivation: { el: HTMLElement; at: number } | null = null;
+const ENTER_DEBOUNCE_MS = 300;
+const CONFIRM_WINDOW_MS = 2000;
+
+function logDpad(reason: string, extra?: Record<string, unknown>) {
+  try {
+    // eslint-disable-next-line no-console
+    console.log("[tv-dpad]", reason, extra ?? {});
+  } catch { /* noop */ }
+}
+
+function isPlayerLink(el: HTMLElement | null): el is HTMLAnchorElement {
+  if (!el || el.tagName !== "A") return false;
+  const href = (el as HTMLAnchorElement).getAttribute("href") || "";
+  return href.startsWith("/player/") || href.includes("/player/");
+}
+
+function showConfirmHint(el: HTMLElement) {
+  // Marca visualmente o item como "armado" para confirmação.
+  el.setAttribute("data-tv-arming", "1");
+  el.style.outline = "3px solid #1FB6FF";
+  el.style.outlineOffset = "2px";
+  window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
+  (el as HTMLElement & { __armT?: number }).__armT = window.setTimeout(() => {
+    el.removeAttribute("data-tv-arming");
+    el.style.outline = "";
+    el.style.outlineOffset = "";
+  }, CONFIRM_WINDOW_MS) as unknown as number;
+}
+
+function clearConfirmHint(el: HTMLElement) {
+  el.removeAttribute("data-tv-arming");
+  el.style.outline = "";
+  el.style.outlineOffset = "";
+  window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
+}
+
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -230,17 +272,51 @@ function handleKey(e: KeyboardEvent) {
   if (!tvMode) return;
 
   if (isEnter) {
+    const now = Date.now();
+    // Debounce: rejeita Enters muito próximos (botão OK com repeat / chave bouncing)
+    if (now - lastEnterAt < ENTER_DEBOUNCE_MS) {
+      e.preventDefault();
+      logDpad("enter-debounced", { dt: now - lastEnterAt });
+      return;
+    }
+    lastEnterAt = now;
+
     const active = document.activeElement as HTMLElement | null;
     if (active && active !== document.body) {
-      // Em alguns controles de Android TV / Fire TV, o Enter chega como keydown
-      // mas o browser não sintetiza o click para <button>/[role=button]. Disparamos
-      // manualmente para garantir ativação consistente.
       const tagA = active.tagName;
       const role = active.getAttribute("role");
-      if (tagA === "A" || tagA === "BUTTON" || role === "button" || role === "link" || role === "menuitem" || role === "tab" || role === "option") {
-        e.preventDefault();
-        active.click();
+      const activatable =
+        tagA === "A" || tagA === "BUTTON" || role === "button" ||
+        role === "link" || role === "menuitem" || role === "tab" || role === "option";
+      if (!activatable) { e.preventDefault(); return; }
+
+      // Confirmação dupla SÓ para links que abrem o player (filme/episódio/canal).
+      // Demais botões (categorias, navegação, settings) ativam normal no 1º Enter.
+      if (isPlayerLink(active)) {
+        const same = pendingActivation && pendingActivation.el === active &&
+          (now - pendingActivation.at) < CONFIRM_WINDOW_MS;
+        if (!same) {
+          e.preventDefault();
+          pendingActivation = { el: active, at: now };
+          showConfirmHint(active);
+          logDpad("enter-arm-player", { href: (active as HTMLAnchorElement).href });
+          return;
+        }
+        // 2º Enter no mesmo item dentro da janela → confirma e abre player
+        clearConfirmHint(active);
+        pendingActivation = null;
+        logDpad("enter-confirm-player", { href: (active as HTMLAnchorElement).href });
+      } else {
+        // Trocou de alvo → limpa qualquer confirmação pendente
+        if (pendingActivation && pendingActivation.el !== active) {
+          clearConfirmHint(pendingActivation.el);
+          pendingActivation = null;
+        }
+        logDpad("enter-activate", { tag: tagA, role });
       }
+
+      e.preventDefault();
+      active.click();
       return;
     }
     e.preventDefault();
@@ -261,6 +337,11 @@ function handleKey(e: KeyboardEvent) {
 
   const next = pickNearest(active, dir);
   if (next) {
+    // Mover o foco com direcional cancela qualquer confirmação pendente
+    if (pendingActivation) {
+      clearConfirmHint(pendingActivation.el);
+      pendingActivation = null;
+    }
     next.focus({ preventScroll: true });
     next.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
