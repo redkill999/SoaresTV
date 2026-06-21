@@ -14,7 +14,7 @@ const CORS = {
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
 function proxyUrl(absolute: string) {
-  return `/api/stream?u=${encodeURIComponent(absolute)}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=5`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -146,50 +146,66 @@ async function handle(request: Request) {
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
   // UAs até obter algo que não seja 403/401.
   const UA_CANDIDATES = [
-    "IPTVSmartersPlayer",
+    "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
+    "Xciptv/6.0",
+    "IPTVSmartersPro/3.1.5",
+    "TiviMate/4.7.0",
+    "okhttp/4.9.3",
     "Lavf/58.76.100",
     "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "VLC/3.0.20 LibVLC/3.0.20",
   ];
 
-  const buildHeaders = (ua: string) => {
+  const buildHeaders = (ua: string, rangeValue: string | null, includeOriginHeaders: boolean) => {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
-    h.set("Referer", `${upstreamUrl.origin}/`);
-    h.set("Origin", upstreamUrl.origin);
-    if (isVod && effectiveVodRange) h.set("Range", effectiveVodRange);
-    else if (range) h.set("Range", range);
+    if (includeOriginHeaders) {
+      h.set("Referer", `${upstreamUrl.origin}/`);
+      h.set("Origin", upstreamUrl.origin);
+    }
+    if (rangeValue) h.set("Range", rangeValue);
     return h;
   };
 
   let upstream: Response | null = null;
   let lastError: unknown = null;
-  for (const ua of UA_CANDIDATES) {
-    try {
-      const res = await fetch(upstreamUrl.toString(), {
-        method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
-        headers: buildHeaders(ua),
-        redirect: "follow",
-      });
-      // Aceita qualquer resposta que não seja bloqueio explícito; para 401/403
-      // tentamos o próximo UA, pois costuma ser anti-bot por User-Agent.
-      if (res.status !== 401 && res.status !== 403) {
-        upstream = res;
-        break;
+  let lastStatus = 0;
+  const rangeCandidates = isVod
+    ? Array.from(new Set([effectiveVodRange, range, null]))
+    : [range];
+  attempt: for (const ua of UA_CANDIDATES) {
+    for (const rangeValue of rangeCandidates) {
+      for (const includeOriginHeaders of [false, true]) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 20_000);
+          const res = await fetch(upstreamUrl.toString(), {
+            method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+            headers: buildHeaders(ua, rangeValue, includeOriginHeaders),
+            redirect: "follow",
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          lastStatus = res.status;
+          const retryBlocked = res.status === 401 || res.status === 403;
+          const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
+          if (!retryBlocked && !retryBadRange) {
+            upstream = res;
+            break attempt;
+          }
+          try { await res.body?.cancel(); } catch { /* noop */ }
+        } catch (e) {
+          lastError = e;
+        }
       }
-      // descarta o body para liberar conexão antes de retentar
-      try { await res.body?.cancel(); } catch { /* noop */ }
-      upstream = res; // mantém o último, caso todos falhem
-    } catch (e) {
-      lastError = e;
     }
   }
   if (!upstream) {
-    return new Response(`upstream fetch failed: ${lastError instanceof Error ? lastError.message : "err"}`, {
-      status: 502,
+    return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
+      status: lastStatus === 401 || lastStatus === 403 ? lastStatus : 502,
       headers: CORS,
     });
   }

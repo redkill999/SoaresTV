@@ -37,7 +37,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=4`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=5`;
 }
 
 function httpsVariant(url: string): string | null {
@@ -109,7 +109,9 @@ export function VideoPlayer({
       const [, base, ext, qs = ""] = vodMatch;
       const currentExt = ext.toLowerCase();
       const preferred = isVod
-        ? ["m3u8", currentExt, "mp4", "m4v", "mkv"]
+        ? currentExt === "m3u8"
+          ? ["m3u8", "mp4", "m4v", "mkv"]
+          : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
         : [currentExt, "mp4", "m4v", "mkv"];
       for (const alt of preferred) {
         const candidate = `${base}.${alt}${qs}`;
@@ -138,6 +140,7 @@ export function VideoPlayer({
     let triedDirect = false;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
+    let currentHlsUrl: string | null = null;
     let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
@@ -206,6 +209,7 @@ export function VideoPlayer({
     video.addEventListener("playing", onPlaying);
 
     const attachHls = (url: string) => {
+      currentHlsUrl = url;
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -274,6 +278,13 @@ export function VideoPlayer({
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
                 if (netRetries++ >= MAX_NET_RETRIES) {
+                  if (nativeDirect && hlsCandidate && currentHlsUrl === hlsCandidate) {
+                    detachStallListeners?.();
+                    hls?.destroy();
+                    hls = null;
+                    attachHls(proxied(hlsCandidate, kind));
+                    return;
+                  }
                   detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
@@ -329,12 +340,12 @@ export function VideoPlayer({
       // hls.js para URL http é bloqueado pelo WebView por mixed content.
       // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
       // resolve o http e devolve o stream com headers de IPTV.
-      hlsProxied = hlsCandidate ? proxied(hlsCandidate, kind) : null;
+      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
       if (native) {
         // VOD: tenta direto (https/http) e mantém proxy como último recurso.
         playbackCandidates.splice(0, playbackCandidates.length, ...vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          return Array.from(new Set([secure, url, proxied(url, "vod")].filter(Boolean) as string[]));
+          return Array.from(new Set([url, secure, proxied(url, "vod")].filter(Boolean) as string[]));
         }));
       }
       if (hlsProxied) attachHls(hlsProxied);
