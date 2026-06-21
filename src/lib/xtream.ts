@@ -103,7 +103,7 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 12_000,
+  timeoutMs = 30_000,
 ): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
