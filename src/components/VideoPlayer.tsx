@@ -120,7 +120,14 @@ export function VideoPlayer({
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          const candidates = [secure, proxied(url, "vod"), secure ? proxied(secure, "vod") : null].filter(Boolean) as string[];
+          // Web desktop: proxy primeiro (https same-origin, sem mixed content).
+          // Tentativas diretas (https/http) ficam só como último recurso.
+          // O ramo isNativeApp() mais abaixo sobrescreve esta lista para o APK.
+          const candidates = [
+            proxied(url, "vod"),
+            secure ? proxied(secure, "vod") : null,
+            secure,
+          ].filter(Boolean) as string[];
           return Array.from(new Set(candidates));
         })
       : vodCandidates.map((url) => proxied(url, kind));
