@@ -265,14 +265,14 @@ export function VideoPlayer({
           lowLatencyMode: false,
           // Live precisa de buffer suficiente sem tentar carregar uma janela enorme.
           // Janela moderada + ABR conservador evita picos de bitrate que causam travadas.
-          backBufferLength: isLive ? 30 : 90,
-          maxBufferLength: isLive ? 45 : 180,
-          maxMaxBufferLength: isLive ? 90 : 600,
-          maxBufferSize: isLive ? 120 * 1000 * 1000 : 240 * 1000 * 1000,
-          maxBufferHole: isLive ? 1.5 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 2 : 3,
-          nudgeMaxRetry: 6,
-          nudgeOffset: 0.1,
+          backBufferLength: isLive ? 15 : 90,
+          maxBufferLength: isLive ? 75 : 180,
+          maxMaxBufferLength: isLive ? 150 : 600,
+          maxBufferSize: isLive ? 180 * 1000 * 1000 : 240 * 1000 * 1000,
+          maxBufferHole: isLive ? 3 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 1 : 3,
+          nudgeMaxRetry: isLive ? 12 : 6,
+          nudgeOffset: isLive ? 0.18 : 0.1,
           fragLoadingMaxRetry: nativeDirect ? 2 : 8,
           manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
           levelLoadingMaxRetry: nativeDirect ? 2 : 6,
@@ -284,19 +284,19 @@ export function VideoPlayer({
           // ultrapassava ~60s atrás do edge, o hls.js fazia seek pra frente
           // (a "pausa+recarga" periódica). Agora deixa o usuário ficar pra
           // trás do edge sem snap, mantendo playback contínuo.
-          liveSyncDurationCount: 6,
-          liveMaxLatencyDurationCount: 60,
+          liveSyncDurationCount: 10,
+          liveMaxLatencyDurationCount: 120,
           // Autoplay instantâneo: começa pelo nível mais baixo (start imediato,
           // sem teste de banda) e o ABR sobe a qualidade depois — evita o
           // engasgo inicial enquanto o player decide o bitrate.
           startLevel: 0,
           testBandwidth: false,
           startFragPrefetch: true,
-          abrEwmaDefaultEstimate: 1_000_000,
-          abrBandWidthFactor: isLive ? 0.7 : 0.8,
-          abrBandWidthUpFactor: isLive ? 0.5 : 0.7,
-          maxStarvationDelay: isLive ? 3 : 4,
-          maxLoadingDelay: isLive ? 3 : 4,
+          abrEwmaDefaultEstimate: isLive ? 650_000 : 1_000_000,
+          abrBandWidthFactor: isLive ? 0.55 : 0.8,
+          abrBandWidthUpFactor: isLive ? 0.35 : 0.7,
+          maxStarvationDelay: isLive ? 2 : 4,
+          maxLoadingDelay: isLive ? 2 : 4,
           capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
@@ -320,9 +320,9 @@ export function VideoPlayer({
         let stallTimer: ReturnType<typeof setTimeout> | null = null;
         const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
 
-        // Fallback automático de qualidade: se travar 2+ vezes em 30s,
-        // fixa no nível mais baixo (loadLevel=0) por 60s para parar de
-        // engasgar. Depois libera o ABR pra voltar a subir naturalmente.
+        // Fallback automático de qualidade: no primeiro sinal de travada em
+        // live já fixa no nível mais baixo. É melhor perder qualidade por um
+        // tempo do que deixar o canal parar repetidamente.
         const stallTimestamps: number[] = [];
         let lockedLow = false;
         let unlockTimer: ReturnType<typeof setTimeout> | null = null;
@@ -344,16 +344,17 @@ export function VideoPlayer({
             } catch { /* noop */ }
             lockedLow = false;
             stallTimestamps.length = 0;
-          }, 60_000);
+          }, 120_000);
         };
         const registerStall = () => {
+          if (!isLive) return;
           const now = Date.now();
           stallTimestamps.push(now);
-          // mantém só os últimos 30s
-          while (stallTimestamps.length && now - stallTimestamps[0] > 30_000) {
+          // mantém só os últimos 45s
+          while (stallTimestamps.length && now - stallTimestamps[0] > 45_000) {
             stallTimestamps.shift();
           }
-          if (stallTimestamps.length >= 2) lockLowQuality();
+          lockLowQuality();
         };
 
         const recoverLiveStall = () => {
@@ -362,29 +363,46 @@ export function VideoPlayer({
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
-            if (ahead < 0.75) {
+            if (ahead < 1.5) {
               try { hls.startLoad(-1); } catch { /* noop */ }
+              const livePos = hls.liveSyncPosition;
+              if (typeof livePos === "number" && Number.isFinite(livePos) && Math.abs(livePos - video.currentTime) > 4) {
+                try { video.currentTime = livePos; } catch { /* noop */ }
+              }
             }
             void video.play().catch(() => undefined);
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
-          }, 3_000);
+          }, 1_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
+        video.addEventListener("stalled", onWaiting);
         video.addEventListener("playing", onResumed);
         video.addEventListener("canplay", onResumed);
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
+          video.removeEventListener("stalled", onWaiting);
           video.removeEventListener("playing", onResumed);
           video.removeEventListener("canplay", onResumed);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
-          if (!data.fatal) return;
+          if (!data.fatal) {
+            if (isLive && (
+              data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
+              data.details === Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE ||
+              data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT ||
+              data.details === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
+            )) {
+              registerStall();
+              recoverLiveStall();
+            }
+            return;
+          }
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
