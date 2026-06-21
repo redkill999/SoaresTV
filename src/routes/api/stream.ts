@@ -272,18 +272,7 @@ async function handle(request: Request) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
     return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
   }
-  if (isVod && status === 200 && effectiveVodRange) {
-    const parsed = parseByteRange(effectiveVodRange) ?? { start: 0, end: VOD_CHUNK_SIZE - 1 };
-    const requestedLength = Math.max(0, (parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1) - parsed.start + 1);
-    const upstreamLength = contentLength && Number.isFinite(Number(contentLength)) ? Number(contentLength) : undefined;
-    const bodyLength = Math.min(upstreamLength ?? requestedLength, requestedLength);
-    const total = parseContentRangeTotal(respHeaders.get("content-range")) ?? (status === 200 ? upstreamLength : undefined);
-    respHeaders.set("Content-Length", String(bodyLength));
-    respHeaders.set("Content-Range", `bytes ${parsed.start}-${parsed.start + bodyLength - 1}/${total ?? "*"}`);
-    status = 206;
-    return new Response(request.method === "HEAD" ? null : limitBody(upstream.body, bodyLength), { status, headers: respHeaders });
-  }
-  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && status === 200 && contentLength) {
+  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
       status = 206;
