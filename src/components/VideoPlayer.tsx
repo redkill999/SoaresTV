@@ -317,7 +317,7 @@ export function VideoPlayer({
                     detachStallListeners?.();
                     hls?.destroy();
                     hls = null;
-                    attachHls(proxied(hlsCandidate, kind));
+                    attachHls(proxiedX(hlsCandidate, kind));
                     return;
                   }
                   detachStallListeners?.();
