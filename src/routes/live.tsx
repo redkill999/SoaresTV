@@ -10,6 +10,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
+import { filterBySearch, getSorted } from "@/lib/search-index";
 import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
@@ -71,7 +72,9 @@ function LivePage() {
   );
 
   const filtered = useMemo(() => {
-    let list = streamsQ.data ?? [];
+    let list: LiveStream[] = streamsQ.data ?? [];
+    // Search first so the cached lowercase index on the full array can be reused.
+    if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((x) => favIds.has(String(x.stream_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
@@ -79,12 +82,7 @@ function LivePage() {
     } else if (cat !== "all") {
       list = list.filter((x) => String(x.category_id) === cat);
     }
-    if (deferredSearch) {
-      const s = deferredSearch.toLowerCase();
-      list = list.filter((x) => x.name.toLowerCase().includes(s));
-    }
-    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
   }, [streamsQ.data, deferredSearch, cat, favIds, recentIds, sort]);
 

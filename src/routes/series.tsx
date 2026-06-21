@@ -9,6 +9,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
+import { filterBySearch, getSorted } from "@/lib/search-index";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Clapperboard } from "lucide-react";
 
@@ -91,7 +92,8 @@ function SeriesPage() {
   );
 
   const filtered = useMemo(() => {
-    let list = listQ.data ?? [];
+    let list: Series[] = listQ.data ?? [];
+    if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
@@ -99,12 +101,7 @@ function SeriesPage() {
     } else if (cat !== "all") {
       list = list.filter((s) => String(s.category_id) === cat);
     }
-    if (deferredSearch) {
-      const s = deferredSearch.toLowerCase();
-      list = list.filter((x) => x.name.toLowerCase().includes(s));
-    }
-    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
