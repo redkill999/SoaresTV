@@ -130,8 +130,15 @@ export async function api<T = unknown>(
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<T> {
-  const native = await nativeApiWithFallbackPorts<T>(c, action, params);
-  if (native) return native.data;
+  // Tenta direto pelo Android (CapacitorHttp). Se falhar no APK, NÃO
+  // estouramos a UI — caímos para o proxy do server-fn, que tem rotação
+  // de User-Agent e bypassa Cloudflare/bloqueios de UA do painel.
+  try {
+    const native = await nativeApiWithFallbackPorts<T>(c, action, params);
+    if (native) return native.data;
+  } catch {
+    // segue para o fallback do server-fn
+  }
 
   const r = await xtreamApi({ data: { ...c, action, params } });
   if (!r.ok) {
@@ -144,12 +151,21 @@ export async function api<T = unknown>(
 }
 
 export async function login(c: XtreamCreds) {
-  const native = await nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
-  const r = native?.data ?? await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+  // 1) Tenta autenticar pelo Android nativo (mesmo caminho do XCIPTV).
+  let nativeRes: Awaited<ReturnType<typeof nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>>> = null;
+  try {
+    nativeRes = await nativeApiWithFallbackPorts<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
+  } catch {
+    // ignora — vamos cair pro server-fn abaixo
+  }
+
+  // 2) Se nativo não trouxe nada (web OU APK com painel bloqueando UA/IP),
+  //    usa o proxy do server-fn — que rotaciona UAs estilo Xciptv/Smarters.
+  const r = nativeRes?.data ?? await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(c);
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
-  if (native?.creds.server) c.server = native.creds.server;
+  if (nativeRes?.creds.server) c.server = nativeRes.creds.server;
   return r;
 }
 
@@ -296,13 +312,18 @@ export async function loadM3U(
   username?: string,
   password?: string,
 ): Promise<M3UEntry[]> {
-  const native = await nativeLoadM3U(url, username, password);
-  if (native) return native;
-
-  if (await isNativeApp()) {
-    throw new Error("A lista não abriu pela conexão direta do Android. Confirme o Portal/DNS/Host usado no XCIPTV.");
+  // 1) Caminho nativo Android (igual ao XCIPTV).
+  try {
+    const native = await nativeLoadM3U(url, username, password);
+    if (native && native.length) return native;
+  } catch {
+    // ignora — vamos cair pro proxy do server-fn
   }
 
+  // 2) Fallback via server-fn (também usado pela web). No APK isso só
+  //    é acionado quando o panel bloqueia a conexão direta do Android
+  //    (Cloudflare/UA), garantindo que listas que rodam no XCIPTV
+  //    também rodem aqui.
   const r = await fetchM3U({ data: { url, username, password } });
   if (r.error) throw new Error(r.error);
   return r.entries as M3UEntry[];
