@@ -469,6 +469,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [info, setInfo] = useState<XtUserInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [creds, setCreds] = useState<ReturnType<typeof store.getCreds>>(null);
+  const [showCompat, setShowCompat] = useState(false);
 
   useEffect(() => {
     if (!open) { setInfo(null); setCreds(null); return; }
