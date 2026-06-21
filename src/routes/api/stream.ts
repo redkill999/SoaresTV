@@ -33,6 +33,10 @@ function isVodPath(path: string): boolean {
   return /\/movie\/[^/]+\/[^/]+\//i.test(path) || /\/series\/[^/]+\/[^/]+\//i.test(path);
 }
 
+function isPlaylistPath(path: string): boolean {
+  return /\.m3u8?(\?|$)/i.test(path);
+}
+
 function parseByteRange(range: string | null): { start: number; end?: number } | null {
   const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
   if (!match) return null;
@@ -162,6 +166,11 @@ async function handle(request: Request) {
     return new Response("bad protocol", { status: 400, headers: CORS });
   }
 
+  const range = request.headers.get("range");
+  const playlistPath = isPlaylistPath(upstreamUrl.pathname);
+  const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
+
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
   // UAs até obter algo que não seja 403/401.
@@ -176,6 +185,7 @@ async function handle(request: Request) {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", "*/*");
+    h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
     h.set("Referer", `${upstreamUrl.origin}/`);
     h.set("Origin", upstreamUrl.origin);
@@ -184,10 +194,6 @@ async function handle(request: Request) {
     else if (range) h.set("Range", range);
     return h;
   };
-
-  const range = request.headers.get("range");
-  const isVod = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
-  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   let upstream: Response | null = null;
   let lastError: unknown = null;

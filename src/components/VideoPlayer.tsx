@@ -37,7 +37,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=3`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=4`;
 }
 
 function httpsVariant(url: string): string | null {
@@ -109,7 +109,7 @@ export function VideoPlayer({
       const [, base, ext, qs = ""] = vodMatch;
       const currentExt = ext.toLowerCase();
       const preferred = isVod
-        ? [currentExt, "mp4", "m3u8", "m4v", "mkv"]
+        ? ["m3u8", currentExt, "mp4", "m4v", "mkv"]
         : [currentExt, "mp4", "m4v", "mkv"];
       for (const alt of preferred) {
         const candidate = `${base}.${alt}${qs}`;
