@@ -10,10 +10,17 @@ let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
   if (!mpegtsLoading) {
-    mpegtsLoading = import("mpegts.js").then((m) => {
-      mpegtsModule = m.default;
-      return mpegtsModule;
-    });
+    mpegtsLoading = import("mpegts.js")
+      .then((m) => {
+        mpegtsModule = m.default;
+        return mpegtsModule;
+      })
+      .catch((err) => {
+        // Reseta para permitir nova tentativa na próxima troca de canal,
+        // em vez de manter uma Promise rejeitada para sempre.
+        mpegtsLoading = null;
+        throw err;
+      });
   }
   return mpegtsLoading;
 }
