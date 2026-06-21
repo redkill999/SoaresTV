@@ -9,6 +9,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
+import { filterBySearch, getSorted } from "@/lib/search-index";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Film } from "lucide-react";
 
