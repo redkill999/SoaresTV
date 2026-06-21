@@ -389,22 +389,6 @@ function MsgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-function HomeSkeleton() {
-  return (
-    <div className="flex min-h-dvh flex-col bg-[#0a3a8c] p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <Skeleton className="h-10 w-32 bg-white/10" />
-        <Skeleton className="h-14 w-14 rounded-full bg-white/10" />
-        <Skeleton className="h-10 w-32 bg-white/10" />
-      </div>
-      <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-2 items-center gap-4 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="aspect-square rounded-2xl bg-white/10" />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /* -------- Conta Dialog -------- */
 
