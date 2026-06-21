@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { store, type XtreamCreds } from "@/lib/storage";
 import {
@@ -10,6 +10,7 @@ import {
   type LiveCategory,
   type LiveStream,
 } from "@/lib/xtream";
+import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
