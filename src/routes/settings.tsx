@@ -790,11 +790,10 @@ function PlayerDialog({ open, onClose }: { open: boolean; onClose: () => void })
     { k: "multiscreen", label: "Multi-Screen" },
   ];
 
-  // Fallback web: mantém o seletor original interno/externo.
+  // Web desktop: usa somente o player interno do navegador.
   if (!isNative) {
     const options: { v: PlayerChoice; t: string; d: string }[] = [
       { v: "internal", t: "Player interno", d: "Reprodutor nativo do app (HLS/MP4)." },
-      { v: "external", t: "Player externo", d: "Abre o stream no MX/VLC (Android)." },
     ];
     return (
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
