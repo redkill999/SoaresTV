@@ -257,7 +257,7 @@ export function VideoPlayer({
     const playMpegTs = async (url: string) => {
       if (!isLive) return false;
       try {
-        const mpegts = (await import("mpegts.js")).default;
+        const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
         destroyTsPlayer();
         video.pause();
