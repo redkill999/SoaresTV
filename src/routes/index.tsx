@@ -223,7 +223,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex items-start lg:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 lg:py-10 relative">
+    <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 size-96 rounded-full bg-primary/20 blur-3xl" />
@@ -246,30 +246,30 @@ function LoginPage() {
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
         {/* Left — brand panel: só em desktop largo (>=1024). Em landscape de celular não cabia. */}
-        <div className="hidden lg:flex relative overflow-hidden rounded-3xl p-8 md:p-10 bg-brand-gradient shadow-glow lg:min-h-[460px] flex-col justify-between">
+        <div className="hidden lg:flex relative overflow-hidden rounded-3xl p-6 md:p-8 xl:p-10 bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px] flex-col justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-12">
-              <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center">
+            <div className="flex items-center gap-3 mb-8 xl:mb-12">
+              <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center shrink-0">
                 <Tv className="size-5 text-white" strokeWidth={2.25} />
               </div>
-              <span className="font-semibold text-lg">{t("auth.appName")}</span>
+              <span className="font-semibold text-lg truncate">{t("auth.appName")}</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+            <h1 className="text-3xl md:text-4xl xl:text-5xl font-bold tracking-tight leading-[1.1]">
               {t("auth.heroTitle")}
             </h1>
-            <p className="mt-5 text-white/85 max-w-sm leading-relaxed">
+            <p className="mt-4 xl:mt-5 text-sm xl:text-base text-white/85 max-w-sm leading-relaxed">
               {t("auth.heroDesc")}
             </p>
           </div>
-          <ul className="space-y-2.5 text-sm text-white/95">
-            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat1")}</li>
-            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat2")}</li>
-            <li className="flex items-center gap-2"><PlayCircle className="size-4" /> {t("auth.feat3")}</li>
+          <ul className="space-y-2 xl:space-y-2.5 text-sm text-white/95 mt-4">
+            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat1")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat2")}</li>
+            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat3")}</li>
           </ul>
         </div>
 
         {/* Right — login card */}
-        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[460px] flex flex-col">
+        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col">
           <h2 className="text-2xl font-bold">{t("auth.signIn")}</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
             {t("auth.signInSub")}
