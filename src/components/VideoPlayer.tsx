@@ -377,19 +377,32 @@ export function VideoPlayer({
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
+        video.addEventListener("stalled", onWaiting);
         video.addEventListener("playing", onResumed);
         video.addEventListener("canplay", onResumed);
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
+          video.removeEventListener("stalled", onWaiting);
           video.removeEventListener("playing", onResumed);
           video.removeEventListener("canplay", onResumed);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
-          if (!data.fatal) return;
+          if (!data.fatal) {
+            if (isLive && (
+              data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
+              data.details === Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE ||
+              data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT ||
+              data.details === Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT
+            )) {
+              registerStall();
+              recoverLiveStall();
+            }
+            return;
+          }
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
