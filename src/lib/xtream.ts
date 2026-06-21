@@ -1,5 +1,6 @@
 import { discoverPanelXtreamServer, xtreamApi, fetchM3U } from "./xtream.functions";
 import type { XtreamCreds } from "./storage";
+import { getUAHint, setUAHint } from "./ua-hint";
 
 export type LiveCategory = { category_id: string; category_name: string };
 export type LiveStream = {
