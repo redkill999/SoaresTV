@@ -272,17 +272,22 @@ export function VideoPlayer({
           highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
-          fragLoadingMaxRetry: nativeDirect ? 2 : 8,
-          manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
-          levelLoadingMaxRetry: nativeDirect ? 2 : 6,
+          // Retries iguais em web e APK — IPTV server frequentemente devolve
+          // 1 erro transitório por fragmento; com retry baixo o APK falhava.
+          fragLoadingMaxRetry: 8,
+          manifestLoadingMaxRetry: 6,
+          levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
           liveSyncDurationCount: 6,
           liveMaxLatencyDurationCount: 60,
-          startLevel: -1,
-          testBandwidth: true,
+          // Live: começa pelo nível mais baixo e sem teste de banda — muitos
+          // servidores IPTV não respondem ao probe de bandwidth do hls.js
+          // (era o que travava a abertura dos canais no APK).
+          startLevel: isLive ? 0 : -1,
+          testBandwidth: !isLive,
           startFragPrefetch: true,
           abrEwmaDefaultEstimate: 1_000_000,
           abrBandWidthFactor: 0.8,
