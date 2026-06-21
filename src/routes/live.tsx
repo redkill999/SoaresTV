@@ -42,15 +42,25 @@ function LivePage() {
   useEffect(() => setCreds(store.getCreds()), []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
+  const catsCacheKey = `live-cats:${acct}`;
+  const listCacheKey = `live-streams:${acct}:all`;
+  const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
+  const listPersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(listCacheKey) : null), [listCacheKey, acct]);
   const categoriesQ = useQuery({
     queryKey: ["live-cats", acct],
     enabled: !!creds,
-    queryFn: () => api<LiveCategory[]>(creds!, "get_live_categories"),
+    queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_live_categories")),
+    initialData: catsPersisted?.data,
+    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
   const streamsQ = useQuery({
     queryKey: ["live-streams", acct, "all"],
     enabled: !!creds,
-    queryFn: () => api<LiveStream[]>(creds!, "get_live_streams"),
+    queryFn: withPersist(listCacheKey, () => api<LiveStream[]>(creds!, "get_live_streams")),
+    initialData: listPersisted?.data,
+    initialDataUpdatedAt: listPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
