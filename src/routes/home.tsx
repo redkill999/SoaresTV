@@ -6,7 +6,7 @@ import {
   Star, Radio, Settings as SettingsIcon,
   AlarmClock, Video, Lock, Mail, RefreshCw,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { xtreamCredsFromUrl } from "@/lib/xtream";
 import {
