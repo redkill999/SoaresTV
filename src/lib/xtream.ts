@@ -148,7 +148,7 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   params?: Record<string, string | number>,
 ): Promise<{ data: T; creds: XtreamCreds } | null> {
   if (!(await canUseNativeHttp())) return null;
-  let base = normalizeServer(c.server);
+  const base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
   try {
     const u = new URL(base);
