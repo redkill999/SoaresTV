@@ -169,7 +169,6 @@ async function handle(request: Request) {
   const range = request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
-  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
   // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
@@ -189,9 +188,7 @@ async function handle(request: Request) {
     h.set("Icy-MetaData", "0");
     h.set("Referer", `${upstreamUrl.origin}/`);
     h.set("Origin", upstreamUrl.origin);
-    const range = request.headers.get("range");
-    if (isVod && effectiveVodRange) h.set("Range", effectiveVodRange);
-    else if (range) h.set("Range", range);
+    if (range) h.set("Range", range);
     return h;
   };
 
@@ -232,12 +229,6 @@ async function handle(request: Request) {
 
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
-    if (isVod) {
-      return Response.json(
-        { error: `UPSTREAM_${upstream.status}`, fallback: true },
-        { status: 200, headers: respHeaders },
-      );
-    }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
@@ -268,10 +259,6 @@ async function handle(request: Request) {
   let status = upstream.status;
   const requestedRange = request.headers.get("range");
   const contentLength = respHeaders.get("content-length");
-  if (isVod && status === 206 && effectiveVodRange) {
-    normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
-    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
-  }
   if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
