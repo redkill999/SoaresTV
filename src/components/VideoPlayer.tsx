@@ -625,7 +625,12 @@ export function VideoPlayer({
         controls
         autoPlay
         playsInline
-        style={{ ['--cue-scale' as never]: settings.subtitleScale }}
+        style={{
+          ['--cue-scale' as never]: settings.subtitleScale,
+          // Realce visual estilo "HDR" (apenas CSS — não é HDR real).
+          // Suave pra não estourar pele/branco. Se incomodar, é só reverter.
+          filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
+        }}
         className={videoClass}
       />
       {error && (
