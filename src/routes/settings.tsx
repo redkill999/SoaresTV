@@ -544,6 +544,18 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
           )}
         </div>
 
+        {(creds || lists[0]) && (
+          <div className="px-6 pb-3">
+            <button
+              type="button"
+              onClick={() => setShowCompat(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/85 hover:bg-white/10"
+            >
+              <Sliders className="size-3.5" /> Avançado — Compatibilidade
+            </button>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={onClose}
@@ -551,6 +563,26 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
         >
           FECHAR
         </button>
+
+        {showCompat && (
+          <CompatDialog
+            title={creds ? `Compatibilidade — ${new URL(creds.server).host}` : `Compatibilidade — ${lists[0]?.name ?? "Lista"}`}
+            value={creds?.compat ?? lists[0]?.compat ?? {}}
+            onClose={() => setShowCompat(false)}
+            onSave={(c) => {
+              if (creds) {
+                store.setCreds({ ...creds, compat: c });
+                setCreds({ ...creds, compat: c });
+              } else if (lists[0]) {
+                const all = store.getM3U();
+                all[0] = { ...all[0], compat: c };
+                store.setM3U(all);
+              }
+              toast.success("Compatibilidade salva");
+              setShowCompat(false);
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
