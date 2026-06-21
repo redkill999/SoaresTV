@@ -349,36 +349,31 @@ export function VideoPlayer({
           lockLowQuality();
         };
 
+        let manifestReady = false;
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
+
         const recoverLiveStall = () => {
-          if (!isLive || cancelled) return;
+          if (!isLive || cancelled || !manifestReady) return;
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
-            if (ahead < 1.5) {
-              try { hls.startLoad(-1); } catch { /* noop */ }
-              const livePos = hls.liveSyncPosition;
-              if (typeof livePos === "number" && Number.isFinite(livePos) && Math.abs(livePos - video.currentTime) > 4) {
-                try { video.currentTime = livePos; } catch { /* noop */ }
-              }
+            if (ahead < 0.75) {
+              try { hls.startLoad(); } catch { /* noop */ }
             }
             void video.play().catch(() => undefined);
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
-          }, 1_000);
+          }, 3_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
-        video.addEventListener("stalled", onWaiting);
         video.addEventListener("playing", onResumed);
-        video.addEventListener("canplay", onResumed);
         detachStallListeners = () => {
           clearStall();
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
-          video.removeEventListener("stalled", onWaiting);
           video.removeEventListener("playing", onResumed);
-          video.removeEventListener("canplay", onResumed);
         };
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
