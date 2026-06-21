@@ -22,11 +22,11 @@ export const Route = createFileRoute("/live")({
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
       queryKey: ["live-cats", acct],
-      queryFn: () => api<LiveCategory[]>(creds, "get_live_categories"),
+      queryFn: withPersist(`live-cats:${acct}`, () => api<LiveCategory[]>(creds, "get_live_categories")),
     });
     void context.queryClient.prefetchQuery({
       queryKey: ["live-streams", acct, "all"],
-      queryFn: () => api<LiveStream[]>(creds, "get_live_streams"),
+      queryFn: withPersist(`live-streams:${acct}:all`, () => api<LiveStream[]>(creds, "get_live_streams")),
     });
   },
   component: LivePage,
