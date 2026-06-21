@@ -1,13 +1,13 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
-import { api, streamUrl, getShortEpg, isNativeApp, type EpgListing } from "@/lib/xtream";
+import { api, streamUrl } from "@/lib/xtream";
 import { useIsFavorite } from "@/hooks/use-favorites";
-import { Clock, ExternalLink, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
@@ -38,7 +38,6 @@ function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
   const navigate = useNavigate();
-  const router = useRouter();
 
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -114,13 +113,6 @@ function PlayerPage() {
     },
   });
 
-  const epgQ = useQuery({
-    queryKey: ["epg", id],
-    enabled: !!creds && type === "live",
-    queryFn: () => getShortEpg(creds!, id, 6),
-    refetchInterval: 60_000,
-  });
-
   const url = useMemo(() => {
     if (!creds) return "";
     if (type === "live") return streamUrl.live(creds, id);
@@ -177,29 +169,6 @@ function PlayerPage() {
     },
     [type, id],
   );
-
-  // Player externo (Android nativo): dispara Intent VIEW para o stream.
-  // Apps como MX Player, VLC, Just Player aceitam e usam ExoPlayer/FFmpeg por baixo.
-  const [isNative, setIsNative] = useState(false);
-  useEffect(() => {
-    void isNativeApp().then(setIsNative);
-  }, []);
-
-  const openInExternalPlayer = useCallback(() => {
-    if (!url) return;
-    try {
-      // Constrói Intent URI Android: força mimeType de vídeo e action VIEW.
-      // O sistema mostra o seletor com MX Player / VLC / etc.
-      const stripped = url.replace(/^https?:\/\//i, "");
-      const scheme = /^https:\/\//i.test(url) ? "https" : "http";
-      const intentUrl =
-        `intent://${stripped}` +
-        `#Intent;scheme=${scheme};type=video/*;action=android.intent.action.VIEW;end`;
-      window.location.href = intentUrl;
-    } catch {
-      window.open(url, "_blank");
-    }
-  }, [url]);
 
   const leavingRef = useRef(false);
   const closePlayer = useCallback(() => {
@@ -293,22 +262,7 @@ function PlayerPage() {
           </Button>
         </div>
 
-          {/* Título/tipo e botão de voltar/favorito ficam ocultos durante a reprodução.
-              Use a tecla Voltar do controle remoto / ESC para sair do player.
-              Mantemos apenas o botão "Player externo" no app nativo, no canto. */}
-          {isNative && url && (
-            <div className="pointer-events-auto absolute right-2 top-2 sm:right-3 sm:top-3 z-20">
-              <Button
-                variant="outline"
-                onClick={openInExternalPlayer}
-                title="Abrir em MX Player, VLC ou outro player nativo (ExoPlayer)"
-                className="bg-player/45 backdrop-blur min-h-11 px-3 sm:px-4 text-sm sm:text-base"
-              >
-                <ExternalLink className="size-4 sm:size-5" />
-                <span className="hidden sm:inline">Player externo</span>
-              </Button>
-            </div>
-          )}
+          {/* Título/tipo e botões extras ficam ocultos durante a reprodução. */}
         {type === "series" && (
           <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
