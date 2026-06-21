@@ -356,7 +356,9 @@ async function nativeLoadM3U(url: string, username?: string, password?: string):
       lastError = err;
     }
   }
-  throw new Error(lastStatus ? `M3U respondeu HTTP ${lastStatus}` : "Lista M3U vazia");
+  if (lastStatus) throw new Error(`M3U respondeu HTTP ${lastStatus}`);
+  if (lastError instanceof Error) throw lastError;
+  throw new Error("Lista M3U vazia");
 }
 
 export async function loadM3U(
