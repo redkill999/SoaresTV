@@ -22,6 +22,10 @@ export const xtreamApi = createServerFn({ method: "POST" })
       password: string;
       action?: string;
       params?: Record<string, string | number>;
+      /** Optional: UA known to work for this server (saved from previous success). Tried first. */
+      preferredUA?: string;
+      /** Per-attempt timeout. Default 10s — fails quickly so we move to next UA / surface error. */
+      timeoutMs?: number;
     }) => d,
   )
   .handler(async ({ data }) => {
@@ -36,11 +40,9 @@ export const xtreamApi = createServerFn({ method: "POST" })
       }
     }
 
-    // Some Xtream panels respond 502/503/504 transiently when overloaded,
-    // OR permanently reject requests whose User-Agent isn't on their allow-list.
-    // We try the most common IPTV-app UAs in order — if the panel works in
-    // Xciptv/Smarters/TiviMate, one of these will match.
-    const UAS = [
+    // Common IPTV-app User-Agents. We try the most-likely-to-work first
+    // (preferredUA from a previous successful login is cached client-side).
+    const DEFAULT_UAS = [
       "Xciptv/6.0",
       "IPTVSmartersPro/3.1.5",
       "TiviMate/4.7.0",
@@ -49,15 +51,21 @@ export const xtreamApi = createServerFn({ method: "POST" })
       "VLC/3.0.20 LibVLC/3.0.20",
       "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
     ];
+    const uas = data.preferredUA
+      ? [data.preferredUA, ...DEFAULT_UAS.filter((u) => u !== data.preferredUA)]
+      : DEFAULT_UAS;
+    const perAttemptTimeout = data.timeoutMs ?? 10_000;
+
     let lastStatus = 0;
     let lastErr: unknown = null;
-    for (let attempt = 0; attempt < UAS.length; attempt++) {
+    let networkFailures = 0;
+    for (let attempt = 0; attempt < uas.length; attempt++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20_000);
+      const timer = setTimeout(() => controller.abort(), perAttemptTimeout);
       try {
         const res = await fetch(url.toString(), {
           headers: {
-            "User-Agent": UAS[attempt],
+            "User-Agent": uas[attempt],
             Accept: "*/*",
             "Accept-Encoding": "identity",
             Connection: "keep-alive",
@@ -68,21 +76,26 @@ export const xtreamApi = createServerFn({ method: "POST" })
         if (res.ok) {
           const text = await res.text();
           try {
-            return { ok: true as const, data: JSON.parse(text) };
+            return { ok: true as const, data: JSON.parse(text), ua: uas[attempt] };
           } catch {
             return { ok: false as const, raw: text };
           }
         }
         lastStatus = res.status;
-        // Don't retry on auth/permanent errors
+        networkFailures = 0; // got a real HTTP response — reset network counter
+        // Don't retry on auth/permanent errors (4xx other than 429)
         if (res.status < 500 && res.status !== 429) break;
       } catch (e) {
         lastErr = e;
+        networkFailures++;
+        // After 2 consecutive network failures, the server is almost certainly
+        // unreachable — stop burning timeouts iterating through UAs.
+        if (networkFailures >= 2) break;
       } finally {
         clearTimeout(timer);
       }
-      // Short backoff between UA attempts (200ms) — total ~1.4s for 7 tries
-      await new Promise((r) => setTimeout(r, 200));
+      // Short backoff between UA attempts
+      await new Promise((r) => setTimeout(r, 150));
     }
 
     let errMessage: string;
