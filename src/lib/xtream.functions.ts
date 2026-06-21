@@ -43,6 +43,13 @@ export const xtreamApi = createServerFn({ method: "POST" })
     // Common IPTV-app User-Agents. We try the most-likely-to-work first
     // (preferredUA from a previous successful login is cached client-side).
     const DEFAULT_UAS = [
+      "XCIPTV/7.0 (Linux; Android 13)",
+      "TiviMate/5.1.0",
+      "IPTV Smarters Pro/4.0",
+      "VLC/3.5.4",
+      "okhttp/4.12.0",
+      "Mozilla/5.0 (Linux; Android 14)",
+      // Mantidos como fallback adicional (UAs antigos que ainda funcionam em painéis legados)
       "Xciptv/6.0",
       "IPTVSmartersPro/3.1.5",
       "TiviMate/4.7.0",
