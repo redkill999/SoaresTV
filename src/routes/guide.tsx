@@ -240,6 +240,8 @@ function GuidePage() {
                 <button
                   key={s.stream_id}
                   type="button"
+                  ref={(el) => registerRow(s.stream_id, el)}
+                  data-stream-id={s.stream_id}
                   onClick={() =>
                     navigate({
                       to: "/player/$type/$id",
