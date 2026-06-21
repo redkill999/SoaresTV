@@ -184,6 +184,8 @@ export function VideoPlayer({
     });
   }, [src, kind]);
 
+  const shouldUseNativePlayer = settings.defaultPlayer === "exo";
+
   useEffect(() => {
     let cancelled = false;
     setPlayerMode("deciding");
@@ -191,6 +193,10 @@ export function VideoPlayer({
       const native = await isNativeApp();
       if (cancelled) return;
       if (!native) {
+        setPlayerMode("web");
+        return;
+      }
+      if (!shouldUseNativePlayer) {
         setPlayerMode("web");
         return;
       }
@@ -205,7 +211,7 @@ export function VideoPlayer({
       cancelled = true;
       void stopNative();
     };
-  }, [src, kind, openNative]);
+  }, [src, kind, openNative, shouldUseNativePlayer]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -684,16 +690,15 @@ export function VideoPlayer({
           ? proxiedX(hlsCandidate, kind)
           : forceDirect
             ? hlsCandidate
-            : native ? hlsCandidate : proxiedX(hlsCandidate, kind)
+            : proxiedX(hlsCandidate, kind)
         : null;
-      if (native && !forceProxy) {
-        // APK/TV: tenta direto primeiro e mantém proxy como último recurso
-        // (a menos que o usuário tenha escolhido forceProxy).
+      if (native && forceDirect) {
+        // APK/TV com transporte direto forçado: tenta direto primeiro e mantém
+        // proxy como último recurso. No modo automático usamos proxy primeiro
+        // para evitar bloqueio de CORS/mixed-content no WebView do APK.
         playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
-          const list = forceDirect
-            ? [url, secure]
-            : [url, secure, proxiedX(url, kind)];
+          const list = [url, secure, proxiedX(url, kind)];
           return Array.from(new Set(list.filter(Boolean) as string[]));
         }));
       } else if (native && forceProxy) {
