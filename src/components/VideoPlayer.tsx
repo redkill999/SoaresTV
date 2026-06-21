@@ -153,7 +153,9 @@ export function VideoPlayer({
       }
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) playDirect();
-      else setError("Não foi possível reproduzir esta mídia.");
+      else if (isVod && !nativeDirect && /^https?:\/\//i.test(src)) {
+        window.location.href = src;
+      } else setError("Não foi possível reproduzir esta mídia.");
     };
 
     const armVodWatchdog = () => {
@@ -162,7 +164,7 @@ export function VideoPlayer({
       watchdog = setTimeout(() => {
         if (cancelled) return;
         if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) tryNextVod();
-      }, 12_000);
+      }, 5_000);
     };
 
     const playDirect = () => {
