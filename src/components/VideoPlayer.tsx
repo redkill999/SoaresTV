@@ -236,9 +236,9 @@ export function VideoPlayer({
           highBufferWatchdogPeriod: 3,
           nudgeMaxRetry: 10,
           nudgeOffset: 0.2,
-          fragLoadingMaxRetry: 8,
-          manifestLoadingMaxRetry: 6,
-          levelLoadingMaxRetry: 6,
+          fragLoadingMaxRetry: nativeDirect ? 2 : 8,
+          manifestLoadingMaxRetry: nativeDirect ? 2 : 6,
+          levelLoadingMaxRetry: nativeDirect ? 2 : 6,
           fragLoadingRetryDelay: 500,
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
@@ -252,7 +252,7 @@ export function VideoPlayer({
         hls.attachMedia(video);
 
         let netRetries = 0;
-        const MAX_NET_RETRIES = 5;
+        const MAX_NET_RETRIES = nativeDirect ? 2 : 5;
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
 
@@ -356,7 +356,7 @@ export function VideoPlayer({
       // hls.js para URL http é bloqueado pelo WebView por mixed content.
       // Roteamos pelo proxy /api/stream (mesma origem https) — o servidor
       // resolve o http e devolve o stream com headers de IPTV.
-      hlsProxied = hlsCandidate && !native ? proxied(hlsCandidate, kind) : null;
+      hlsProxied = hlsCandidate ? (native ? hlsCandidate : proxied(hlsCandidate, kind)) : null;
       if (native) {
         // APK/TV: tenta direto primeiro e mantém proxy como último recurso.
         playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
