@@ -813,13 +813,26 @@ export function VideoPlayer({
           filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
         }}
         className={videoClass}
+        hidden={playerMode === "native"}
       />
+      {playerMode === "native" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-player text-foreground">
+          <p className="text-sm opacity-80">Reproduzindo no player nativo (ExoPlayer)</p>
+          <button
+            type="button"
+            onClick={() => { void openNative(); }}
+            className="rounded-full bg-primary px-5 py-2 text-sm text-primary-foreground shadow-glow"
+          >
+            ▶ Abrir player
+          </button>
+        </div>
+      )}
       {error && (
         <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       )}
-      {canManualPlay && !error && (
+      {canManualPlay && !error && playerMode === "web" && (
         <button
           type="button"
           onClick={() => videoRef.current?.play().then(() => setCanManualPlay(false)).catch(() => undefined)}
