@@ -166,12 +166,9 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   const candidates = new Set<string>([base]);
   try {
     const u = new URL(base);
-    const ports = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"];
-    // Probamos http E https — alguns painéis (jetflix etc.) só respondem por
-    // HTTPS, outros (a maioria com porta custom) só por HTTP. Mantemos o
-    // origin original sempre como primeiro tentativa.
+    // Mantemos o origin original sempre como primeira tentativa.
     for (const scheme of ["http", "https"]) {
-      for (const port of ports) {
+      for (const port of COMMON_XTREAM_PORTS) {
         candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
       }
     }
@@ -180,12 +177,18 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   }
 
   let lastError: unknown = null;
+  let consecutiveFailures = 0;
   for (const server of candidates) {
     try {
       const data = await nativeApi<T>({ ...c, server }, action, params);
       if (data) return { data, creds: { ...c, server } };
+      consecutiveFailures = 0;
     } catch (err) {
       lastError = err;
+      consecutiveFailures += 1;
+      // Fail-fast: 3 falhas seguidas significam servidor offline / DNS quebrado.
+      // Sem isso, no pior caso esperaríamos timeoutMs × 10 candidatas = 120s.
+      if (consecutiveFailures >= 3) break;
     }
   }
   if (lastError) throw lastError;
