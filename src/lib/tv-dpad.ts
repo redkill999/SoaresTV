@@ -337,6 +337,11 @@ function handleKey(e: KeyboardEvent) {
 
   const next = pickNearest(active, dir);
   if (next) {
+    // Mover o foco com direcional cancela qualquer confirmação pendente
+    if (pendingActivation) {
+      clearConfirmHint(pendingActivation.el);
+      pendingActivation = null;
+    }
     next.focus({ preventScroll: true });
     next.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
