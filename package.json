@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "android:fix-splash": "bash scripts/fix-android-splash.sh",
-    "android:sync": "bunx cap sync android && bash scripts/fix-android-splash.sh"
+    "android:landscape": "node scripts/android-landscape.mjs",
+    "android:sync": "bunx cap sync android && bash scripts/fix-android-splash.sh && node scripts/android-landscape.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
