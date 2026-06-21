@@ -6,7 +6,6 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
-import { useIsFavorite } from "@/hooks/use-favorites";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
@@ -205,10 +204,6 @@ function PlayerPage() {
   // Obs.: não fechamos o player ao sair do fullscreen — sair de tela cheia
   // deve apenas voltar o player ao modo inline. O fechamento real acontece
   // apenas via botão "voltar" (closePlayer) ou pelo evento soarestv:player-back.
-
-  // (Favorito agora é gerenciado fora do player)
-  void useIsFavorite;
-
 
   // Mostra controles (seta voltar) ao mover o mouse, e oculta após alguns segundos
   const [showControls, setShowControls] = useState(false);
