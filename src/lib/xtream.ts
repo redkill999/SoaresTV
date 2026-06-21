@@ -312,13 +312,18 @@ export async function loadM3U(
   username?: string,
   password?: string,
 ): Promise<M3UEntry[]> {
-  const native = await nativeLoadM3U(url, username, password);
-  if (native) return native;
-
-  if (await isNativeApp()) {
-    throw new Error("A lista não abriu pela conexão direta do Android. Confirme o Portal/DNS/Host usado no XCIPTV.");
+  // 1) Caminho nativo Android (igual ao XCIPTV).
+  try {
+    const native = await nativeLoadM3U(url, username, password);
+    if (native && native.length) return native;
+  } catch {
+    // ignora — vamos cair pro proxy do server-fn
   }
 
+  // 2) Fallback via server-fn (também usado pela web). No APK isso só
+  //    é acionado quando o panel bloqueia a conexão direta do Android
+  //    (Cloudflare/UA), garantindo que listas que rodam no XCIPTV
+  //    também rodem aqui.
   const r = await fetchM3U({ data: { url, username, password } });
   if (r.error) throw new Error(r.error);
   return r.entries as M3UEntry[];
