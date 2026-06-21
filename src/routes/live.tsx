@@ -10,6 +10,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
+import { filterBySearch, getSorted } from "@/lib/search-index";
 import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
