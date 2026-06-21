@@ -242,11 +242,14 @@ export function VideoPlayer({
     // Detecção automática pelo sufixo da URL. Override do usuário (compat)
     // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
     const auto = detectFormat(workingSrc);
+    // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
+    // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
+    // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
+    // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      // Se a URL termina em .ts/.mp4/.mkv não faz sentido tentar HLS antes.
-      (compat.streamFormat == null && (auto === "ts" || auto === "mp4" || auto === "mkv"));
+      (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     let hlsProxied: string | null = null;
