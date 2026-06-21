@@ -101,7 +101,10 @@ export async function isNativeApp(): Promise<boolean> {
   }
 }
 
-async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
+async function nativeHttpGet(
+  url: string,
+  timeoutMs = 10_000,
+): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
@@ -115,8 +118,8 @@ async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
     return await CapacitorHttp.get({
       url,
       headers: IPTV_HEADERS,
-      connectTimeout: 20_000,
-      readTimeout: 20_000,
+      connectTimeout: timeoutMs,
+      readTimeout: timeoutMs,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
