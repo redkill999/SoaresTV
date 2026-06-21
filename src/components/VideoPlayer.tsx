@@ -243,8 +243,14 @@ export function VideoPlayer({
       clearWatchdog();
       watchdog = setTimeout(() => {
         if (cancelled) return;
-        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) tryNextVod();
-      }, 12_000);
+        // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
+        // que o servidor respondeu — esperar mais 6s evita falso negativo em
+        // VOD de painel lento que demorou pra começar a entregar bytes.
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
+        else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
+        }
+      }, 18_000);
     };
 
     const bufferedAhead = () => {
