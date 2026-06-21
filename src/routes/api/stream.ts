@@ -152,7 +152,7 @@ async function handle(request: Request) {
   const respHeaders = new Headers(CORS);
   if (!upstream.ok) {
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
-    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+    return new Response(request.method === "HEAD" ? null : upstream.body, { status: upstream.status, headers: respHeaders });
   }
   // forward useful headers
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
@@ -189,7 +189,7 @@ async function handle(request: Request) {
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(upstream.body, { status, headers: respHeaders });
+  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
