@@ -100,9 +100,19 @@ function LoadingPage() {
       if (creds) await runXtream();
       else await runM3U();
       await wait(700);
-      navigate({ to: "/home", replace: true });
+      // Só avança para /home se TODOS os testes passarem.
+      // Se qualquer um falhar, mantém o usuário aqui com botões de ação.
+      setStatus((p) => {
+        const allOk = (Object.keys(p) as TestKey[]).every((k) => p[k] === "ok");
+        if (allOk) navigate({ to: "/home", replace: true });
+        return p;
+      });
     })();
   }, [navigate]);
+
+  const anyFail = (Object.keys(status) as TestKey[]).some((k) => status[k] === "fail");
+  const anyPending = (Object.keys(status) as TestKey[]).some((k) => status[k] === "pending");
+  const finishedWithFailure = !anyPending && anyFail;
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
