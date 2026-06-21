@@ -233,25 +233,9 @@ function PlayerPage() {
     return () => window.removeEventListener("soarestv:player-back", onRemoteBack);
   }, [closePlayer]);
 
-  useEffect(() => {
-    const d = document as Document & { webkitFullscreenElement?: Element };
-    const wasFullscreen = { current: !!(d.fullscreenElement || d.webkitFullscreenElement) };
-    const onFullscreenChange = () => {
-      const isFullscreen = !!(d.fullscreenElement || d.webkitFullscreenElement);
-      if (isFullscreen) {
-        wasFullscreen.current = true;
-        return;
-      }
-      if (wasFullscreen.current && !leavingRef.current) closePlayer();
-    };
-
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
-    };
-  }, [closePlayer]);
+  // Obs.: não fechamos o player ao sair do fullscreen — sair de tela cheia
+  // deve apenas voltar o player ao modo inline. O fechamento real acontece
+  // apenas via botão "voltar" (closePlayer) ou pelo evento soarestv:player-back.
 
   // (Favorito agora é gerenciado fora do player)
   void useIsFavorite;
