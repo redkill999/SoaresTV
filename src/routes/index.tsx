@@ -223,7 +223,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex items-start lg:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 lg:py-10 relative">
+    <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 size-96 rounded-full bg-primary/20 blur-3xl" />
