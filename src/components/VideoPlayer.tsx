@@ -116,6 +116,10 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
+  // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
+  // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
+  // "web" = caminho clássico hls.js/mpegts.js.
+  const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -125,6 +129,61 @@ export function VideoPlayer({
     onProgressRef.current = onProgress;
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
+
+  // --- Decisão de player + ponte ExoPlayer ---------------------------------
+  // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
+  // que usa ExoPlayer/Media3 em overlay fullscreen, fora do WebView. Ganhos:
+  //  - codecs HEVC/AC3/EAC3 com decoder de hardware (canais que travam no MSE
+  //    do WebView geralmente rodam liso aqui)
+  //  - MPEG-TS sem demux JS (sem mpegts.js)
+  //  - headers customizados (User-Agent estilo XCIPTV) direto no request
+  //  - bypassa o proxy /api/stream (vai direto pro painel via http)
+  // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
+  // web (hls.js/mpegts) que continua existindo.
+  const openNative = useCallback(async () => {
+    const native = await isNativeApp();
+    if (!native) return false;
+    const compat = getCompatForUrl(src);
+    const ua =
+      compat.userAgent && compat.userAgent !== "auto"
+        ? USER_AGENT_STRINGS[compat.userAgent]
+        : "XCIPTV/7.0 (Linux; Android 13)";
+    return playNative({
+      url: src,
+      userAgent: ua,
+      startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
+      onExit: (pos) => {
+        if (kind !== "live" && pos > 0) {
+          // Duração real não vem do plugin; salvamos posição com duração
+          // best-effort para o store de "Continuar assistindo".
+          onProgressRef.current?.(pos, Math.max(pos + 1, pos));
+        }
+      },
+    });
+  }, [src, kind]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlayerMode("deciding");
+    (async () => {
+      const native = await isNativeApp();
+      if (cancelled) return;
+      if (!native) {
+        setPlayerMode("web");
+        return;
+      }
+      const ok = await openNative();
+      if (cancelled) {
+        if (ok) void stopNative();
+        return;
+      }
+      setPlayerMode(ok ? "native" : "web");
+    })();
+    return () => {
+      cancelled = true;
+      void stopNative();
+    };
+  }, [src, kind, openNative]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
