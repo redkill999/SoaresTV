@@ -244,7 +244,7 @@ async function handle(request: Request) {
 
   if (isPlaylist && upstream.ok) {
     const text = await upstream.text();
-    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString());
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
     respHeaders.delete("content-length");
     return new Response(rewritten, { status: upstream.status, headers: respHeaders });
