@@ -179,19 +179,29 @@ export const store = {
 
   getHistory: () => read<HistItem[]>(K.hist, []),
   pushHistory: (item: HistItem) => {
+    const now = Date.now();
+    const TTL = 60 * 24 * 60 * 60 * 1000; // 60 dias
+    const MAX = 200;
     const cur = read<HistItem[]>(K.hist, []).filter(
-      (x) => !(x.type === item.type && x.id === item.id),
+      (x) => !(x.type === item.type && x.id === item.id) && (now - x.at) < TTL,
     );
-    const next = [item, ...cur].slice(0, 100);
+    const next = [item, ...cur].slice(0, MAX);
     write(K.hist, next);
   },
-  /** Atualiza posição/duração do item mais recente sem reordenar o histórico. */
+  /** Atualiza posição/duração do item mais recente sem reordenar o histórico.
+   *  Throttle: ignora se a última gravação foi há <4s E a posição mudou <5s
+   *  — evita 12 writes/min do tick do player saturando localStorage no APK. */
   updateProgress: (type: HistItem["type"], id: string, position: number, duration: number) => {
     const cur = read<HistItem[]>(K.hist, []);
     const idx = cur.findIndex((x) => x.type === type && x.id === id);
     if (idx === -1) return;
+    const prev = cur[idx];
+    const now = Date.now();
+    const sincePrev = now - prev.at;
+    const posDelta = Math.abs((prev.position ?? 0) - position);
+    if (sincePrev < 4000 && posDelta < 5) return;
     const next = cur.slice();
-    next[idx] = { ...next[idx], position, duration, at: Date.now() };
+    next[idx] = { ...prev, position, duration, at: now };
     write(K.hist, next);
   },
   removeHistory: (type: HistItem["type"], id: string) => {
