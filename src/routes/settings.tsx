@@ -217,6 +217,7 @@ function OutrasDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [lists, setLists] = useState<M3UPlaylist[]>([]);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [compatIdx, setCompatIdx] = useState<number | null>(null);
 
   useEffect(() => { if (open) setLists(store.getM3U()); }, [open]);
 
@@ -230,13 +231,23 @@ function OutrasDialog({ open, onClose }: { open: boolean; onClose: () => void })
     const next = lists.filter((_, idx) => idx !== i);
     store.setM3U(next); setLists(next);
   };
+  const saveCompat = (i: number, compat: ListCompat) => {
+    const next = lists.slice();
+    next[i] = { ...next[i], compat };
+    store.setM3U(next); setLists(next);
+    toast.success("Compatibilidade salva");
+    setCompatIdx(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Outras configurações</DialogTitle>
-          <DialogDescription>Gerencie suas listas M3U / M3U8.</DialogDescription>
+          <DialogDescription>
+            Gerencie suas listas M3U / M3U8. Use o botão "Avançado" para
+            ajustar User-Agent, formato e transporte por lista.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid sm:grid-cols-[1fr_2fr_auto] gap-2 mb-3">
@@ -250,16 +261,151 @@ function OutrasDialog({ open, onClose }: { open: boolean; onClose: () => void })
         <div className="space-y-2 max-h-72 overflow-auto">
           {lists.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma lista.</p>}
           {lists.map((l, i) => (
-            <div key={i} className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2 text-sm">
-              <div className="min-w-0">
+            <div key={i} className="flex items-center justify-between gap-2 bg-white/5 rounded-lg px-3 py-2 text-sm">
+              <div className="min-w-0 flex-1">
                 <div className="font-medium truncate">{l.name}</div>
                 <div className="text-xs text-muted-foreground truncate">{l.url}</div>
+                {l.compat && (
+                  <div className="text-[10px] text-cyan-300/80 mt-0.5">
+                    {compatSummary(l.compat)}
+                  </div>
+                )}
               </div>
+              <button
+                onClick={() => setCompatIdx(i)}
+                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                title="Compatibilidade desta lista"
+              >
+                <Sliders className="size-3.5" /> Avançado
+              </button>
               <button onClick={() => removeList(i)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="size-4" />
               </button>
             </div>
           ))}
+        </div>
+
+        {compatIdx !== null && lists[compatIdx] && (
+          <CompatDialog
+            title={`Compatibilidade — ${lists[compatIdx].name}`}
+            value={lists[compatIdx].compat ?? {}}
+            onClose={() => setCompatIdx(null)}
+            onSave={(c) => saveCompat(compatIdx, c)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const UA_LABELS: Record<ListUserAgent, string> = {
+  auto: "Automático (testa vários)",
+  xciptv: "XCIPTV",
+  smarters: "IPTV Smarters",
+  tivimate: "TiviMate",
+  vlc: "VLC",
+  okhttp: "okhttp",
+  lavf: "Lavf / FFmpeg",
+  chrome: "Chrome Android",
+};
+const FORMAT_LABELS: Record<ListStreamFormat, string> = {
+  auto: "Automático",
+  hls: "HLS (.m3u8)",
+  ts:  "MPEG-TS (.ts)",
+  mp4: "MP4 progressivo",
+};
+const TRANSPORT_LABELS: Record<ListTransport, string> = {
+  auto:   "Automático",
+  proxy:  "Sempre via proxy",
+  direct: "Sempre direto",
+};
+
+function compatSummary(c: ListCompat): string {
+  const parts: string[] = [];
+  if (c.userAgent && c.userAgent !== "auto") parts.push(`UA: ${UA_LABELS[c.userAgent]}`);
+  if (c.streamFormat && c.streamFormat !== "auto") parts.push(FORMAT_LABELS[c.streamFormat]);
+  if (c.transport && c.transport !== "auto") parts.push(TRANSPORT_LABELS[c.transport]);
+  if (c.forceHttps) parts.push("HTTPS forçado");
+  return parts.length ? parts.join(" • ") : "Padrão";
+}
+
+function CompatDialog({
+  title, value, onClose, onSave,
+}: {
+  title: string;
+  value: ListCompat;
+  onClose: () => void;
+  onSave: (c: ListCompat) => void;
+}) {
+  const [draft, setDraft] = useState<ListCompat>(value);
+  useEffect(() => { setDraft(value); }, [value]);
+
+  const Section = <T extends string>({
+    label, options, current, onPick,
+  }: {
+    label: string;
+    options: { v: T; t: string }[];
+    current: T;
+    onPick: (v: T) => void;
+  }) => (
+    <div>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {options.map((o) => (
+          <button
+            key={o.v}
+            onClick={() => onPick(o.v)}
+            className={`rounded-md px-3 py-2 text-xs text-left border transition ${current === o.v ? "bg-primary/15 border-primary text-white" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+          >
+            {o.t}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Ajustes que só valem para os streams deste servidor.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5">
+          <Section<ListUserAgent>
+            label="User-Agent enviado ao servidor"
+            current={draft.userAgent ?? "auto"}
+            onPick={(v) => setDraft({ ...draft, userAgent: v })}
+            options={(Object.keys(UA_LABELS) as ListUserAgent[]).map((v) => ({ v, t: UA_LABELS[v] }))}
+          />
+          <Section<ListStreamFormat>
+            label="Formato preferido"
+            current={draft.streamFormat ?? "auto"}
+            onPick={(v) => setDraft({ ...draft, streamFormat: v })}
+            options={(Object.keys(FORMAT_LABELS) as ListStreamFormat[]).map((v) => ({ v, t: FORMAT_LABELS[v] }))}
+          />
+          <Section<ListTransport>
+            label="Transporte"
+            current={draft.transport ?? "auto"}
+            onPick={(v) => setDraft({ ...draft, transport: v })}
+            options={(Object.keys(TRANSPORT_LABELS) as ListTransport[]).map((v) => ({ v, t: TRANSPORT_LABELS[v] }))}
+          />
+          <div className="flex items-center justify-between rounded-md border border-white/10 bg-white/5 px-3 py-2">
+            <div>
+              <div className="text-sm">Forçar HTTPS</div>
+              <div className="text-xs text-muted-foreground">
+                Upgrade http→https antes de tocar (resolve mixed-content).
+              </div>
+            </div>
+            <Switch checked={!!draft.forceHttps} onCheckedChange={(v) => setDraft({ ...draft, forceHttps: v })} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={() => onSave(draft)} className="bg-brand-gradient">Salvar</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
