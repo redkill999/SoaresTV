@@ -307,7 +307,7 @@ export function VideoPlayer({
         });
 
         let netRetries = 0;
-        const MAX_NET_RETRIES = nativeDirect ? 2 : 5;
+        const MAX_NET_RETRIES = 5;
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
 
