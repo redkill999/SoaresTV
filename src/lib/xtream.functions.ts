@@ -61,7 +61,7 @@ export const xtreamApi = createServerFn({ method: "POST" })
     const uas = data.preferredUA
       ? [data.preferredUA, ...DEFAULT_UAS.filter((u) => u !== data.preferredUA)]
       : DEFAULT_UAS;
-    const perAttemptTimeout = data.timeoutMs ?? 10_000;
+    const perAttemptTimeout = data.timeoutMs ?? 30_000;
 
     let lastStatus = 0;
     let lastErr: unknown = null;
@@ -373,7 +373,7 @@ function buildM3UCandidateUrls(raw: string, username?: string, password?: string
 
 type CategoryMap = Map<string, string>;
 
-async function fetchJson(url: string, timeoutMs = 12_000): Promise<unknown> {
+async function fetchJson(url: string, timeoutMs = 30_000): Promise<unknown> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {

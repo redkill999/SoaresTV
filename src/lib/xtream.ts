@@ -103,7 +103,7 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 12_000,
+  timeoutMs = 30_000,
 ): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -435,7 +435,7 @@ async function nativeLoadM3U(
   let consecutiveFailures = 0;
   for (const target of candidates) {
     try {
-      const res = await nativeHttpGet(target, 15_000);
+      const res = await nativeHttpGet(target, 30_000);
       if (!res) return null;
       lastStatus = res.status;
       if (res.status < 200 || res.status >= 300) { consecutiveFailures = 0; continue; }
