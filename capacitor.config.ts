@@ -6,9 +6,11 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   // Estratégia "casca" (Opção A): o APK abre o site publicado no Lovable.
   // Assim o backend (server functions do TanStack Start) continua funcionando.
+  // URL estável do projeto: não muda se o subdomínio publicado for renomeado,
+  // garantindo que APKs instalados não quebrem após mudança de slug.
   // Se um dia quiser empacotar offline, remova o bloco `server` e rode `bun run build` antes de `cap sync`.
   server: {
-    url: 'https://tv-magica-brasa-soarestv.lovable.app',
+    url: 'https://project--7e27fbd1-c4eb-4da3-b3cd-6957171df823.lovable.app',
     cleartext: true,
     androidScheme: 'https',
   },
