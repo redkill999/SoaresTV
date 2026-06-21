@@ -3,6 +3,17 @@ import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
+type MpegTsPlayer = {
+  destroy(): void;
+  unload(): void;
+  detachMediaElement(): void;
+  pause(): void;
+  attachMediaElement(mediaElement: HTMLMediaElement): void;
+  load(): void;
+  play(): Promise<void> | void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+};
+
 async function lockLandscape() {
   try {
     const { ScreenOrientation } = await import("@capacitor/screen-orientation");
@@ -170,6 +181,7 @@ export function VideoPlayer({
 
 
     let hls: Hls | null = null;
+    let tsPlayer: MpegTsPlayer | null = null;
     let cancelled = false;
     let vodIdx = 0;
     let triedDirect = false;
@@ -183,15 +195,25 @@ export function VideoPlayer({
       watchdog = null;
     };
 
+    const destroyTsPlayer = () => {
+      if (!tsPlayer) return;
+      try { tsPlayer.pause(); } catch { /* noop */ }
+      try { tsPlayer.unload(); } catch { /* noop */ }
+      try { tsPlayer.detachMediaElement(); } catch { /* noop */ }
+      try { tsPlayer.destroy(); } catch { /* noop */ }
+      tsPlayer = null;
+    };
+
     const tryNextVod = () => {
       clearWatchdog();
       if (hls) {
         hls.destroy();
         hls = null;
       }
+      destroyTsPlayer();
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) playDirect();
-      else setError("Não foi possível reproduzir esta mídia.");
+      else setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
     };
 
     const armVodWatchdog = () => {
@@ -217,11 +239,49 @@ export function VideoPlayer({
       return 0;
     };
 
+    const playMpegTs = async (url: string) => {
+      if (!isLive) return false;
+      try {
+        const mpegts = (await import("mpegts.js")).default;
+        if (cancelled || !mpegts.isSupported()) return false;
+        destroyTsPlayer();
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        tsPlayer = mpegts.createPlayer(
+          { type: "mpegts", isLive: true, url },
+          {
+            isLive: true,
+            enableWorker: true,
+            enableStashBuffer: false,
+            liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMinRemain: 1,
+          },
+        );
+        tsPlayer.on(mpegts.Events.ERROR, () => {
+          if (!cancelled) tryNextVod();
+        });
+        tsPlayer.attachMediaElement(video);
+        tsPlayer.load();
+        const playPromise = tsPlayer.play();
+        if (playPromise && typeof playPromise.then === "function") {
+          playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+        } else {
+          void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     const playDirect = () => {
       if (hls) {
         hls.destroy();
         hls = null;
       }
+      destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       const decodedUrl = (() => {
@@ -233,6 +293,18 @@ export function VideoPlayer({
       })();
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
+        return;
+      }
+      if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
+        void playMpegTs(url).then((handled) => {
+          if (!handled && !cancelled) {
+            video.pause();
+            video.currentTime = 0;
+            video.src = url;
+            video.load();
+            video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+          }
+        });
         return;
       }
       video.pause();
@@ -500,6 +572,7 @@ export function VideoPlayer({
       video.removeEventListener("canplay", onVideoReady);
       video.removeEventListener("playing", onPlaying);
       if (hls) hls.destroy();
+      destroyTsPlayer();
       video.removeAttribute("src");
       video.load();
     };

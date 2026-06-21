@@ -51,15 +51,11 @@ function hasWindowNativeBridge(): boolean {
       Capacitor?: {
         isNativePlatform?: () => boolean;
         getPlatform?: () => string;
-        isPluginAvailable?: (name: string) => boolean;
       };
     }
   ).Capacitor;
-  return !!(
-    cap?.isNativePlatform?.() ||
-    cap?.getPlatform?.() === "android" ||
-    cap?.isPluginAvailable?.("CapacitorHttp")
-  );
+  const platform = cap?.getPlatform?.();
+  return !!(cap?.isNativePlatform?.() || platform === "android" || platform === "ios");
 }
 
 function isAndroidWebViewShell(): boolean {
@@ -74,12 +70,14 @@ function isAndroidWebViewShell(): boolean {
 async function canUseNativeHttp(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (hasWindowNativeBridge()) return true;
+  if (!isAndroidWebViewShell()) return false;
   try {
     const { Capacitor } = await import("@capacitor/core");
+    const platform = Capacitor.getPlatform?.();
     return !!(
       Capacitor.isNativePlatform() ||
-      Capacitor.getPlatform?.() === "android" ||
-      Capacitor.isPluginAvailable?.("CapacitorHttp")
+      platform === "android" ||
+      platform === "ios"
     );
   } catch {
     return false;
@@ -91,10 +89,11 @@ export async function isNativeApp(): Promise<boolean> {
   if (hasWindowNativeBridge() || isAndroidWebViewShell()) return true;
   try {
     const { Capacitor } = await import("@capacitor/core");
+    const platform = Capacitor.getPlatform?.();
     return !!(
       Capacitor.isNativePlatform() ||
-      Capacitor.getPlatform?.() === "android" ||
-      Capacitor.isPluginAvailable?.("CapacitorHttp")
+      platform === "android" ||
+      platform === "ios"
     );
   } catch {
     return isAndroidWebViewShell();
@@ -105,10 +104,11 @@ async function nativeHttpGet(url: string): Promise<NativeHttpResponse | null> {
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
+    const platform = Capacitor.getPlatform?.();
     const canUseHttp =
       Capacitor.isNativePlatform() ||
-      Capacitor.getPlatform?.() === "android" ||
-      Capacitor.isPluginAvailable?.("CapacitorHttp") ||
+      platform === "android" ||
+      platform === "ios" ||
       hasWindowNativeBridge();
     if (!canUseHttp) return null;
     return await CapacitorHttp.get({
