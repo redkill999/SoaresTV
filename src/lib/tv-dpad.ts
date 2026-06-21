@@ -6,6 +6,48 @@ let bound = false;
 let lastInteractionWasKeyboard = false;
 let routeWatchId: ReturnType<typeof setInterval> | null = null;
 
+// Anti-clique-fantasma do controle remoto / teclado:
+// - Debounce: ignora Enters repetidos em < 300ms (botão OK com repeat).
+// - Confirmação dupla: ativar um <Link> que abre o player exige 2 Enters
+//   no mesmo item dentro de 2s. Evita abertura acidental do filme.
+let lastEnterAt = 0;
+let pendingActivation: { el: HTMLElement; at: number } | null = null;
+const ENTER_DEBOUNCE_MS = 300;
+const CONFIRM_WINDOW_MS = 2000;
+
+function logDpad(reason: string, extra?: Record<string, unknown>) {
+  try {
+    // eslint-disable-next-line no-console
+    console.log("[tv-dpad]", reason, extra ?? {});
+  } catch { /* noop */ }
+}
+
+function isPlayerLink(el: HTMLElement | null): el is HTMLAnchorElement {
+  if (!el || el.tagName !== "A") return false;
+  const href = (el as HTMLAnchorElement).getAttribute("href") || "";
+  return href.startsWith("/player/") || href.includes("/player/");
+}
+
+function showConfirmHint(el: HTMLElement) {
+  // Marca visualmente o item como "armado" para confirmação.
+  el.setAttribute("data-tv-arming", "1");
+  el.style.outline = "3px solid #1FB6FF";
+  el.style.outlineOffset = "2px";
+  window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
+  (el as HTMLElement & { __armT?: number }).__armT = window.setTimeout(() => {
+    el.removeAttribute("data-tv-arming");
+    el.style.outline = "";
+    el.style.outlineOffset = "";
+  }, CONFIRM_WINDOW_MS) as unknown as number;
+}
+
+function clearConfirmHint(el: HTMLElement) {
+  el.removeAttribute("data-tv-arming");
+  el.style.outline = "";
+  el.style.outlineOffset = "";
+  window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
+}
+
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
