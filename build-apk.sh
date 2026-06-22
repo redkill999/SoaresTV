@@ -47,6 +47,18 @@ fi
 log "3/5 — Sincronizando Capacitor (bunx cap sync android)"
 bunx cap sync android
 
+log "3b/5 — Patch landscape + permissões (android-landscape.mjs)"
+node scripts/android-landscape.mjs
+# Validação: aborta se o patch não pegou
+if ! grep -q 'android:screenOrientation="landscape"' android/app/src/main/AndroidManifest.xml; then
+  err "AndroidManifest não ficou em landscape após o patch."
+  exit 1
+fi
+if ! grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then
+  err "Permissão INTERNET ausente no AndroidManifest."
+  exit 1
+fi
+
 log "4/5 — Compilando APK ($MODE) com Gradle"
 pushd android >/dev/null
 chmod +x ./gradlew

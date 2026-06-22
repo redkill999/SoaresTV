@@ -186,9 +186,15 @@ export function VideoPlayer({
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo";
 
+  // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
+  // Sem isso, o cleanup chamava stopNative() em modo "web" também,
+  // potencialmente matando outra instância do plugin.
+  const nativeOpenedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     setPlayerMode("deciding");
+    nativeOpenedRef.current = false;
     (async () => {
       const native = await isNativeApp();
       if (cancelled) return;
@@ -201,6 +207,7 @@ export function VideoPlayer({
         return;
       }
       const ok = await openNative();
+      if (ok) nativeOpenedRef.current = true;
       if (cancelled) {
         if (ok) void stopNative();
         return;
@@ -209,7 +216,11 @@ export function VideoPlayer({
     })();
     return () => {
       cancelled = true;
-      void stopNative();
+      // Só mata o ExoPlayer se ele foi realmente aberto por esta instância.
+      if (nativeOpenedRef.current) {
+        void stopNative();
+        nativeOpenedRef.current = false;
+      }
     };
   }, [src, kind, openNative, shouldUseNativePlayer]);
 
@@ -723,25 +734,30 @@ export function VideoPlayer({
     };
   }, [src, kind, playerMode]);
 
-  // No APK Android, força paisagem ao entrar em tela cheia e libera ao sair.
+  // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
+  // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
+  // ScreenOrientation.lock no boot). Desbloquear aqui fazia o app voltar
+  // para portrait quando o usuário fechava o player no celular.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const onFsChange = () => {
       const isFs = !!(document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement);
-      if (isFs) void lockLandscape();
-      else void unlockOrientation();
+      // Sempre re-aplica landscape, tanto entrando quanto saindo do fullscreen.
+      void lockLandscape();
+      void isFs; // mantemos o cálculo para clareza/log futuros
     };
     document.addEventListener("fullscreenchange", onFsChange);
     document.addEventListener("webkitfullscreenchange", onFsChange);
     video.addEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
-    video.addEventListener("webkitendfullscreen", unlockOrientation as EventListener);
+    video.addEventListener("webkitendfullscreen", lockLandscape as EventListener);
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
       document.removeEventListener("webkitfullscreenchange", onFsChange);
       video.removeEventListener("webkitbeginfullscreen", lockLandscape as EventListener);
-      video.removeEventListener("webkitendfullscreen", unlockOrientation as EventListener);
-      void unlockOrientation();
+      video.removeEventListener("webkitendfullscreen", lockLandscape as EventListener);
+      // Cleanup: re-aplica landscape em vez de desbloquear.
+      void lockLandscape();
     };
   }, []);
 

@@ -62,6 +62,23 @@ echo [3/5] Sincronizando Capacitor (bunx cap sync android)...
 call bunx cap sync android || goto :fail
 
 echo.
+echo [3b/5] Aplicando patch landscape + permissoes (android-landscape.mjs)...
+call node scripts/android-landscape.mjs || goto :fail
+
+REM Validacao: garante que o patch funcionou
+findstr /C:"android:screenOrientation=\"landscape\"" "android\app\src\main\AndroidManifest.xml" >nul 2>nul
+if errorlevel 1 (
+  echo [ERRO] AndroidManifest nao ficou em landscape apos o patch.
+  goto :fail
+)
+findstr /C:"android.permission.INTERNET" "android\app\src\main\AndroidManifest.xml" >nul 2>nul
+if errorlevel 1 (
+  echo [ERRO] Permissao INTERNET ausente no AndroidManifest.
+  goto :fail
+)
+
+
+echo.
 echo [4/5] Compilando APK (%MODE%) com Gradle...
 pushd android
 if /I "%MODE%"=="release" (

@@ -174,8 +174,11 @@ html[data-tv-mode] {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
-  cursor: none;
   text-rendering: optimizeSpeed;
+}
+/* cursor:none só em Smart TV real — APK em celular pode ter mouse OTG. */
+html[data-smart-tv] {
+  cursor: none;
 }
 html[data-smart-tv] input,
 html[data-smart-tv] textarea,

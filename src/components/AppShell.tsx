@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Tv, Film, Clapperboard, Heart, History, Settings, LogOut, Search, Home, CalendarDays } from "lucide-react";
+import { Tv, Film, Clapperboard, CalendarDays, Search, Home } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { store } from "@/lib/storage";
@@ -13,14 +13,6 @@ const PRIMARY_NAV = [
   { to: "/series", labelKey: "nav.series", icon: Clapperboard },
   { to: "/guide", labelKey: "nav.guide", icon: CalendarDays },
 ] as const;
-
-const SECONDARY_NAV = [
-  { to: "/favorites", labelKey: "nav.favorites", icon: Heart },
-  { to: "/history", labelKey: "nav.history", icon: History },
-  { to: "/settings", labelKey: "nav.settings", icon: Settings },
-] as const;
-
-const ALL_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV] as const;
 
 export function AppShell({
   children,
@@ -120,33 +112,5 @@ export function AppShell({
       </main>
 
     </div>
-  );
-}
-
-function NavItem({
-  to,
-  label,
-  icon: Icon,
-  active,
-}: {
-  to: string;
-  label: string;
-  icon: typeof Tv;
-  active: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      data-nav-item="true"
-      data-active={active ? "true" : "false"}
-      className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] transition-all outline-none ${
-        active
-          ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <Icon className="size-3 shrink-0" />
-      <span className="truncate">{label}</span>
-    </Link>
   );
 }
