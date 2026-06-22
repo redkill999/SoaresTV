@@ -247,19 +247,30 @@ html[data-tv-mode] body .h-screen { height: 720px !important; }
 html[data-tv-mode] body .max-h-screen { max-height: 720px !important; }
 html[data-tv-mode] body .min-h-dvh { min-height: 720px !important; }
 html[data-tv-mode] body .h-dvh { height: 720px !important; }
+html[data-tv-mode] body .max-h-dvh { max-height: 720px !important; }
 html[data-tv-mode] body .w-dvw { width: 1280px !important; }
 
 /* Home (XCIPTV) — no modo TV/APK o body é um canvas 1280x720 escalado por
    transform. O JSX da home usa calc(100dvh*16/9) / calc(100vw*9/16) pra se
    ajustar em desktop, mas essas unidades medem o viewport REAL do dispositivo
    (ex. 1280x575 no celular em landscape) e não o canvas — resultado: a área
-   renderizava pequena no topo com muito preto em volta. Forçamos 100% aqui
-   pra ela ocupar todo o canvas; a imagem usa object-contain então a
-   proporção 16:9 é mantida sem distorcer. Não afeta web desktop. */
+   renderizava pequena no topo com muito preto em volta. Forçamos o wrapper
+   e o canvas a ocupar todo o body 1280x720; a imagem usa object-fill (o
+   body já é 16:9, então não distorce visualmente) pra eliminar barras
+   pretas mesmo se a imagem fonte não for exatamente 16:9. Web desktop
+   não é afetado. */
+html[data-tv-mode] body .home-wrapper {
+  height: 100% !important;
+  max-height: none !important;
+  padding: 0 !important;
+}
 html[data-tv-mode] body .home-canvas {
   width: 100% !important;
   height: 100% !important;
   aspect-ratio: auto !important;
+}
+html[data-tv-mode] body .home-canvas .home-bg {
+  object-fit: fill !important;
 }
 
 /* Responsividade — diálogos shadcn não podem estourar a altura em landscape
