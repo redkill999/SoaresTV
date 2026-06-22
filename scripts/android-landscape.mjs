@@ -8,10 +8,29 @@
  *
  * Idempotente: se já estiver landscape, não altera nada.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 
 const manifestPath = resolve("android/app/src/main/AndroidManifest.xml");
+
+// Copia o banner de TV (320x180) para res/drawable/tv_banner.png se ainda nao existir.
+// Sem esse arquivo o build falha com: resource drawable/tv_banner not found.
+const bannerSrc = resolve("resources/tv-banner.png");
+const bannerDst = resolve("android/app/src/main/res/drawable/tv_banner.png");
+if (existsSync(bannerSrc)) {
+  try {
+    mkdirSync(dirname(bannerDst), { recursive: true });
+    if (!existsSync(bannerDst)) {
+      copyFileSync(bannerSrc, bannerDst);
+      console.log("✅ Banner de TV copiado para res/drawable/tv_banner.png");
+    }
+  } catch (e) {
+    console.warn("⚠️  Nao consegui copiar tv_banner.png:", e.message);
+  }
+} else {
+  console.warn("⚠️  resources/tv-banner.png nao encontrado — o build pode falhar pedindo @drawable/tv_banner.");
+}
+
 
 if (!existsSync(manifestPath)) {
   console.error("❌ AndroidManifest.xml não encontrado em", manifestPath);
