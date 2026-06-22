@@ -119,7 +119,7 @@ function LoadingPage() {
       {/* Fundo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none absolute inset-0 bg-contain bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${homeBg.url})` }}
       />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
