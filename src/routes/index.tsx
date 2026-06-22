@@ -296,7 +296,7 @@ function LoginPage() {
             </div>
           </div>
         ) : (
-          <div className="hidden lg:block relative overflow-hidden rounded-3xl bg-black aspect-[8/9] w-full">
+          <div className="hidden lg:block relative overflow-hidden rounded-3xl bg-black aspect-[8/9] w-full lg:mt-20">
             {/* A imagem original é 1280×720 (16:9) com dois painéis lado a lado.
                 Cada metade é 640×720 (8:9). Damos ao container aspect-[8/9] e à imagem
                 largura 200% alinhada à esquerda — assim a METADE ESQUERDA (SoaresTV)
