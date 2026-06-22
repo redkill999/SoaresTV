@@ -238,23 +238,25 @@ function MainTile({ tile, onClick, defaultFocus }: { tile: Tile; onClick: () => 
     <button
       onClick={onClick}
       data-tv-default-focus={defaultFocus ? "" : undefined}
-      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60 landscape:max-h-[120px] landscape:py-2 landscape:gap-1 sm:landscape:max-h-none sm:landscape:py-5 sm:landscape:gap-1.5"
+      className="group relative flex h-full w-full flex-col items-center justify-center gap-2 sm:gap-3 overflow-hidden rounded-[20px] border border-white/15 bg-white/[0.06] backdrop-blur-xl text-white transition-all duration-200 hover:bg-white/[0.12] hover:border-white/40 hover:scale-[1.02] active:scale-[0.97] focus:outline-none focus:ring-2 focus:ring-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
     >
-      <Icon className="size-8 sm:size-12 transition group-hover:scale-105 landscape:size-6 sm:landscape:size-12" strokeWidth={1.6} />
-      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em] landscape:text-[10px] sm:landscape:text-base">{tile.label}</span>
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+      <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.08] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Icon className="size-10 sm:size-14 transition-transform group-hover:scale-110" strokeWidth={1.5} />
+      <span className="text-sm sm:text-lg font-bold tracking-[0.2em]">{tile.label}</span>
     </button>
   );
 }
 
-function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
+function FooterItem({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   const Icon = tile.icon;
   return (
     <button
       onClick={onClick}
-      className="flex aspect-square w-[56px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 sm:w-[78px]"
+      className="group flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-white/85 transition-all hover:bg-white/10 hover:text-white active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/60"
     >
-      <Icon className="size-5 sm:size-7" strokeWidth={1.7} />
-      <span className="text-[8px] font-semibold tracking-widest sm:text-[10px]">{tile.label}</span>
+      <Icon className="size-5 sm:size-6 transition-transform group-hover:scale-110" strokeWidth={1.7} />
+      <span className="text-[9px] sm:text-[10px] font-semibold tracking-[0.15em] truncate w-full text-center">{tile.label}</span>
     </button>
   );
 }
