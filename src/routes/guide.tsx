@@ -327,7 +327,8 @@ function GuidePage() {
           )}
         </div>
       )}
-    </AppShell>
+      </div>
+    </PremiumChrome>
   );
 }
 
