@@ -49,6 +49,12 @@ export function PremiumChrome({
     return () => { html.style.background = prevH; body.style.background = prevB; };
   }, []);
 
+  useEffect(() => {
+    const hasCreds = !!store.getCreds();
+    const hasM3U = store.getM3U().length > 0;
+    if (!hasCreds && !hasM3U) navigate({ to: "/" });
+  }, [navigate]);
+
   useEffect(() => () => {
     if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
   }, []);
