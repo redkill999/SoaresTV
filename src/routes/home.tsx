@@ -136,9 +136,13 @@ function HomePage() {
         paddingRight: "env(safe-area-inset-right)",
       }}
     >
-      {/* Canvas 16:9 que mantém o layout idêntico ao mockup em qualquer tela */}
+      {/* Canvas 16:9 que mantém o layout idêntico ao mockup em qualquer tela.
+          No modo TV/APK o body já é um canvas fixo 1280x720 escalado por
+          transform — então o CSS override (.home-canvas em data-tv-mode)
+          força 100%x100% e ignora os calcs com 100dvh/100vw, que mediriam
+          o viewport real do celular (ex. 1280x575) e quebrariam a altura. */}
       <div
-        className="relative"
+        className="relative home-canvas"
         style={{
           aspectRatio: "16 / 9",
           width: "min(100%, calc(100dvh * 16 / 9))",
