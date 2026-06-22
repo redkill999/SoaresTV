@@ -33,7 +33,7 @@ function LoadingPage() {
     const body = document.body;
     const prevH = html.style.background;
     const prevB = body.style.background;
-    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    const bg = `url(${homeBg.url}) center/contain no-repeat #082968`;
     html.style.background = bg;
     body.style.background = bg;
     return () => { html.style.background = prevH; body.style.background = prevB; };
@@ -119,7 +119,7 @@ function LoadingPage() {
       {/* Fundo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none absolute inset-0 bg-contain bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${homeBg.url})` }}
       />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
