@@ -26,18 +26,20 @@ type Tile = {
   to: string;
 };
 
+// Grid 2x4 — 8 tiles iguais (spec XCIPTV-like)
 const MAIN: Tile[] = [
   { label: "TV AO VIVO", icon: Tv, to: "/live" },
   { label: "FILMES", icon: Film, to: "/movies" },
   { label: "SÉRIES", icon: Clapperboard, to: "/series" },
   { label: "EPG", icon: CalendarDays, to: "/guide" },
-];
-
-const BOTTOM: Tile[] = [
-  { label: "CONTA", icon: User, to: "/settings" },
   { label: "FAVORITOS", icon: Star, to: "/favorites" },
   { label: "RÁDIO", icon: Radio, to: "/live" },
   { label: "CONFIG", icon: SettingsIcon, to: "/settings" },
+  { label: "CONTA", icon: User, to: "/settings" },
+];
+
+// Barra fixa inferior — apenas Catch Up + Multi (spec)
+const BOTTOM: Tile[] = [
   { label: "CATCH UP", icon: RotateCcw, to: "/live" },
   { label: "MULTI", icon: LayoutGrid, to: "/live" },
 ];
