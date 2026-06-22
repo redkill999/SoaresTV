@@ -141,8 +141,35 @@ echo.
 echo  [3c/5] Aplicando patches no AndroidManifest (landscape + icone TV)...
 call node scripts/android-landscape.mjs >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
-  echo  [aviso] Falha ao patchar AndroidManifest - veja o log.
+  echo  [ERRO] Falha ao patchar AndroidManifest - veja o log.
+  goto :fail
 )
+
+REM ---------- 5d. VALIDACAO: garantir que o manifest ficou em landscape ----------
+echo.
+echo  [3d/5] Validando AndroidManifest...
+set "MANIFEST=android\app\src\main\AndroidManifest.xml"
+if not exist "%MANIFEST%" (
+  echo  [ERRO] AndroidManifest.xml nao encontrado em %MANIFEST%
+  goto :fail
+)
+findstr /C:"android:screenOrientation=\"landscape\"" "%MANIFEST%" >nul 2>nul
+if errorlevel 1 (
+  echo  [ERRO] AndroidManifest NAO ficou em landscape apos o patch.
+  echo         Conteudo atual da MainActivity:
+  findstr /C:"MainActivity" "%MANIFEST%"
+  goto :fail
+)
+findstr /C:"android.permission.INTERNET" "%MANIFEST%" >nul 2>nul
+if errorlevel 1 (
+  echo  [ERRO] Permissao INTERNET ausente no AndroidManifest.
+  goto :fail
+)
+findstr /C:"usesCleartextTraffic=\"true\"" "%MANIFEST%" >nul 2>nul
+if errorlevel 1 (
+  echo  [aviso] usesCleartextTraffic nao detectado - listas HTTP puras podem falhar.
+)
+echo  [ok] Manifest validado: landscape + INTERNET confirmados.
 
 REM ---------- 6. Compilar APK ----------
 echo.
