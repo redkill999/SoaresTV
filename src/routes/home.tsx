@@ -148,67 +148,69 @@ function HomePage() {
 
 
   return (
-    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Background image — stretched 100% 100% pra mostrar a arte inteira igual
-          no celular/tablet/TV sem cropar (cover zoomava demais em portrait e
-          deixava a UI parecendo fora de lugar). */}
+    <div
+      className="relative flex h-dvh max-h-dvh flex-col overflow-hidden text-white"
+      style={{
+        background:
+          "radial-gradient(110% 70% at 15% 0%, rgba(220,38,38,0.35) 0%, transparent 55%), radial-gradient(110% 70% at 85% 100%, rgba(37,99,235,0.40) 0%, transparent 55%), linear-gradient(180deg, #0a0a0a 0%, #050505 60%, #000 100%)",
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
+      {/* Neon glow accents */}
+      <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 size-[60vmin] rounded-full bg-red-600/20 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-32 -right-24 size-[60vmin] rounded-full bg-blue-600/25 blur-3xl" />
+
+      {/* Watermark logo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-no-repeat bg-center"
-        style={{ backgroundImage: `url(${homeBg.url})`, backgroundSize: "100% 100%" }}
-      />
+        className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
+      >
+        <span className="text-[28vmin] font-black tracking-tighter text-white/[0.05] leading-none">
+          SoaresTV
+        </span>
+      </div>
 
-      {/* Subtle darken to keep tiles readable */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-black/25"
-      />
-
-
-      {/* Top bar */}
-      <header className="relative z-10 flex items-start justify-end gap-2 px-3 pt-3 sm:px-6 sm:pt-5">
-        <div className="flex flex-wrap items-start justify-end gap-x-1.5 gap-y-1 sm:gap-2.5 shrink-0 max-w-[55%]">
-          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
+      {/* Header */}
+      <header className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-3 sm:px-6 sm:pt-4">
+        <div />
+        <div className="flex items-center justify-center gap-2">
+          <div className="grid size-9 sm:size-10 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-blue-600 shadow-[0_0_24px_rgba(220,38,38,0.45)]">
+            <Tv className="size-5 text-white" strokeWidth={2.2} />
+          </div>
+          <span className="text-lg sm:text-2xl font-black tracking-[0.18em] bg-gradient-to-r from-red-400 via-white to-blue-400 bg-clip-text text-transparent">
+            SOARESTV
+          </span>
+        </div>
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+          <StatusIcon icon={RefreshCw}  label="UPDATE" onClick={() => handleStatus("update")} />
+          <StatusIcon icon={Lock}       label="VPN"    onClick={() => handleStatus("vpn")} />
+          <StatusIcon icon={Mail}       label="MSG"    onClick={() => handleStatus("msg")} />
           <StatusIcon icon={Video}      label="REC"    active={recOn}        activeColor="bg-red-500"     onClick={() => handleStatus("rec")} />
-          <StatusIcon icon={Lock}       label="VPN"                                                       onClick={() => handleStatus("vpn")} />
-          <StatusIcon icon={Mail}       label="MSG"                                                       onClick={() => handleStatus("msg")} />
-          <StatusIcon icon={RefreshCw}  label="UPDATE"                                                    onClick={() => handleStatus("update")} />
+          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
         </div>
       </header>
 
-      {/* Main 4 tiles */}
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
-        {/* landscape:grid-cols-4 garante que aparelhos como o Ulefone Armor 8
-            (que abre a WebView em paisagem sem disparar o TV-mode, portanto
-            sem largura >=768px) NAO empilhem os tiles em 2x2 — o que estourava
-            a altura e empurrava o rodape por cima do conteudo. */}
-        <div className="grid w-full grid-cols-2 landscape:grid-cols-4 gap-3 sm:gap-5 md:grid-cols-4">
+      {/* Main 2x2 grid */}
+      <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 min-h-0 items-center justify-center px-4 py-3 sm:py-6">
+        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 h-full max-h-[560px]">
           {MAIN.map((t, i) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-3 pt-1 sm:px-6 sm:pb-5">
-        <div className="flex items-end gap-2 sm:gap-3">
-          {BOTTOM_LEFT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
+      {/* Footer bar */}
+      <footer className="relative z-10 px-3 pb-3 sm:px-6 sm:pb-4">
+        <div className="mx-auto flex max-w-3xl items-stretch justify-between gap-1.5 sm:gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+          {BOTTOM.map((t) => (
+            <FooterItem key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
         </div>
-        <div className="flex flex-col items-center justify-end pb-1 text-center">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-white/70">
-            <Tv className="size-3.5" />
-            <span>Desenvolvido por</span>
-          </div>
-          <div className="text-[11px] font-semibold tracking-[0.2em] text-white/90">
-            RedKiLL999
-          </div>
-        </div>
-        <div className="flex items-end justify-end gap-2 sm:gap-3">
-          {BOTTOM_RIGHT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
-          ))}
+        <div className="mt-1.5 text-center text-[9px] uppercase tracking-[0.3em] text-white/40">
+          Desenvolvido por RedKiLL999
         </div>
       </footer>
 
