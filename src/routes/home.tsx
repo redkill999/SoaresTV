@@ -63,14 +63,14 @@ function HomePage() {
     if (!hasCreds && playlists.length === 0) navigate({ to: "/" });
   }, [navigate]);
 
-  // Pinta o "letterbox" do TV-mode com a mesma imagem da home,
-  // pra não sobrar barra preta em cima/embaixo no preview/APK.
+  // Pinta html/body com o mesmo gradiente da Home pra eliminar
+  // qualquer "borda branca" do letterbox (TV mode / safe-area do APK).
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlBg = html.style.background;
     const prevBodyBg = body.style.background;
-    const bg = `url(${homeBg.url}) center/100% 100% no-repeat #082968`;
+    const bg = "#050505";
     html.style.background = bg;
     body.style.background = bg;
     return () => {
