@@ -271,7 +271,7 @@ function LoginPage() {
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
         {/* Left — brand panel: só no app nativo. Na web a imagem de fundo já mostra esse painel. */}
-        {isNative && (
+        {isNative ? (
           <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
             <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
               <div>
@@ -295,9 +295,16 @@ function LoginPage() {
               </ul>
             </div>
           </div>
+        ) : (
+          <div className="hidden lg:flex relative overflow-hidden rounded-3xl lg:min-h-[420px] xl:min-h-[460px] bg-black">
+            <img
+              src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+          </div>
         )}
-        {/* Na web sem painel esquerdo, colocamos um spacer pra manter o card de login alinhado à direita */}
-        {!isNative && <div className="hidden lg:block" />}
 
         {/* Right — login card */}
         <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col">
