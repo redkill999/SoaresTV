@@ -69,7 +69,7 @@ function LoginPage() {
         setNativeSplash(true);
       } else {
         setSplash(true);
-        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
+        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 10000);
       }
       setSplashReady(true);
     });
