@@ -243,18 +243,14 @@ function LoginPage() {
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
-      <div className="fixed inset-0 z-0 overflow-hidden bg-background pointer-events-none">
-        {isNative && (
-          <>
-            <img
-              src={`${loginBgAsset.url}?v=${loginBgAsset.asset_id}`}
-              alt=""
-              aria-hidden
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/55" />
-          </>
-        )}
+      <div className="fixed inset-0 z-0 overflow-hidden bg-black pointer-events-none">
+        <img
+          src={`${isNative ? loginBgAsset.url : loginBgWebAsset.url}?v=${isNative ? loginBgAsset.asset_id : loginBgWebAsset.asset_id}`}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {isNative && <div className="absolute inset-0 bg-black/55" />}
       </div>
 
       <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex items-center gap-2">
@@ -272,16 +268,9 @@ function LoginPage() {
         </div>
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
-        {/* Left — brand panel: só em desktop largo (>=1024). Em landscape de celular não cabia. */}
-        <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
-          {!isNative ? (
-            <img
-              src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
-              alt=""
-              aria-hidden
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
+        {/* Left — brand panel: só no app nativo. Na web a imagem de fundo já mostra esse painel. */}
+        {isNative && (
+          <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
             <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
               <div>
                 <div className="flex items-center gap-3 mb-8 xl:mb-12">
@@ -303,8 +292,10 @@ function LoginPage() {
                 <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat3")}</li>
               </ul>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        {/* Na web sem painel esquerdo, colocamos um spacer pra manter o card de login alinhado à direita */}
+        {!isNative && <div className="hidden lg:block" />}
 
         {/* Right — login card */}
         <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col">
