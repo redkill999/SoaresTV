@@ -131,7 +131,6 @@ function warnQuota(k: string, err: unknown) {
   lastQuotaWarn[k] = now;
   const name = err instanceof Error ? err.name : "Error";
   const msg = err instanceof Error ? err.message : String(err);
-  // eslint-disable-next-line no-console
   console.warn(`[storage] write falhou em "${k}" (${name}): ${msg}`);
 }
 function write<T>(k: string, v: T) {
