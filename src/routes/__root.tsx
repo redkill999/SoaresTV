@@ -156,8 +156,11 @@ const TV_MODE_SCRIPT = `(function(){
         : 'width=device-width, initial-scale=1, viewport-fit=cover');
       document.head.appendChild(m);
       if (isTV) {
-        html.setAttribute('data-tv-mode','');
-        setTimeout(function(){
+        // Calcula scale ANTES de setar data-tv-mode pra evitar FOUC.
+        // Se ligássemos data-tv-mode primeiro, o CSS aplicaria
+        // scale(var(--tv-scale-x)) com a var inexistente → body de
+        // 1280px sem transform, estourando a tela por ~30ms.
+        var computeAndApply = function(){
           var vw = window.innerWidth;
           var vh = window.innerHeight;
           var portrait = vh > vw;
@@ -172,11 +175,18 @@ const TV_MODE_SCRIPT = `(function(){
           html.style.setProperty('--tv-vw', vw + 'px');
           html.style.setProperty('--tv-vh', vh + 'px');
           html.setAttribute('data-tv-orientation', portrait ? 'portrait' : 'landscape');
-        }, 30);
+          html.setAttribute('data-tv-mode','');
+        };
+        computeAndApply();
+        // Re-aplica após o WebView estabilizar (alguns Android reportam
+        // innerWidth/Height errados nos primeiros ms após o load).
+        setTimeout(computeAndApply, 30);
       } else {
         html.removeAttribute('data-tv-mode');
         html.removeAttribute('data-tv-orientation');
         html.style.removeProperty('--tv-scale');
+        html.style.removeProperty('--tv-scale-x');
+        html.style.removeProperty('--tv-scale-y');
         html.style.removeProperty('--tv-vw');
         html.style.removeProperty('--tv-vh');
       }
