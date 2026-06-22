@@ -15,6 +15,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginBgAsset from "@/assets/login-bg.png.asset.json";
+import loginBgWebAsset from "@/assets/login-web.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,6 +35,7 @@ function LoginPage() {
   const [splash, setSplash] = useState(false);
   const [nativeSplash, setNativeSplash] = useState(false);
   const [splashReady, setSplashReady] = useState(false);
+  const [isNative, setIsNative] = useState(false);
   const handleNativeSplashDone = useCallback(() => setNativeSplash(false), []);
 
   // Xtream state
@@ -65,6 +67,7 @@ function LoginPage() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     void isNativeApp().then((native) => {
       if (cancelled) return;
+      setIsNative(native);
       if (native) {
         setNativeSplash(true);
       } else {
@@ -228,7 +231,7 @@ function LoginPage() {
       <Toaster theme="dark" />
       <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
         <img
-          src={loginBgAsset.url}
+          src={isNative ? loginBgAsset.url : loginBgWebAsset.url}
           alt=""
           aria-hidden
           className="absolute inset-0 w-full h-full object-cover"
