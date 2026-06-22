@@ -26,18 +26,20 @@ type Tile = {
   to: string;
 };
 
+// Grid 2x4 — 8 tiles iguais (spec XCIPTV-like)
 const MAIN: Tile[] = [
   { label: "TV AO VIVO", icon: Tv, to: "/live" },
   { label: "FILMES", icon: Film, to: "/movies" },
   { label: "SÉRIES", icon: Clapperboard, to: "/series" },
   { label: "EPG", icon: CalendarDays, to: "/guide" },
-];
-
-const BOTTOM: Tile[] = [
-  { label: "CONTA", icon: User, to: "/settings" },
   { label: "FAVORITOS", icon: Star, to: "/favorites" },
   { label: "RÁDIO", icon: Radio, to: "/live" },
   { label: "CONFIG", icon: SettingsIcon, to: "/settings" },
+  { label: "CONTA", icon: User, to: "/settings" },
+];
+
+// Barra fixa inferior — apenas Catch Up + Multi (spec)
+const BOTTOM: Tile[] = [
   { label: "CATCH UP", icon: RotateCcw, to: "/live" },
   { label: "MULTI", icon: LayoutGrid, to: "/live" },
 ];
@@ -193,18 +195,18 @@ function HomePage() {
         </div>
       </header>
 
-      {/* Main 2x2 grid */}
-      <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 min-h-0 items-center justify-center px-4 py-3 sm:py-6">
-        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 h-full max-h-[560px]">
+      {/* Main grid 2x4 — 8 tiles iguais, ocupa 72% (flex-1) */}
+      <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 min-h-0 items-center justify-center px-3 py-3 sm:px-6 sm:py-5">
+        <div className="grid w-full h-full max-h-[640px] grid-cols-2 grid-rows-4 gap-2.5 sm:grid-cols-4 sm:grid-rows-2 sm:gap-4">
           {MAIN.map((t, i) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
         </div>
       </main>
 
-      {/* Footer bar */}
+      {/* Footer bar — Catch Up + Multi, centralizados */}
       <footer className="relative z-10 px-3 pb-3 sm:px-6 sm:pb-4">
-        <div className="mx-auto flex max-w-3xl items-stretch justify-between gap-1.5 sm:gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+        <div className="mx-auto flex max-w-md items-stretch justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
           {BOTTOM.map((t) => (
             <FooterItem key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
