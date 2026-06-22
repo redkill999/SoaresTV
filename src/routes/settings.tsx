@@ -126,15 +126,9 @@ function SettingsPage() {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black text-white">
       <Toaster theme="dark" />
 
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${homeBg.url})` }}
-      />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
 
       <header className="relative z-10 flex items-center justify-between px-6 py-4">
         <button
