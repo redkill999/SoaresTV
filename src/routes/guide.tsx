@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppShell } from "@/components/AppShell";
+import { PremiumChrome } from "@/components/PremiumChrome";
 import { store, type XtreamCreds } from "@/lib/storage";
 import {
   api,
@@ -11,7 +11,7 @@ import {
   type LiveStream,
 } from "@/lib/xtream";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
   head: () => ({ meta: [{ title: "Guia EPG — SoaresTV" }] }),
