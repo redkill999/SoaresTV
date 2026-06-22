@@ -297,11 +297,13 @@ function LoginPage() {
           </div>
         ) : (
           <div className="hidden lg:flex relative overflow-hidden rounded-3xl lg:min-h-[420px] xl:min-h-[460px] bg-black">
+            {/* A imagem contém os dois painéis (SoaresTV + login). Usamos object-cover + object-left
+                e largura 200% pra revelar SÓ a metade esquerda (a parte SoaresTV) preenchendo o painel. */}
             <img
               src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
               alt=""
               aria-hidden
-              className="absolute inset-0 w-full h-full object-contain"
+              className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none object-cover object-left"
             />
           </div>
         )}
