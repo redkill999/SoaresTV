@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AppShell } from "@/components/AppShell";
+import { PremiumChrome } from "@/components/PremiumChrome";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ParentalGate } from "@/components/ParentalGate";
 import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
@@ -101,7 +101,8 @@ function LivePage() {
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
 
   return (
-    <AppShell fixedViewport><div className="flex-1 min-h-0 flex flex-col overflow-hidden xciptv-bg text-white">
+    <PremiumChrome>
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
@@ -134,7 +135,8 @@ function LivePage() {
           </div>
         </div>
       )}
-    </div></AppShell>
+      </div>
+    </PremiumChrome>
   );
 }
 

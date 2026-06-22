@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { AppShell } from "@/components/AppShell";
+import { PremiumChrome } from "@/components/PremiumChrome";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { type TabKey } from "@/components/SectionTabs";
@@ -90,18 +92,28 @@ function FavoritesPage() {
   ];
 
   return (
-    <AppShell search={search} onSearch={setSearch}>
-      <div className="mb-5">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight">
-          {t("pages.favorites.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {favs.length}
-        </p>
+    <PremiumChrome title="FAVORITOS">
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 pb-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-lg sm:text-2xl font-bold tracking-tight truncate">
+            {t("pages.favorites.title")}
+          </h1>
+          <p className="text-xs text-white/60 mt-0.5">{favs.length}</p>
+        </div>
+        <div className="relative w-44 sm:w-64 shrink-0">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-white/50" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar"
+            className="pl-8 bg-white/5 border-white/10 rounded-full h-8 text-xs text-white placeholder:text-white/40"
+          />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div role="tablist" className="inline-flex p-1 rounded-full glass border border-border/60">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div role="tablist" className="inline-flex p-1 rounded-full bg-white/[0.05] border border-white/10">
           {TABS.map((tEntry) => {
             const active = tab === tEntry.key;
             const count = tEntry.key === "all" ? favs.length : favs.filter((f) => f.type === tEntry.key).length;
@@ -111,15 +123,15 @@ function FavoritesPage() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(tEntry.key as typeof tab)}
-                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
                   active
-                    ? "bg-brand-gradient text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-gradient-to-r from-red-500 to-blue-600 text-white shadow-[0_0_16px_rgba(220,38,38,0.35)]"
+                    : "text-white/65 hover:text-white"
                 }`}
               >
                 {tEntry.label}
                 {count > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? "bg-black/20" : "bg-white/[0.06]"}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? "bg-black/25" : "bg-white/[0.08]"}`}>
                     {count}
                   </span>
                 )}
@@ -128,8 +140,7 @@ function FavoritesPage() {
           })}
         </div>
 
-        {/* Ordenação — fica ao lado das abas, com o mesmo visual glass. */}
-        <div role="tablist" aria-label="Ordenar favoritos" className="inline-flex p-1 rounded-full glass border border-border/60">
+        <div role="tablist" aria-label="Ordenar favoritos" className="inline-flex p-1 rounded-full bg-white/[0.05] border border-white/10">
           {SORT_OPTS.map((opt) => {
             const active = sort === opt.key;
             const Icon = opt.icon;
@@ -140,10 +151,10 @@ function FavoritesPage() {
                 aria-selected={active}
                 onClick={() => setSort(opt.key)}
                 title={opt.label}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
                   active
-                    ? "bg-brand-gradient text-primary-foreground shadow-glow"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-gradient-to-r from-red-500 to-blue-600 text-white shadow-[0_0_16px_rgba(220,38,38,0.35)]"
+                    : "text-white/65 hover:text-white"
                 }`}
               >
                 <Icon className="size-3.5" />
@@ -172,6 +183,7 @@ function FavoritesPage() {
           />
         ))}
       </MediaGrid>
-    </AppShell>
+      </div>
+    </PremiumChrome>
   );
 }

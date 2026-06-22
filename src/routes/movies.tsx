@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AppShell } from "@/components/AppShell";
+import { PremiumChrome } from "@/components/PremiumChrome";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
@@ -96,7 +96,8 @@ function MoviesPage() {
   }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
-    <AppShell fixedViewport><div className="flex-1 min-h-0 flex flex-col overflow-hidden xciptv-bg text-white">
+    <PremiumChrome>
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
       <div className="flex-1 min-h-0 flex flex-col items-stretch sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
         <XciptvCategoryList
@@ -125,7 +126,8 @@ function MoviesPage() {
           )}
         </div>
       </div>
-    </div></AppShell>
+      </div>
+    </PremiumChrome>
   );
 }
 
