@@ -238,7 +238,7 @@ function LoginPage() {
       <Toaster theme="dark" />
       <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
         <img
-          src={isNative ? loginBgAsset.url : loginBgWebAsset.url}
+          src={`${isNative ? loginBgAsset.url : loginBgWebAsset.url}?v=${isNative ? loginBgAsset.asset_id : loginBgWebAsset.asset_id}`}
           alt=""
           aria-hidden
           className="absolute inset-0 w-full h-full object-cover"
