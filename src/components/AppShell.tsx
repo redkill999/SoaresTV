@@ -114,31 +114,3 @@ export function AppShell({
     </div>
   );
 }
-
-function NavItem({
-  to,
-  label,
-  icon: Icon,
-  active,
-}: {
-  to: string;
-  label: string;
-  icon: typeof Tv;
-  active: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      data-nav-item="true"
-      data-active={active ? "true" : "false"}
-      className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] transition-all outline-none ${
-        active
-          ? "bg-brand-gradient text-primary-foreground shadow-glow font-medium"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <Icon className="size-3 shrink-0" />
-      <span className="truncate">{label}</span>
-    </Link>
-  );
-}
