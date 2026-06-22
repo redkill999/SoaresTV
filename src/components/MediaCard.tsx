@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Play, Tv, Film, Clapperboard, ImageOff } from "lucide-react";
+import { Heart, Play } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import { useState } from "react";
+import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
 type Aspect = "poster" | "wide" | "square";
 
