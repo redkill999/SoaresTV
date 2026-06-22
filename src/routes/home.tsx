@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import homeBg from "@/assets/home-bg.png.asset.json";
+
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
