@@ -90,7 +90,7 @@ function SettingsPage() {
     const body = document.body;
     const prevH = html.style.background;
     const prevB = body.style.background;
-    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    const bg = "#000000";
     html.style.background = bg;
     body.style.background = bg;
     return () => { html.style.background = prevH; body.style.background = prevB; };
@@ -126,15 +126,9 @@ function SettingsPage() {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black text-white">
       <Toaster theme="dark" />
 
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${homeBg.url})` }}
-      />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
 
       <header className="relative z-10 flex items-center justify-between px-6 py-4">
         <button
