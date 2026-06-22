@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Tv, Film, Clapperboard } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useState } from "react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
+import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
 export function XciptvTile({
   type,
