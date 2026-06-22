@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Play, Tv, Film, Clapperboard, ImageOff } from "lucide-react";
+import { Heart, Play } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import { useState } from "react";
+import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
 type Aspect = "poster" | "wide" | "square";
 
@@ -40,13 +41,6 @@ export function MediaCard({
       : null;
 
   const showImage = !!image && !errored;
-  const FallbackIcon = type === "live" ? Tv : type === "movie" ? Film : type === "series" ? Clapperboard : ImageOff;
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join("");
 
   return (
     <div className="group relative">
@@ -79,22 +73,14 @@ export function MediaCard({
               />
             </>
           ) : (
-            <div
-              className="w-full h-full flex flex-col items-center justify-center gap-2 text-center px-3"
-              style={{
-                background:
-                  "linear-gradient(135deg, hsl(var(--primary) / 0.18), hsl(var(--accent) / 0.10) 60%, hsl(var(--card) / 0.6))",
-              }}
-              aria-label={`Sem imagem: ${name}`}
-            >
-              <FallbackIcon className="size-8 text-primary/80" strokeWidth={1.6} />
-              <div className="font-display text-2xl font-bold text-foreground/80 leading-none">
-                {initials || name.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground line-clamp-1">
-                {type === "live" ? "Canal" : type === "movie" ? "Filme" : "Série"}
-              </div>
-            </div>
+            <img
+              src={channelFallback.url}
+              alt={name}
+              loading="lazy"
+              className={`w-full h-full ${
+                aspect === "poster" ? "object-cover" : "object-contain p-4"
+              } bg-black/40 group-hover:scale-[1.04] transition-transform duration-500`}
+            />
           )}
 
           {/* Hover overlay */}

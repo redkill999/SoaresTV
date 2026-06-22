@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Tv, Film, Clapperboard } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useState } from "react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
+import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
 export function XciptvTile({
   type,
@@ -17,7 +18,7 @@ export function XciptvTile({
 }) {
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
-  const Fallback = type === "live" ? Tv : type === "movie" ? Film : Clapperboard;
+  const hasImage = !!image && !errored;
 
   return (
     <Link
@@ -27,7 +28,7 @@ export function XciptvTile({
       className="group block focus:outline-none"
     >
       <div className="xciptv-tile rounded-sm overflow-hidden aspect-square relative group-hover:xciptv-tile-active group-focus-visible:xciptv-tile-active">
-        {image && !errored ? (
+        {hasImage ? (
           <img
             src={image}
             alt={name}
@@ -36,9 +37,12 @@ export function XciptvTile({
             className="w-full h-full object-contain p-3"
           />
         ) : (
-          <div className="w-full h-full grid place-items-center">
-            <Fallback className="size-10 text-white/30" strokeWidth={1.5} />
-          </div>
+          <img
+            src={channelFallback.url}
+            alt={name}
+            loading="lazy"
+            className="w-full h-full object-contain p-3 opacity-90"
+          />
         )}
 
         <button
