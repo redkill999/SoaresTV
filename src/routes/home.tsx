@@ -28,21 +28,18 @@ type Tile = {
 
 const MAIN: Tile[] = [
   { label: "TV AO VIVO", icon: Tv, to: "/live" },
-  { label: "EPG", icon: CalendarDays, to: "/guide" },
   { label: "FILMES", icon: Film, to: "/movies" },
   { label: "SÉRIES", icon: Clapperboard, to: "/series" },
+  { label: "EPG", icon: CalendarDays, to: "/guide" },
 ];
 
-const BOTTOM_LEFT: Tile[] = [
+const BOTTOM: Tile[] = [
   { label: "CONTA", icon: User, to: "/settings" },
-  { label: "MULTI", icon: LayoutGrid, to: "/live" },
-  { label: "CATCH UP", icon: RotateCcw, to: "/live" },
-];
-
-const BOTTOM_RIGHT: Tile[] = [
   { label: "FAVORITOS", icon: Star, to: "/favorites" },
   { label: "RÁDIO", icon: Radio, to: "/live" },
-  { label: "CONFIGURAÇÃO", icon: SettingsIcon, to: "/settings" },
+  { label: "CONFIG", icon: SettingsIcon, to: "/settings" },
+  { label: "CATCH UP", icon: RotateCcw, to: "/live" },
+  { label: "MULTI", icon: LayoutGrid, to: "/live" },
 ];
 
 
