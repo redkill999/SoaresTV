@@ -311,7 +311,7 @@ function LoginPage() {
         )}
 
         {/* Right — login card */}
-        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col">
+        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col lg:mt-48">
           <h2 className="text-2xl font-bold">{t("auth.signIn")}</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
             {t("auth.signInSub")}
