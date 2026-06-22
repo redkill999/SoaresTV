@@ -243,7 +243,7 @@ function LoginPage() {
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
+      <div className="fixed inset-0 z-0 overflow-hidden bg-black pointer-events-none">
         <img
           src={`${isNative ? loginBgAsset.url : loginBgWebAsset.url}?v=${isNative ? loginBgAsset.asset_id : loginBgWebAsset.asset_id}`}
           alt=""
@@ -259,7 +259,7 @@ function LoginPage() {
       </div>
 
       {/* Mobile/landscape-pequeno brand header — escondido só em telas largas onde o painel da esquerda aparece */}
-      <div className="w-full max-w-5xl">
+      <div className="w-full max-w-5xl relative z-10">
         <div className="lg:hidden flex items-center gap-3 mb-3 mt-8 sm:mt-10">
           <div className="size-9 sm:size-10 rounded-xl bg-brand-gradient shadow-glow grid place-items-center shrink-0">
             <Tv className="size-4 sm:size-5 text-white" strokeWidth={2.25} />
