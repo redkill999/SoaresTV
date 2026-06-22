@@ -186,9 +186,15 @@ export function VideoPlayer({
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo";
 
+  // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
+  // Sem isso, o cleanup chamava stopNative() em modo "web" também,
+  // potencialmente matando outra instância do plugin.
+  const nativeOpenedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     setPlayerMode("deciding");
+    nativeOpenedRef.current = false;
     (async () => {
       const native = await isNativeApp();
       if (cancelled) return;
@@ -201,6 +207,7 @@ export function VideoPlayer({
         return;
       }
       const ok = await openNative();
+      if (ok) nativeOpenedRef.current = true;
       if (cancelled) {
         if (ok) void stopNative();
         return;
@@ -209,7 +216,11 @@ export function VideoPlayer({
     })();
     return () => {
       cancelled = true;
-      void stopNative();
+      // Só mata o ExoPlayer se ele foi realmente aberto por esta instância.
+      if (nativeOpenedRef.current) {
+        void stopNative();
+        nativeOpenedRef.current = false;
+      }
     };
   }, [src, kind, openNative, shouldUseNativePlayer]);
 
