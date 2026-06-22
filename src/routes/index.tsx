@@ -243,14 +243,18 @@ function LoginPage() {
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
-      <div className="fixed inset-0 z-0 overflow-hidden bg-black pointer-events-none">
-        <img
-          src={`${isNative ? loginBgAsset.url : loginBgWebAsset.url}?v=${isNative ? loginBgAsset.asset_id : loginBgWebAsset.asset_id}`}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-black/55" />
+      <div className="fixed inset-0 z-0 overflow-hidden bg-background pointer-events-none">
+        {isNative && (
+          <>
+            <img
+              src={`${loginBgAsset.url}?v=${loginBgAsset.asset_id}`}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/55" />
+          </>
+        )}
       </div>
 
       <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex items-center gap-2">
@@ -269,26 +273,37 @@ function LoginPage() {
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
         {/* Left — brand panel: só em desktop largo (>=1024). Em landscape de celular não cabia. */}
-        <div className="hidden lg:flex relative overflow-hidden rounded-3xl p-6 md:p-8 xl:p-10 bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px] flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-8 xl:mb-12">
-              <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center shrink-0">
-                <Tv className="size-5 text-white" strokeWidth={2.25} />
+        <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
+          {!isNative ? (
+            <img
+              src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
+              <div>
+                <div className="flex items-center gap-3 mb-8 xl:mb-12">
+                  <div className="size-11 rounded-xl bg-black/30 backdrop-blur grid place-items-center shrink-0">
+                    <Tv className="size-5 text-white" strokeWidth={2.25} />
+                  </div>
+                  <span className="font-semibold text-lg truncate">{t("auth.appName")}</span>
+                </div>
+                <h1 className="text-3xl md:text-4xl xl:text-5xl font-bold tracking-tight leading-[1.1]">
+                  {t("auth.heroTitle")}
+                </h1>
+                <p className="mt-4 xl:mt-5 text-sm xl:text-base text-white/85 max-w-sm leading-relaxed">
+                  {t("auth.heroDesc")}
+                </p>
               </div>
-              <span className="font-semibold text-lg truncate">{t("auth.appName")}</span>
+              <ul className="space-y-2 xl:space-y-2.5 text-sm text-white/95 mt-4">
+                <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat1")}</li>
+                <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat2")}</li>
+                <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat3")}</li>
+              </ul>
             </div>
-            <h1 className="text-3xl md:text-4xl xl:text-5xl font-bold tracking-tight leading-[1.1]">
-              {t("auth.heroTitle")}
-            </h1>
-            <p className="mt-4 xl:mt-5 text-sm xl:text-base text-white/85 max-w-sm leading-relaxed">
-              {t("auth.heroDesc")}
-            </p>
-          </div>
-          <ul className="space-y-2 xl:space-y-2.5 text-sm text-white/95 mt-4">
-            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat1")}</li>
-            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat2")}</li>
-            <li className="flex items-center gap-2"><PlayCircle className="size-4 shrink-0" /> {t("auth.feat3")}</li>
-          </ul>
+          )}
         </div>
 
         {/* Right — login card */}
