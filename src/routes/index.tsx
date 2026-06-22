@@ -67,6 +67,7 @@ function LoginPage() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     void isNativeApp().then((native) => {
       if (cancelled) return;
+      setIsNative(native);
       if (native) {
         setNativeSplash(true);
       } else {
