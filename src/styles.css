@@ -224,25 +224,17 @@ html[data-tv-mode] body {
   overflow: hidden;
 }
 
-/* Portrait: rotate 90deg, scale-to-fit, centered */
+/* Portrait: rotate 90deg, fill screen (scale X/Y independentes) */
 html[data-tv-mode][data-tv-orientation="portrait"] body {
   transform:
-    translate(
-      calc((var(--tv-vw) + 720px * var(--tv-scale)) / 2),
-      calc((var(--tv-vh) - 1280px * var(--tv-scale)) / 2)
-    )
+    translate(var(--tv-vw), 0)
     rotate(90deg)
-    scale(var(--tv-scale));
+    scale(var(--tv-scale-y, var(--tv-scale)), var(--tv-scale-x, var(--tv-scale)));
 }
 
-/* Landscape: no rotation, scale-to-fit, centered */
+/* Landscape: sem rotação, preenche a tela inteira (XCIPTV-like, sem tarjas) */
 html[data-tv-mode][data-tv-orientation="landscape"] body {
-  transform:
-    translate(
-      calc((var(--tv-vw) - 1280px * var(--tv-scale)) / 2),
-      calc((var(--tv-vh) - 720px * var(--tv-scale)) / 2)
-    )
-    scale(var(--tv-scale));
+  transform: scale(var(--tv-scale-x, var(--tv-scale)), var(--tv-scale-y, var(--tv-scale)));
 }
 
 /* Tailwind's *-screen utilities use 100vh which now equals the inflated
