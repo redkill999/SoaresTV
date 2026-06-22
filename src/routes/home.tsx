@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import homeBg from "@/assets/home-bg.png.asset.json";
+
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -28,21 +28,18 @@ type Tile = {
 
 const MAIN: Tile[] = [
   { label: "TV AO VIVO", icon: Tv, to: "/live" },
-  { label: "EPG", icon: CalendarDays, to: "/guide" },
   { label: "FILMES", icon: Film, to: "/movies" },
   { label: "SÉRIES", icon: Clapperboard, to: "/series" },
+  { label: "EPG", icon: CalendarDays, to: "/guide" },
 ];
 
-const BOTTOM_LEFT: Tile[] = [
+const BOTTOM: Tile[] = [
   { label: "CONTA", icon: User, to: "/settings" },
-  { label: "MULTI", icon: LayoutGrid, to: "/live" },
-  { label: "CATCH UP", icon: RotateCcw, to: "/live" },
-];
-
-const BOTTOM_RIGHT: Tile[] = [
   { label: "FAVORITOS", icon: Star, to: "/favorites" },
   { label: "RÁDIO", icon: Radio, to: "/live" },
-  { label: "CONFIGURAÇÃO", icon: SettingsIcon, to: "/settings" },
+  { label: "CONFIG", icon: SettingsIcon, to: "/settings" },
+  { label: "CATCH UP", icon: RotateCcw, to: "/live" },
+  { label: "MULTI", icon: LayoutGrid, to: "/live" },
 ];
 
 
@@ -66,14 +63,14 @@ function HomePage() {
     if (!hasCreds && playlists.length === 0) navigate({ to: "/" });
   }, [navigate]);
 
-  // Pinta o "letterbox" do TV-mode com a mesma imagem da home,
-  // pra não sobrar barra preta em cima/embaixo no preview/APK.
+  // Pinta html/body com o mesmo gradiente da Home pra eliminar
+  // qualquer "borda branca" do letterbox (TV mode / safe-area do APK).
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlBg = html.style.background;
     const prevBodyBg = body.style.background;
-    const bg = `url(${homeBg.url}) center/100% 100% no-repeat #082968`;
+    const bg = "#050505";
     html.style.background = bg;
     body.style.background = bg;
     return () => {
@@ -151,67 +148,69 @@ function HomePage() {
 
 
   return (
-    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Background image — stretched 100% 100% pra mostrar a arte inteira igual
-          no celular/tablet/TV sem cropar (cover zoomava demais em portrait e
-          deixava a UI parecendo fora de lugar). */}
+    <div
+      className="relative flex h-dvh max-h-dvh flex-col overflow-hidden text-white"
+      style={{
+        background:
+          "radial-gradient(110% 70% at 15% 0%, rgba(220,38,38,0.35) 0%, transparent 55%), radial-gradient(110% 70% at 85% 100%, rgba(37,99,235,0.40) 0%, transparent 55%), linear-gradient(180deg, #0a0a0a 0%, #050505 60%, #000 100%)",
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "env(safe-area-inset-left)",
+        paddingRight: "env(safe-area-inset-right)",
+      }}
+    >
+      {/* Neon glow accents */}
+      <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 size-[60vmin] rounded-full bg-red-600/20 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-32 -right-24 size-[60vmin] rounded-full bg-blue-600/25 blur-3xl" />
+
+      {/* Watermark logo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-no-repeat bg-center"
-        style={{ backgroundImage: `url(${homeBg.url})`, backgroundSize: "100% 100%" }}
-      />
+        className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
+      >
+        <span className="text-[28vmin] font-black tracking-tighter text-white/[0.05] leading-none">
+          SoaresTV
+        </span>
+      </div>
 
-      {/* Subtle darken to keep tiles readable */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-black/25"
-      />
-
-
-      {/* Top bar */}
-      <header className="relative z-10 flex items-start justify-end gap-2 px-3 pt-3 sm:px-6 sm:pt-5">
-        <div className="flex flex-wrap items-start justify-end gap-x-1.5 gap-y-1 sm:gap-2.5 shrink-0 max-w-[55%]">
-          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
+      {/* Header */}
+      <header className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-3 sm:px-6 sm:pt-4">
+        <div />
+        <div className="flex items-center justify-center gap-2">
+          <div className="grid size-9 sm:size-10 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-blue-600 shadow-[0_0_24px_rgba(220,38,38,0.45)]">
+            <Tv className="size-5 text-white" strokeWidth={2.2} />
+          </div>
+          <span className="text-lg sm:text-2xl font-black tracking-[0.18em] bg-gradient-to-r from-red-400 via-white to-blue-400 bg-clip-text text-transparent">
+            SOARESTV
+          </span>
+        </div>
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+          <StatusIcon icon={RefreshCw}  label="UPDATE" onClick={() => handleStatus("update")} />
+          <StatusIcon icon={Lock}       label="VPN"    onClick={() => handleStatus("vpn")} />
+          <StatusIcon icon={Mail}       label="MSG"    onClick={() => handleStatus("msg")} />
           <StatusIcon icon={Video}      label="REC"    active={recOn}        activeColor="bg-red-500"     onClick={() => handleStatus("rec")} />
-          <StatusIcon icon={Lock}       label="VPN"                                                       onClick={() => handleStatus("vpn")} />
-          <StatusIcon icon={Mail}       label="MSG"                                                       onClick={() => handleStatus("msg")} />
-          <StatusIcon icon={RefreshCw}  label="UPDATE"                                                    onClick={() => handleStatus("update")} />
+          <StatusIcon icon={AlarmClock} label="ALARM"  active={alarmMin > 0} activeColor="bg-emerald-400" onClick={() => handleStatus("alarm")} />
         </div>
       </header>
 
-      {/* Main 4 tiles */}
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 min-h-0 items-center justify-center px-4 py-2">
-        {/* landscape:grid-cols-4 garante que aparelhos como o Ulefone Armor 8
-            (que abre a WebView em paisagem sem disparar o TV-mode, portanto
-            sem largura >=768px) NAO empilhem os tiles em 2x2 — o que estourava
-            a altura e empurrava o rodape por cima do conteudo. */}
-        <div className="grid w-full grid-cols-2 landscape:grid-cols-4 gap-3 sm:gap-5 md:grid-cols-4">
+      {/* Main 2x2 grid */}
+      <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 min-h-0 items-center justify-center px-4 py-3 sm:py-6">
+        <div className="grid w-full grid-cols-2 gap-3 sm:gap-5 h-full max-h-[560px]">
           {MAIN.map((t, i) => (
             <MainTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} defaultFocus={i === 0} />
           ))}
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 grid grid-cols-3 items-end gap-3 px-4 pb-3 pt-1 sm:px-6 sm:pb-5">
-        <div className="flex items-end gap-2 sm:gap-3">
-          {BOTTOM_LEFT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
+      {/* Footer bar */}
+      <footer className="relative z-10 px-3 pb-3 sm:px-6 sm:pb-4">
+        <div className="mx-auto flex max-w-3xl items-stretch justify-between gap-1.5 sm:gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-2 py-2 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+          {BOTTOM.map((t) => (
+            <FooterItem key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
           ))}
         </div>
-        <div className="flex flex-col items-center justify-end pb-1 text-center">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-white/70">
-            <Tv className="size-3.5" />
-            <span>Desenvolvido por</span>
-          </div>
-          <div className="text-[11px] font-semibold tracking-[0.2em] text-white/90">
-            RedKiLL999
-          </div>
-        </div>
-        <div className="flex items-end justify-end gap-2 sm:gap-3">
-          {BOTTOM_RIGHT.map((t) => (
-            <SmallTile key={t.label} tile={t} onClick={() => openTile(t.to, t.label)} />
-          ))}
+        <div className="mt-1.5 text-center text-[9px] uppercase tracking-[0.3em] text-white/40">
+          Desenvolvido por RedKiLL999
         </div>
       </footer>
 
@@ -239,23 +238,25 @@ function MainTile({ tile, onClick, defaultFocus }: { tile: Tile; onClick: () => 
     <button
       onClick={onClick}
       data-tv-default-focus={defaultFocus ? "" : undefined}
-      className="group mx-auto flex w-full max-w-[180px] flex-col items-center justify-center gap-1.5 rounded-xl border border-white/70 bg-white/[0.04] px-3 py-3 sm:px-4 sm:py-5 text-white transition hover:bg-white/10 hover:border-white focus:outline-none focus:ring-2 focus:ring-white/60 landscape:max-h-[120px] landscape:py-2 landscape:gap-1 sm:landscape:max-h-none sm:landscape:py-5 sm:landscape:gap-1.5"
+      className="group relative flex h-full w-full flex-col items-center justify-center gap-2 sm:gap-3 overflow-hidden rounded-[20px] border border-white/15 bg-white/[0.06] backdrop-blur-xl text-white transition-all duration-200 hover:bg-white/[0.12] hover:border-white/40 hover:scale-[1.02] active:scale-[0.97] focus:outline-none focus:ring-2 focus:ring-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
     >
-      <Icon className="size-8 sm:size-12 transition group-hover:scale-105 landscape:size-6 sm:landscape:size-12" strokeWidth={1.6} />
-      <span className="text-xs sm:text-base font-semibold tracking-[0.16em] sm:tracking-[0.18em] landscape:text-[10px] sm:landscape:text-base">{tile.label}</span>
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+      <span aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.08] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Icon className="size-10 sm:size-14 transition-transform group-hover:scale-110" strokeWidth={1.5} />
+      <span className="text-sm sm:text-lg font-bold tracking-[0.2em]">{tile.label}</span>
     </button>
   );
 }
 
-function SmallTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
+function FooterItem({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   const Icon = tile.icon;
   return (
     <button
       onClick={onClick}
-      className="flex aspect-square w-[56px] flex-col items-center justify-center gap-1 rounded-lg border border-white/80 bg-white/[0.03] text-white transition hover:bg-white/10 sm:w-[78px]"
+      className="group flex flex-1 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-white/85 transition-all hover:bg-white/10 hover:text-white active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/60"
     >
-      <Icon className="size-5 sm:size-7" strokeWidth={1.7} />
-      <span className="text-[8px] font-semibold tracking-widest sm:text-[10px]">{tile.label}</span>
+      <Icon className="size-5 sm:size-6 transition-transform group-hover:scale-110" strokeWidth={1.7} />
+      <span className="text-[9px] sm:text-[10px] font-semibold tracking-[0.15em] truncate w-full text-center">{tile.label}</span>
     </button>
   );
 }
