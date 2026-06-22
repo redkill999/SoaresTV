@@ -128,7 +128,7 @@ function HomePage() {
 
   return (
     <div
-      className="relative flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-black text-white"
+      className="home-wrapper relative flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-black text-white"
       style={{
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
@@ -140,7 +140,9 @@ function HomePage() {
           No modo TV/APK o body já é um canvas fixo 1280x720 escalado por
           transform — então o CSS override (.home-canvas em data-tv-mode)
           força 100%x100% e ignora os calcs com 100dvh/100vw, que mediriam
-          o viewport real do celular (ex. 1280x575) e quebrariam a altura. */}
+          o viewport real do celular (ex. 1280x575) e quebrariam a altura.
+          A imagem usa object-fill em TV mode pra preencher toda a tela sem
+          barras pretas (o body já é 16:9, então não distorce). */}
       <div
         className="relative home-canvas"
         style={{
@@ -153,7 +155,7 @@ function HomePage() {
           src={homeBg.url}
           alt="SoaresTV"
           draggable={false}
-          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
         />
 
         {HOTSPOTS.map((h, i) => (
