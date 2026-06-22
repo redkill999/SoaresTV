@@ -79,7 +79,7 @@ function LoginPage() {
         setNativeSplash(true);
       } else {
         setSplash(true);
-        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 10000);
+        timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
       }
       setSplashReady(true);
     });
@@ -224,7 +224,14 @@ function LoginPage() {
 
   if (splash) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        <img
+          src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black/55" />
         <div className="text-center">
           <div className="size-20 rounded-3xl bg-brand-gradient shadow-glow mx-auto mb-4 animate-pulse" />
           <h1 className="text-3xl font-bold text-brand-gradient">{t("auth.appName")}</h1>
