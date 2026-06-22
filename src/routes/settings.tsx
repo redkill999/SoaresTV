@@ -90,7 +90,7 @@ function SettingsPage() {
     const body = document.body;
     const prevH = html.style.background;
     const prevB = body.style.background;
-    const bg = `url(${homeBg.url}) center/cover no-repeat #082968`;
+    const bg = "#000000";
     html.style.background = bg;
     body.style.background = bg;
     return () => { html.style.background = prevH; body.style.background = prevB; };
