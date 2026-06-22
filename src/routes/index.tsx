@@ -255,7 +255,7 @@ function LoginPage() {
         </div>
       )}
 
-      <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex items-center gap-2">
+      <div className="fixed top-2 right-2 sm:top-3 sm:right-3 z-50 flex items-center gap-2">
         <LanguageSwitcher />
         <ThemeSwitcher />
       </div>
