@@ -296,9 +296,11 @@ function LoginPage() {
             </div>
           </div>
         ) : (
-          <div className="hidden lg:flex relative overflow-hidden rounded-3xl lg:min-h-[420px] xl:min-h-[460px] bg-black">
-            {/* A imagem contém os dois painéis (SoaresTV + login). Usamos object-cover + object-left
-                e largura 200% pra revelar SÓ a metade esquerda (a parte SoaresTV) preenchendo o painel. */}
+          <div className="hidden lg:block relative overflow-hidden rounded-3xl bg-black aspect-[8/9] w-full">
+            {/* A imagem original é 1280×720 (16:9) com dois painéis lado a lado.
+                Cada metade é 640×720 (8:9). Damos ao container aspect-[8/9] e à imagem
+                largura 200% alinhada à esquerda — assim a METADE ESQUERDA (SoaresTV)
+                preenche o painel inteiro sem cortar nada. */}
             <img
               src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
               alt=""
