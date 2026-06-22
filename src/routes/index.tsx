@@ -53,13 +53,20 @@ function LoginPage() {
   const [m3uLoading, setM3uLoading] = useState(false);
 
   useEffect(() => {
-    // Auto-login: if creds (or a saved playlist) already exist, skip the
-    // login screen entirely and go straight to /home — same as XCIPTV.
-    const hasCreds = !!store.getCreds();
-    const hasList = (store.getM3U() ?? []).length > 0;
-    if (hasCreds || hasList) {
-      navigate({ to: "/loading", replace: true });
-      return;
+    // Permite forçar logout/reset via ?reset=1 — limpa tudo e mostra o login.
+    if (typeof window !== "undefined" && /[?&]reset=1\b/.test(window.location.search)) {
+      try { window.localStorage.clear(); } catch { /* noop */ }
+      try { window.sessionStorage.clear(); } catch { /* noop */ }
+      window.history.replaceState(null, "", window.location.pathname);
+    } else {
+      // Auto-login: if creds (or a saved playlist) already exist, skip the
+      // login screen entirely and go straight to /home — same as XCIPTV.
+      const hasCreds = !!store.getCreds();
+      const hasList = (store.getM3U() ?? []).length > 0;
+      if (hasCreds || hasList) {
+        navigate({ to: "/loading", replace: true });
+        return;
+      }
     }
     // Splash animado estilo XCIPTV: ~2.8s no APK Android (celular/TV),
     // splash curto de 600ms na web (sem mudar o que já funciona).
