@@ -243,7 +243,7 @@ function LoginPage() {
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-black">
+      <div className="fixed inset-0 z-0 overflow-hidden bg-black pointer-events-none">
         <img
           src={`${isNative ? loginBgAsset.url : loginBgWebAsset.url}?v=${isNative ? loginBgAsset.asset_id : loginBgWebAsset.asset_id}`}
           alt=""
