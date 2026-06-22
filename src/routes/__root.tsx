@@ -161,10 +161,14 @@ const TV_MODE_SCRIPT = `(function(){
           var vw = window.innerWidth;
           var vh = window.innerHeight;
           var portrait = vh > vw;
-          var scale = portrait
-            ? Math.min(vw / 720, vh / 1280)
-            : Math.min(vw / 1280, vh / 720);
+          // Preenche a tela inteira (XCIPTV-like): escala X e Y independentes.
+          // Aceita leve distorção em celulares 19.5:9 em troca de zero tarjas pretas.
+          var sx = portrait ? (vw / 720) : (vw / 1280);
+          var sy = portrait ? (vh / 1280) : (vh / 720);
+          var scale = Math.min(sx, sy); // fallback p/ utilitários que ainda leem --tv-scale
           html.style.setProperty('--tv-scale', String(scale));
+          html.style.setProperty('--tv-scale-x', String(sx));
+          html.style.setProperty('--tv-scale-y', String(sy));
           html.style.setProperty('--tv-vw', vw + 'px');
           html.style.setProperty('--tv-vh', vh + 'px');
           html.setAttribute('data-tv-orientation', portrait ? 'portrait' : 'landscape');
