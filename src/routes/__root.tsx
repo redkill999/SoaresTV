@@ -224,9 +224,10 @@ function RootComponent() {
   // Re-apply TV mode after React hydration in case hydration cleared the attribute / meta
   useEffect(() => {
     try {
-      // eslint-disable-next-line no-new-func
       new Function(TV_MODE_SCRIPT)();
-    } catch {}
+    } catch {
+      /* noop — boot TV defensivo */
+    }
     // Global error guard — evita que uma exception não tratada derrube
     // a WebView do APK em aparelhos Android antigos. Só loga (logcat captura).
     if (!(window as any).__globalErrGuardBound) {

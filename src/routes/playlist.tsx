@@ -95,7 +95,10 @@ function PlaylistPage() {
     staleTime: Infinity,
   });
 
-  const entries: M3UEntry[] = q.data ?? effectiveCached?.entries ?? [];
+  const entries: M3UEntry[] = useMemo(
+    () => q.data ?? effectiveCached?.entries ?? [],
+    [q.data, effectiveCached],
+  );
 
   const groups = useMemo(() => {
     const set = new Set<string>();

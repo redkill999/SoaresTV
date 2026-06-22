@@ -17,7 +17,6 @@ const CONFIRM_WINDOW_MS = 2000;
 
 function logDpad(reason: string, extra?: Record<string, unknown>) {
   try {
-    // eslint-disable-next-line no-console
     console.log("[tv-dpad]", reason, extra ?? {});
   } catch { /* noop */ }
 }
