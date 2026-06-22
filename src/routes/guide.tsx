@@ -153,11 +153,11 @@ function GuidePage() {
 
   if (!creds) {
     return (
-      <AppShell>
-        <div className="py-20 text-center text-sm text-muted-foreground">
+      <PremiumChrome title="EPG">
+        <div className="py-20 text-center text-sm text-white/60 px-4">
           Faça login para ver o guia EPG.
         </div>
-      </AppShell>
+      </PremiumChrome>
     );
   }
 
@@ -165,40 +165,26 @@ function GuidePage() {
   const hours = Array.from({ length: WINDOW_HOURS + 1 }, (_, i) => windowStart + i * 3600);
 
   return (
-    <AppShell>
-      <div className="mb-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-        <Link
-          to="/home"
-          aria-label="Voltar"
-          className="shrink-0 inline-flex items-center justify-center size-10 rounded-full border border-border bg-card/50 hover:bg-card transition-colors"
+    <PremiumChrome title="EPG">
+      <div className="px-3 sm:px-5 pb-3 flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-2">
+          <CalendarDays className="size-5 text-red-400" />
+          <h2 className="text-sm font-bold tracking-[0.25em] uppercase text-white/90 truncate">Guia EPG</h2>
+          <span className="text-[10px] text-white/50 hidden sm:inline">agora ± {WINDOW_HOURS - 1}h</span>
+        </div>
+        <select
+          value={catId}
+          onChange={(e) => { setCatId(e.target.value); setPage(0); }}
+          className="h-8 rounded-full bg-white/5 border border-white/10 px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500/40 text-white"
         >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight truncate flex items-center gap-2">
-            <CalendarDays className="size-6 text-primary" /> Guia EPG
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Programação ao vivo dos canais — agora ± {WINDOW_HOURS - 1}h
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={catId}
-            onChange={(e) => {
-              setCatId(e.target.value);
-              setPage(0);
-            }}
-            className="h-10 rounded-full bg-card/60 border border-white/10 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="all">Todas categorias</option>
-            {(categoriesQ.data ?? []).map((c) => (
-              <option key={c.category_id} value={c.category_id}>
-                {c.category_name}
-              </option>
-            ))}
-          </select>
-        </div>
+          <option value="all">Todas categorias</option>
+          {(categoriesQ.data ?? []).map((c) => (
+            <option key={c.category_id} value={c.category_id}>
+              {c.category_name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {streamsQ.isLoading ? (
