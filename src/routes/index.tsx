@@ -413,16 +413,16 @@ function LoginPage() {
                 required
                 rightPad="12%"
               />
-              {/* Olhinho — centralizado exatamente sobre o ícone desenhado na arte */}
+              {/* Olhinho — aparece só quando o input cobre o ícone desenhado */}
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 tabIndex={-1}
-                className="absolute z-30 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md text-white outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
-                style={{ left: "90.5%", top: "66.4%", width: "4.2%", height: "6.4%" }}
+                className="absolute z-30 grid place-items-center rounded-md outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
+                style={{ left: "88.95%", top: "64.9%", width: "3.2%", height: "3.6%" }}
               >
-                {showPassword ? <Eye className="size-5" /> : <EyeOff className="size-5" />}
+                {password && (showPassword ? <Eye className="size-5 text-white" /> : <EyeOff className="size-5 text-white" />)}
               </button>
               {/* Entrar Xtream */}
               <button
