@@ -126,8 +126,10 @@ if exist "android-template\styles.xml" (
 )
 call :fix_styles_xml || goto :fail
 call npx cap sync android >> "%LOG_FILE%" 2>&1
+call :fix_build_gradle
 echo       OK
 echo.
+
 
 echo [8/8] Compilando APK debug com Gradle (assembleDebug)...
 pushd android >nul
