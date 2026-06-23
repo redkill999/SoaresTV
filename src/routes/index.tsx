@@ -14,9 +14,8 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
-import loginBgAsset from "@/assets/login-bg.png.asset.json";
-import loginBgWebAsset from "@/assets/login-web.png.asset.json";
 import loginNewBg from "@/assets/login-new.png";
+
 
 
 export const Route = createFileRoute("/")({
@@ -239,11 +238,12 @@ function LoginPage() {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <img
-          src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+          src={loginNewBg}
           alt=""
           aria-hidden
           className="absolute inset-0 w-full h-full object-cover"
         />
+
         <div className="absolute inset-0 bg-black/55" />
         <div className="text-center">
           <div className="size-20 rounded-3xl bg-brand-gradient shadow-glow mx-auto mb-4 animate-pulse" />
