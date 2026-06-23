@@ -143,32 +143,35 @@ function HomePage() {
         paddingRight: "env(safe-area-inset-right)",
       }}
     >
-      {/* Canvas 16:9 que mantém o layout idêntico ao mockup em qualquer tela.
-          No modo TV/APK o body já é um canvas fixo 1280x720 escalado por
-          transform — então o CSS override (.home-canvas em data-tv-mode)
-          força 100%x100% e ignora os calcs com 100dvh/100vw, que mediriam
-          o viewport real do celular (ex. 1280x575) e quebrariam a altura.
-          A imagem usa object-fill em TV mode pra preencher toda a tela sem
-          barras pretas (o body já é 16:9, então não distorce). */}
+      {/* Fundo borrado: a mesma arte esticada e desfocada preenche os
+          espaços laterais/superiores quando a viewport não é exatamente
+          16:9. Sem barras pretas, sem zoom destrutivo, sem distorção
+          aparente (o blur disfarça qualquer stretch). */}
+      <img
+        src={homeBg.url}
+        alt=""
+        aria-hidden
+        draggable={false}
+        className="absolute inset-0 h-full w-full select-none object-cover scale-110 blur-2xl opacity-70 pointer-events-none"
+      />
+
+      {/* Canvas 16:9 nítido — fica contido na viewport sem cortar nenhum
+          hotspot. Em TV mode o CSS .home-canvas override força 100%x100%. */}
       <div
         className="relative home-canvas"
         style={{
-          // Mantém 16:9 da arte original (sem esticar = sem perder qualidade)
-          // mas dimensiona o canvas pra COBRIR toda a viewport: usa o MAIOR
-          // entre a viewport e a derivada 16:9. O wrapper tem overflow-hidden,
-          // então o excesso (no eixo mais curto) é apenas recortado nas bordas.
-          // Resultado: imagem nítida, sem barras pretas, hotspots em % alinhados.
           aspectRatio: "16 / 9",
-          width: "max(100%, calc(100dvh * 16 / 9))",
-          height: "max(100dvh, calc(100% * 9 / 16))",
+          width: "min(100%, calc(100dvh * 16 / 9))",
+          height: "min(100dvh, calc(100% * 9 / 16))",
         }}
       >
         <img
           src={homeBg.url}
           alt="SoaresTV"
           draggable={false}
-          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
+          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
         />
+
 
 
 
