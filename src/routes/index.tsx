@@ -327,14 +327,14 @@ function LoginPage() {
                 }}
               />
               <div
-                className="absolute grid place-items-center text-center font-semibold text-white/65"
-                style={{ left: "53%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
+                className="absolute grid place-items-center text-center font-semibold uppercase tracking-[0.18em] text-white/65"
+                style={{ left: "53%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)", transform: "scaleX(1.15)", transformOrigin: "center" }}
               >
                 Xtream Codes
               </div>
               <div
-                className="absolute grid place-items-center text-center font-semibold text-white"
-                style={{ left: "73.5%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
+                className="absolute grid place-items-center text-center font-semibold uppercase tracking-[0.18em] text-white"
+                style={{ left: "73.5%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)", transform: "scaleX(1.15)", transformOrigin: "center" }}
               >
                 Lista M3U
               </div>
