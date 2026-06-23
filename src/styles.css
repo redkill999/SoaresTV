@@ -320,20 +320,12 @@ div[style*="Edit with Lovable"],
 [data-smart-tv] :focus-visible,
 .tv-focus :focus,
 .tv-focus :focus-visible {
-  /* outline desenhada DENTRO da caixa (offset negativo) — não é cortada por overflow:hidden */
-  outline: 4px solid var(--tv-focus) !important;
-  outline-offset: -4px !important;
-  /* halo interno + leve halo externo (que ainda ajuda quando não há clipping) */
-  box-shadow:
-    inset 0 0 0 2px #000,
-    inset 0 0 0 6px var(--tv-focus),
-    0 0 0 4px var(--tv-focus-soft) !important;
-  background-color: var(--tv-focus-soft) !important;
-  border-radius: 10px;
-  transition: background-color 80ms ease, box-shadow 80ms ease, transform 120ms ease;
-  z-index: 5;
-  position: relative;
+  /* Foco TV sem moldura amarela — feedback fica só no scale + brilho da imagem. */
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
 }
+
 
 /* Tiles principais e cards crescem um pouquinho quando focados na TV.
    scale é mantido pois não é cortado por overflow do pai (apenas pelo viewport). */
