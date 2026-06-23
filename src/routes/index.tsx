@@ -293,16 +293,17 @@ function LoginPage() {
           />
 
           {/* Switchers (canto superior — sobre os botões desenhados BR/PT e Tema) */}
-          <div className="absolute z-20" style={{ left: "55.5%", top: "3.2%", width: "10%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-90">
+          <div className="absolute z-20" style={{ left: "72.5%", top: "3.2%", width: "11%", height: "6.5%" }}>
+            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
               <LanguageSwitcher />
             </div>
           </div>
-          <div className="absolute z-20" style={{ left: "67.5%", top: "3.2%", width: "10%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-90">
+          <div className="absolute z-20" style={{ left: "85%", top: "3.2%", width: "11%", height: "6.5%" }}>
+            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
               <ThemeSwitcher />
             </div>
           </div>
+
 
           {/* Abas (clicáveis sobre as abas desenhadas) */}
           <button
