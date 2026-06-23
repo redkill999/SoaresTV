@@ -115,14 +115,6 @@ function LoadingPage() {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Fundo */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-contain bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${homeBg.url})` }}
-      />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35" />
-
       {/* Header */}
       <div className="relative z-10 mx-auto mt-6 w-[94%] max-w-5xl rounded-md bg-gradient-to-b from-white/85 to-white/70 px-4 py-3 text-center">
         <div className="text-base sm:text-xl tracking-wide text-slate-700/90">
@@ -137,13 +129,12 @@ function LoadingPage() {
         ))}
       </div>
 
-
-      {/* Spinner + mensagem */}
+      {/* Spinner + mensagem (única instância) */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
         {!finishedWithFailure ? (
           <>
-            <Loader2 className="size-8 text-emerald-400 animate-spin" strokeWidth={2.2} />
-            <div className="mt-4 text-lg sm:text-xl text-white/90">
+            <Loader2 className="size-10 text-emerald-400 animate-spin" strokeWidth={2.2} />
+            <div className="mt-4 text-lg sm:text-xl text-white/90 tracking-wide">
               Por favor, aguarde........
             </div>
           </>
@@ -175,11 +166,6 @@ function LoadingPage() {
             </div>
           </>
         )}
-      </div>
-
-      {/* Faixa rodapé */}
-      <div className="relative z-10 mx-auto mb-4 w-[94%] max-w-5xl rounded-md border border-cyan-300/40 bg-teal-600/40 px-4 py-3 text-center tracking-[0.25em] text-white/80">
-        POR FAVOR, AGUARDE........
       </div>
     </div>
   );
