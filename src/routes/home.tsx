@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
-import { xtreamCredsFromUrl } from "@/lib/xtream";
+import { api, xtreamCredsFromUrl } from "@/lib/xtream";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
