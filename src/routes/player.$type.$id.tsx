@@ -217,13 +217,53 @@ function PlayerPage() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
   }, []);
 
+  // Fase 7 — Fullscreen desktop padrão (F11 já é nativo do browser; aqui
+  // adicionamos tecla "F" e double-click no container, como Tivimate/Plex).
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const toggleFullscreen = useCallback(() => {
+    const d = document as Document & {
+      webkitFullscreenElement?: Element;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    const el = stageRef.current as (HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    }) | null;
+    if (!el) return;
+    const inFs = !!(document.fullscreenElement || d.webkitFullscreenElement);
+    try {
+      if (inFs) {
+        if (typeof document.exitFullscreen === "function") void document.exitFullscreen();
+        else if (typeof d.webkitExitFullscreen === "function") void d.webkitExitFullscreen();
+      } else {
+        if (typeof el.requestFullscreen === "function") void el.requestFullscreen();
+        else if (typeof el.webkitRequestFullscreen === "function") void el.webkitRequestFullscreen();
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ignora se o usuário está digitando em algum input/textarea.
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleFullscreen]);
+
   return (
     <AppShell immersive>
       <div
+        ref={stageRef}
         className="relative h-dvh w-dvw overflow-hidden bg-player text-player-foreground"
         onMouseMove={revealControls}
         onMouseEnter={revealControls}
         onTouchStart={revealControls}
+        onDoubleClick={toggleFullscreen}
       >
         <div className="absolute inset-0 bg-player">
           {url ? (
