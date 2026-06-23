@@ -15,10 +15,10 @@ type TestKey = "live" | "vod" | "series" | "epg";
 // Posições (em % do canvas 16:9) dos rótulos de status logo abaixo do título
 // dentro de cada card desenhado na imagem de fundo.
 const CARD_POS: Record<TestKey, { left: string; top: string; width: string }> = {
-  live:   { left: "14.0%", top: "40.5%", width: "16%" },
-  vod:    { left: "37.0%", top: "40.5%", width: "16%" },
-  series: { left: "60.0%", top: "40.5%", width: "16%" },
-  epg:    { left: "82.5%", top: "40.5%", width: "16%" },
+  live:   { left: "20.0%", top: "34.0%", width: "12%" },
+  vod:    { left: "43.0%", top: "34.0%", width: "12%" },
+  series: { left: "66.0%", top: "34.0%", width: "12%" },
+  epg:    { left: "85.5%", top: "34.0%", width: "12%" },
 };
 
 function LoadingPage() {
