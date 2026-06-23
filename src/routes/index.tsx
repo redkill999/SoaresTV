@@ -523,7 +523,7 @@ function OverlayInput({
       autoCorrect="off"
       spellCheck={false}
       required={required}
-      className="absolute z-20 bg-transparent text-white placeholder:text-white/40 outline-none focus:bg-black/40 focus:ring-2 focus:ring-white/40 rounded-xl"
+      className={`absolute z-20 text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-white/40 rounded-xl ${value ? "bg-background" : "bg-transparent"} focus:bg-background`}
       style={{
         ...style,
         paddingLeft: leftPad,
