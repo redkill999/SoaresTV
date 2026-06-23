@@ -47,6 +47,8 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"xtream" | "m3u">("xtream");
+
 
   // M3U state
   const [m3uName, setM3uName] = useState("");
