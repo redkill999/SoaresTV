@@ -330,7 +330,7 @@ function LoginPage() {
                 value={server}
                 onChange={setServer}
                 placeholder=""
-                style={{ left: "53.5%", top: "37.5%", width: "41%", height: "9%" }}
+                style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
                 inputMode="url"
                 autoComplete="url"
                 required
@@ -340,7 +340,7 @@ function LoginPage() {
                 value={username}
                 onChange={setUsername}
                 placeholder=""
-                style={{ left: "53.5%", top: "51%", width: "41%", height: "9%" }}
+                style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
                 autoComplete="username"
                 required
               />
@@ -349,12 +349,13 @@ function LoginPage() {
                 value={password}
                 onChange={setPassword}
                 placeholder=""
-                style={{ left: "53.5%", top: "64.5%", width: "41%", height: "9%" }}
+                style={{ left: "52.5%", top: "63%", width: "42%", height: "8.5%" }}
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
                 rightPad="12%"
               />
+
               {/* Eye toggle — área clicável transparente sobre o ícone desenhado */}
               <button
                 type="button"
@@ -403,17 +404,18 @@ function LoginPage() {
                 value={m3uName}
                 onChange={setM3uName}
                 placeholder={t("auth.listNamePh")}
-                style={{ left: "53.5%", top: "37.5%", width: "41%", height: "9%" }}
+                style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
               />
               <OverlayInput
                 id="m3u-url"
                 value={m3uUrl}
                 onChange={setM3uUrl}
                 placeholder="http://..."
-                style={{ left: "53.5%", top: "51%", width: "41%", height: "9%" }}
+                style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
                 inputMode="url"
                 required
               />
+
 
               <button
                 type="submit"
