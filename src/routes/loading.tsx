@@ -164,7 +164,11 @@ function LoadingPage() {
                 Tentar novamente
               </button>
               <button
-                onClick={() => navigate({ to: "/", replace: true })}
+                onClick={() => {
+                  try { window.localStorage.clear(); } catch { /* noop */ }
+                  try { window.sessionStorage.clear(); } catch { /* noop */ }
+                  window.location.replace("/?reset=1");
+                }}
                 className="px-4 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
               >
                 Voltar ao login
