@@ -108,23 +108,16 @@ function LoadingPage() {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
-      {/* Fundo borrado: mesma arte esticada e desfocada preenche os espaços
-          quando a viewport não é 16:9. Imagem principal abaixo fica nítida. */}
-      <img
-        src={bgAsset.url}
-        alt=""
-        aria-hidden
-        draggable={false}
-        className="absolute inset-0 h-full w-full select-none object-cover scale-110 blur-2xl opacity-70 pointer-events-none"
-      />
-      {/* Canvas 16:9 contido (object-contain) — imagem nítida, sem cortar
-          os cards das pontas. Hotspots % continuam alinhados. */}
+      {/* Canvas 16:9 dimensionado com max() para cobrir 100% da viewport
+          sem barras pretas e sem blur. Imagem fica nítida; o excesso
+          transborda e é cortado pelo overflow-hidden do wrapper.
+          Rótulos em % seguem a imagem porque escalam juntos com o canvas. */}
       <div
         className="relative"
         style={{
           aspectRatio: "16 / 9",
-          width: "min(100vw, calc(100vh * 16 / 9))",
-          height: "min(100vh, calc(100vw * 9 / 16))",
+          width: "max(100vw, calc(100vh * 16 / 9))",
+          height: "max(100vh, calc(100vw * 9 / 16))",
           backgroundImage: `url(${bgAsset.url})`,
           backgroundSize: "100% 100%",
           backgroundPosition: "center",
@@ -132,6 +125,7 @@ function LoadingPage() {
           containerType: "size",
         } as React.CSSProperties}
       >
+
 
 
 
