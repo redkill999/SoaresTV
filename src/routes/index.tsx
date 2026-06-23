@@ -14,9 +14,8 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
-import loginBgAsset from "@/assets/login-bg.png.asset.json";
-import loginBgWebAsset from "@/assets/login-web.png.asset.json";
 import loginNewBg from "@/assets/login-new.png";
+
 
 
 export const Route = createFileRoute("/")({
@@ -239,11 +238,12 @@ function LoginPage() {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <img
-          src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+          src={loginNewBg}
           alt=""
           aria-hidden
           className="absolute inset-0 w-full h-full object-cover"
         />
+
         <div className="absolute inset-0 bg-black/55" />
         <div className="text-center">
           <div className="size-20 rounded-3xl bg-brand-gradient shadow-glow mx-auto mb-4 animate-pulse" />
@@ -293,17 +293,10 @@ function LoginPage() {
           />
 
 
-          {/* Switchers (z-40 — dropdowns precisam ficar acima de tudo) */}
-          <div className="absolute z-40" style={{ left: "72.5%", top: "3.2%", width: "11%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
-              <LanguageSwitcher />
-            </div>
-          </div>
-          <div className="absolute z-40" style={{ left: "85%", top: "3.2%", width: "11%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
-              <ThemeSwitcher />
-            </div>
-          </div>
+          {/* Switchers de idioma/tema: a arte já mostra BR PT e Tema
+              desenhados como decoração. Não renderizamos os componentes
+              reais aqui para não duplicar visualmente. */}
+
 
 
 
@@ -505,7 +498,7 @@ function NativeLoginLayout(p: NativeProps) {
   return (
     <div className="relative min-h-dvh flex items-center justify-center px-3 sm:px-4 py-3 sm:py-6 overflow-y-auto">
       <img
-        src={`${loginBgAsset.url}?v=${loginBgAsset.asset_id}`}
+        src={loginNewBg}
         alt=""
         aria-hidden
         className="fixed inset-0 z-0 h-full w-full object-cover pointer-events-none"
