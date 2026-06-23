@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { store } from "@/lib/storage";
 import { api, loadM3U } from "@/lib/xtream";
 import bgAsset from "@/assets/loading-bg.png.asset.json";
