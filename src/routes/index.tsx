@@ -505,7 +505,7 @@ function NativeLoginLayout(p: NativeProps) {
   return (
     <div className="relative min-h-dvh flex items-center justify-center px-3 sm:px-4 py-3 sm:py-6 overflow-y-auto">
       <img
-        src={`${loginBgAsset.url}?v=${loginBgAsset.asset_id}`}
+        src={loginNewBg}
         alt=""
         aria-hidden
         className="fixed inset-0 z-0 h-full w-full object-cover pointer-events-none"
