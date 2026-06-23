@@ -243,7 +243,41 @@ exit /b 0
 
 :fix_styles_xml
 if not exist "android\app\src\main\res\values\styles.xml" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\src\main\res\values\styles.xml'; $s=Get-Content -LiteralPath $p -Raw; $s=$s -replace '<resources>','<resources xmlns:tools=''http://schemas.android.com/tools''>'; $s=$s -replace '<!--[\s\S]*?-->','<!-- Android fullscreen theme. -->'; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
+(
+  echo ^<?xml version="1.0" encoding="utf-8"?^>
+  echo ^<!-- Android fullscreen theme. --^>
+  echo ^<resources xmlns:tools="http://schemas.android.com/tools"^>
+  echo.
+  echo     ^<style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar"^>
+  echo         ^<item name="android:background"^>@android:color/black^</item^>
+  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
+  echo         ^<item name="android:statusBarColor"^>@android:color/transparent^</item^>
+  echo         ^<item name="android:navigationBarColor"^>@android:color/transparent^</item^>
+  echo         ^<item name="android:windowDrawsSystemBarBackgrounds"^>true^</item^>
+  echo         ^<item name="android:windowTranslucentStatus"^>true^</item^>
+  echo         ^<item name="android:windowTranslucentNavigation"^>true^</item^>
+  echo         ^<item name="android:windowFullscreen"^>true^</item^>
+  echo         ^<item name="android:windowNoTitle"^>true^</item^>
+  echo         ^<item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27"^>shortEdges^</item^>
+  echo     ^</style^>
+  echo.
+  echo     ^<style name="AppTheme.NoActionBar" parent="AppTheme"^>
+  echo         ^<item name="android:windowActionBar"^>false^</item^>
+  echo         ^<item name="android:windowNoTitle"^>true^</item^>
+  echo         ^<item name="android:background"^>@android:color/black^</item^>
+  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
+  echo     ^</style^>
+  echo.
+  echo     ^<style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar"^>
+  echo         ^<item name="android:background"^>@android:color/black^</item^>
+  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
+  echo         ^<item name="android:windowNoTitle"^>true^</item^>
+  echo         ^<item name="android:windowActionBar"^>false^</item^>
+  echo         ^<item name="android:windowFullscreen"^>true^</item^>
+  echo     ^</style^>
+  echo.
+  echo ^</resources^>
+) > "android\app\src\main\res\values\styles.xml"
 if errorlevel 1 (
   echo [ERRO] Falha ao corrigir styles.xml.
   exit /b 1
