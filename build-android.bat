@@ -126,8 +126,10 @@ if exist "android-template\styles.xml" (
 )
 call :fix_styles_xml || goto :fail
 call npx cap sync android >> "%LOG_FILE%" 2>&1
+call :fix_build_gradle
 echo       OK
 echo.
+
 
 echo [8/8] Compilando APK debug com Gradle (assembleDebug)...
 pushd android >nul
@@ -247,6 +249,13 @@ if errorlevel 1 (
   exit /b 1
 )
 exit /b 0
+
+:fix_build_gradle
+if not exist "android\app\build.gradle" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\build.gradle'; $s=Get-Content -LiteralPath $p -Raw; $s=$s -replace 'proguard-android\.txt','proguard-android-optimize.txt'; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
+exit /b 0
+
+
 
 :fail
 echo.
