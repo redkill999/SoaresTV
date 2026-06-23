@@ -16,6 +16,8 @@ import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginBgAsset from "@/assets/login-bg.png.asset.json";
 import loginBgWebAsset from "@/assets/login-web.png.asset.json";
+import loginNewBg from "@/assets/login-new.png";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
