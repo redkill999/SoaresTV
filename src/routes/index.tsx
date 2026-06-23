@@ -14,7 +14,6 @@ import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
-import loginBgAsset from "@/assets/login-bg.png.asset.json";
 import loginBgWebAsset from "@/assets/login-web.png.asset.json";
 
 export const Route = createFileRoute("/")({
