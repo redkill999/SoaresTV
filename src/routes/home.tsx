@@ -151,7 +151,17 @@ function HomePage() {
           A imagem usa object-fill em TV mode pra preencher toda a tela sem
           barras pretas (o body já é 16:9, então não distorce). */}
       <div
-        className="relative home-canvas h-full w-full"
+        className="relative home-canvas"
+        style={{
+          // Mantém 16:9 da arte original (sem esticar = sem perder qualidade)
+          // mas dimensiona o canvas pra COBRIR toda a viewport: usa o MAIOR
+          // entre a viewport e a derivada 16:9. O wrapper tem overflow-hidden,
+          // então o excesso (no eixo mais curto) é apenas recortado nas bordas.
+          // Resultado: imagem nítida, sem barras pretas, hotspots em % alinhados.
+          aspectRatio: "16 / 9",
+          width: "max(100%, calc(100dvh * 16 / 9))",
+          height: "max(100dvh, calc(100% * 9 / 16))",
+        }}
       >
         <img
           src={homeBg.url}
@@ -159,6 +169,7 @@ function HomePage() {
           draggable={false}
           className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
         />
+
 
 
         {HOTSPOTS.map((h) => (
