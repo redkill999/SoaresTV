@@ -165,7 +165,7 @@ function HomePage() {
             onClick={() => onHotspot(h)}
             data-tv-default-focus={h.key === "live" ? "" : undefined}
             aria-label={h.label}
-            aria-label={h.label}
+
             className="group absolute rounded-2xl outline-none transition-all duration-150 hover:bg-white/[0.07] focus-visible:bg-white/[0.10] focus-visible:ring-2 focus-visible:ring-white/80 active:scale-[0.97]"
             style={{
               left: `${h.l}%`,
