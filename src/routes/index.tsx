@@ -495,7 +495,7 @@ function LoginPage() {
 /* -------- Overlay input that sits on top of the drawn field -------- */
 function OverlayInput({
   id, value, onChange, placeholder, style, type = "text",
-  autoComplete, inputMode, required, rightPad = "4%", leftPad = "4%",
+  autoComplete, inputMode, required, rightPad = "clamp(10px,1.2vw,18px)", leftPad = "clamp(10px,1.2vw,18px)",
 }: {
   id: string;
   value: string;
