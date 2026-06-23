@@ -317,15 +317,16 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   useEffect(() => {
     if (!open) return;
-    const creds = store.getCreds();
-    setHasCreds(!!creds);
-    if (!creds) { setInfo(null); return; }
     let alive = true;
+    let creds: ReturnType<typeof store.getCreds> = null;
+    try { creds = store.getCreds(); } catch { creds = null; }
+    setHasCreds(!!creds);
+    setInfo(null);
+    if (!creds) { setLoading(false); return; }
     setLoading(true);
     (async () => {
       try {
-        const { api } = await import("@/lib/xtream");
-        const r = await api<{ user_info?: XtUserInfo }>(creds);
+        const r = await api<{ user_info?: XtUserInfo }>(creds!);
         if (alive) setInfo(r?.user_info ?? null);
       } catch { if (alive) setInfo(null); }
       finally { if (alive) setLoading(false); }
