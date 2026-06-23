@@ -124,6 +124,7 @@ if exist "android-template\styles.xml" (
     echo       styles.xml atualizada
   )
 )
+call :fix_styles_xml || goto :fail
 call npx cap sync android >> "%LOG_FILE%" 2>&1
 echo       OK
 echo.
@@ -236,6 +237,15 @@ if errorlevel 1 (
   exit /b 1
 )
 echo       PortableGit instalado com sucesso (sem admin).
+exit /b 0
+
+:fix_styles_xml
+if not exist "android\app\src\main\res\values\styles.xml" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\src\main\res\values\styles.xml'; $s=Get-Content -LiteralPath $p -Raw; $s=$s -replace '<resources>','<resources xmlns:tools=\"http://schemas.android.com/tools\">'; $s=$s -replace '<!--[\s\S]*?-->','<!-- Android fullscreen theme. -->'; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+  echo [ERRO] Falha ao corrigir styles.xml.
+  exit /b 1
+)
 exit /b 0
 
 :fail
