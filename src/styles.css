@@ -320,20 +320,12 @@ div[style*="Edit with Lovable"],
 [data-smart-tv] :focus-visible,
 .tv-focus :focus,
 .tv-focus :focus-visible {
-  /* outline desenhada DENTRO da caixa (offset negativo) — não é cortada por overflow:hidden */
-  outline: 4px solid var(--tv-focus) !important;
-  outline-offset: -4px !important;
-  /* halo interno + leve halo externo (que ainda ajuda quando não há clipping) */
-  box-shadow:
-    inset 0 0 0 2px #000,
-    inset 0 0 0 6px var(--tv-focus),
-    0 0 0 4px var(--tv-focus-soft) !important;
-  background-color: var(--tv-focus-soft) !important;
-  border-radius: 10px;
-  transition: background-color 80ms ease, box-shadow 80ms ease, transform 120ms ease;
-  z-index: 5;
-  position: relative;
+  /* Foco TV sem moldura amarela — feedback fica só no scale + brilho da imagem. */
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
 }
+
 
 /* Tiles principais e cards crescem um pouquinho quando focados na TV.
    scale é mantido pois não é cortado por overflow do pai (apenas pelo viewport). */
@@ -391,19 +383,18 @@ div[style*="Edit with Lovable"],
   box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 18px rgba(59, 130, 246, 0.35) !important;
 }
 
-/* Em TV mode o nav-item focado usa o amarelo, igual ao resto da TV (inset p/ não ser cortado) */
+/* Em TV mode o nav-item focado também fica sem moldura amarela */
 [data-tv-mode] [data-nav-item]:focus,
 [data-tv-mode] [data-nav-item]:focus-visible,
 [data-smart-tv] [data-nav-item]:focus,
 [data-smart-tv] [data-nav-item]:focus-visible {
-  outline: 4px solid var(--tv-focus) !important;
-  outline-offset: -4px !important;
-  background-color: rgba(255, 214, 10, 0.22) !important;
-  color: #000 !important;
-  box-shadow:
-    inset 0 0 0 2px #000,
-    inset 0 0 0 6px var(--tv-focus) !important;
+  outline: none !important;
+  background-color: rgba(59, 130, 246, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.35) !important;
 }
+
+
 
 
 /* Esconde o badge "Edit with Lovable" no APK/site publicado.
