@@ -413,14 +413,14 @@ function LoginPage() {
                 required
                 rightPad="12%"
               />
-              {/* Olhinho — área clicável transparente sobre o ícone desenhado */}
+              {/* Olhinho — centralizado exatamente sobre o ícone desenhado na arte */}
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 tabIndex={-1}
-                className="absolute z-30 grid place-items-center rounded-md text-white outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
-                style={{ left: "86%", top: "63%", width: "6%", height: "8.5%" }}
+                className="absolute z-30 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md text-white outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
+                style={{ left: "90.5%", top: "66.4%", width: "4.2%", height: "6.4%" }}
               >
                 {showPassword ? <Eye className="size-5" /> : <EyeOff className="size-5" />}
               </button>
