@@ -6,7 +6,7 @@ import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
-import { api, type LiveCategory, type VodStream } from "@/lib/xtream";
+import { api, type LiveCategory, type VodStream, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
 import { filterBySearch, getSorted } from "@/lib/search-index";
@@ -16,16 +16,21 @@ import { Film } from "lucide-react";
 export const Route = createFileRoute("/movies")({
   head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
   loader: ({ context }) => {
-    const creds = store.getCreds();
+    let creds = store.getCreds();
+    if (!creds) {
+      const firstList = store.getM3U()[0];
+      const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
+      if (recovered) creds = recovered;
+    }
     if (!creds) return;
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
       queryKey: ["vod-cats", acct],
-      queryFn: withPersist(`vod-cats:${acct}`, () => api<LiveCategory[]>(creds, "get_vod_categories")),
+      queryFn: withPersist(`vod-cats:${acct}`, () => api<LiveCategory[]>(creds!, "get_vod_categories")),
     });
     void context.queryClient.prefetchQuery({
       queryKey: ["vod-list", acct, "all"],
-      queryFn: withPersist(`vod-list:${acct}:all`, () => api<VodStream[]>(creds, "get_vod_streams")),
+      queryFn: withPersist(`vod-list:${acct}:all`, () => api<VodStream[]>(creds!, "get_vod_streams")),
     });
   },
   component: MoviesPage,
@@ -37,7 +42,13 @@ function MoviesPage() {
   const [cat, setCat] = useState("all");
   const [sort, setSort] = useState<"az" | "za" | "default">("default");
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
-  useEffect(() => setCreds(store.getCreds()), []);
+  useEffect(() => {
+    const saved = store.getCreds();
+    if (saved) { setCreds(saved); return; }
+    const firstList = store.getM3U()[0];
+    const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
+    if (recovered) { store.setCreds(recovered); setCreds(recovered); }
+  }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `vod-cats:${acct}`;

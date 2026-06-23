@@ -230,8 +230,14 @@ function RootComponent() {
     }
     // Global error guard — evita que uma exception não tratada derrube
     // a WebView do APK em aparelhos Android antigos. Só loga (logcat captura).
-    if (!(window as any).__globalErrGuardBound) {
-      (window as any).__globalErrGuardBound = true;
+    interface AppWindow extends Window {
+      __globalErrGuardBound?: boolean;
+      __backButtonBound?: boolean;
+      Capacitor?: { isNativePlatform?: () => boolean };
+    }
+    const w = window as unknown as AppWindow;
+    if (!w.__globalErrGuardBound) {
+      w.__globalErrGuardBound = true;
       window.addEventListener("error", (ev) => {
         try { console.error("[GlobalError]", ev.message, ev.error); } catch {}
       });
@@ -245,8 +251,7 @@ function RootComponent() {
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
     // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
-    const w = window as any;
-    if (w?.Capacitor?.isNativePlatform?.()) {
+    if (w.Capacitor?.isNativePlatform?.()) {
       void import("@capacitor/screen-orientation")
         .then((m) => m.ScreenOrientation.lock({ orientation: "landscape" }))
         .catch(() => {});

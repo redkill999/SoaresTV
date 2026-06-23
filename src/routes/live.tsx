@@ -7,7 +7,7 @@ import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
-import { api, type LiveCategory, type LiveStream } from "@/lib/xtream";
+import { api, type LiveCategory, type LiveStream, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
 import { filterBySearch, getSorted } from "@/lib/search-index";
@@ -17,16 +17,21 @@ import { Tv } from "lucide-react";
 export const Route = createFileRoute("/live")({
   head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
   loader: ({ context }) => {
-    const creds = store.getCreds();
+    let creds = store.getCreds();
+    if (!creds) {
+      const firstList = store.getM3U()[0];
+      const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
+      if (recovered) creds = recovered;
+    }
     if (!creds) return;
     const acct = `${creds.server}|${creds.username}`;
     void context.queryClient.prefetchQuery({
       queryKey: ["live-cats", acct],
-      queryFn: withPersist(`live-cats:${acct}`, () => api<LiveCategory[]>(creds, "get_live_categories")),
+      queryFn: withPersist(`live-cats:${acct}`, () => api<LiveCategory[]>(creds!, "get_live_categories")),
     });
     void context.queryClient.prefetchQuery({
       queryKey: ["live-streams", acct, "all"],
-      queryFn: withPersist(`live-streams:${acct}:all`, () => api<LiveStream[]>(creds, "get_live_streams")),
+      queryFn: withPersist(`live-streams:${acct}:all`, () => api<LiveStream[]>(creds!, "get_live_streams")),
     });
   },
   component: LivePage,
@@ -39,7 +44,13 @@ function LivePage() {
   const [sort, setSort] = useState<"az" | "za" | "default">("default");
   const [unlocked, setUnlocked] = useState(false);
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
-  useEffect(() => setCreds(store.getCreds()), []);
+  useEffect(() => {
+    const saved = store.getCreds();
+    if (saved) { setCreds(saved); return; }
+    const firstList = store.getM3U()[0];
+    const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
+    if (recovered) { store.setCreds(recovered); setCreds(recovered); }
+  }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `live-cats:${acct}`;
