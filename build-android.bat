@@ -243,7 +243,16 @@ exit /b 0
 
 :fix_styles_xml
 if not exist "android\app\src\main\res\values\styles.xml" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\src\main\res\values\styles.xml'; $s=Get-Content -LiteralPath $p -Raw; $s=$s -replace '<resources>','<resources xmlns:tools=''http://schemas.android.com/tools''>'; $s=$s -replace '<!--[\s\S]*?-->','<!-- Android fullscreen theme. -->'; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\src\main\res\values\styles.xml'; $s=Get-Content -LiteralPath $p -Raw; if($s -notmatch 'xmlns:tools='){$s=$s -replace '<resources>','<resources xmlns:tools=''http://schemas.android.com/tools''>'}; $s=$s -replace '<!--[\s\S]*?-->','<!-- Android fullscreen theme. -->'; if($s -notmatch 'name=''AppTheme\.NoActionBarLaunch''|name=""AppTheme\.NoActionBarLaunch""'){$launch=@'
+
+    <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">
+        <item name="android:background">@android:color/black</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+'@; $s=$s -replace '</resources>',$launch+'</resources>'}; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
   echo [ERRO] Falha ao corrigir styles.xml.
   exit /b 1
