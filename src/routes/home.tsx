@@ -26,28 +26,28 @@ type Hotspot = {
 };
 
 const HOTSPOTS: Hotspot[] = [
-  // Header status icons (top-right)
-  { key: "alarm",  label: "ALARM",  action: "alarm",  l: 66.5, t: 4,  w: 7, h: 16 },
-  { key: "rec",    label: "REC",    action: "rec",    l: 73.5, t: 4,  w: 7, h: 16 },
-  { key: "vpn",    label: "VPN",    action: "vpn",    l: 80.5, t: 4,  w: 7, h: 16 },
-  { key: "msg",    label: "MSG",    action: "msg",    l: 87.5, t: 4,  w: 7, h: 16 },
-  { key: "update", label: "UPDATE", action: "update", l: 94.0, t: 4,  w: 6, h: 16 },
+  // Ícones de status (topo direito)
+  { key: "alarm",  label: "ALARME",     action: "alarm",  l: 66.5, t: 4,  w: 7, h: 16 },
+  { key: "rec",    label: "GRAVAR",     action: "rec",    l: 73.5, t: 4,  w: 7, h: 16 },
+  { key: "vpn",    label: "VPN",        action: "vpn",    l: 80.5, t: 4,  w: 7, h: 16 },
+  { key: "msg",    label: "MENSAGENS",  action: "msg",    l: 87.5, t: 4,  w: 7, h: 16 },
+  { key: "update", label: "ATUALIZAR",  action: "update", l: 94.0, t: 4,  w: 6, h: 16 },
 
   // Tiles principais
   { key: "live",   label: "TV AO VIVO", to: "/live",     l: 6.5,  t: 30, w: 19, h: 44 },
-  { key: "epg",    label: "EPG",        to: "/guide",    l: 28.5, t: 30, w: 19, h: 44 },
-  { key: "vod",    label: "VOD",        to: "/movies",   l: 50.5, t: 30, w: 19, h: 44 },
+  { key: "epg",    label: "GUIA",       to: "/guide",    l: 28.5, t: 30, w: 19, h: 44 },
+  { key: "vod",    label: "FILMES",     to: "/movies",   l: 50.5, t: 30, w: 19, h: 44 },
   { key: "series", label: "SÉRIES",     to: "/series",   l: 72.5, t: 30, w: 19, h: 44 },
 
   // Rodapé esquerdo
-  { key: "account",  label: "ACCOUNT",  action: "conta", l: 3.5,  t: 76, w: 10, h: 20 },
-  { key: "multi",    label: "MULTI",    to: "/live",     l: 14.5, t: 76, w: 10, h: 20 },
-  { key: "catchup",  label: "CATCH UP", to: "/live",     l: 25.5, t: 76, w: 10, h: 20 },
+  { key: "account",  label: "CONTA",       action: "conta", l: 3.5,  t: 76, w: 10, h: 20 },
+  { key: "multi",    label: "MULTITELA",   to: "/live",     l: 14.5, t: 76, w: 10, h: 20 },
+  { key: "catchup",  label: "REPRISE",     to: "/live",     l: 25.5, t: 76, w: 10, h: 20 },
 
   // Rodapé direito
-  { key: "favorite", label: "FAVORITE", to: "/favorites", l: 67.5, t: 76, w: 10, h: 20 },
-  { key: "radio",    label: "RADIO",    to: "/live",      l: 78.5, t: 76, w: 10, h: 20 },
-  { key: "settings", label: "SETTINGS", to: "/settings",  l: 89.5, t: 76, w: 10, h: 20 },
+  { key: "favorite", label: "FAVORITOS",   to: "/favorites", l: 67.5, t: 76, w: 10, h: 20 },
+  { key: "radio",    label: "RÁDIO",       to: "/live",      l: 78.5, t: 76, w: 10, h: 20 },
+  { key: "settings", label: "CONFIGURAÇÕES", to: "/settings", l: 89.5, t: 76, w: 10, h: 20 },
 ];
 
 function HomePage() {
