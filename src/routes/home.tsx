@@ -310,26 +310,47 @@ function formatExp(v: XtUserInfo["exp_date"]): string {
   } catch { return String(v); }
 }
 
+function resolveXtreamCreds() {
+  try {
+    const direct = store.getCreds();
+    if (direct?.server && direct.username && direct.password) return direct;
+  } catch { /* ignore */ }
+  try {
+    const lists = store.getM3U();
+    for (const l of lists) {
+      const c = xtreamCredsFromUrl(l.url, l.username, l.password);
+      if (c) return c;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [info, setInfo] = useState<XtUserInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasCreds, setHasCreds] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    let creds: ReturnType<typeof store.getCreds> = null;
-    try { creds = store.getCreds(); } catch { creds = null; }
+    const creds = resolveXtreamCreds();
     setHasCreds(!!creds);
     setInfo(null);
+    setError(null);
     if (!creds) { setLoading(false); return; }
+    // Persist for next time so other screens also have it.
+    try { store.setCreds(creds); } catch { /* ignore */ }
     setLoading(true);
     (async () => {
       try {
-        const r = await api<{ user_info?: XtUserInfo }>(creds!);
-        if (alive) setInfo(r?.user_info ?? null);
-      } catch { if (alive) setInfo(null); }
-      finally { if (alive) setLoading(false); }
+        const r = await api<{ user_info?: XtUserInfo }>(creds);
+        if (!alive) return;
+        if (r?.user_info) setInfo(r.user_info);
+        else setError("O servidor não retornou informações da conta.");
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : "Falha ao consultar o servidor.");
+      } finally { if (alive) setLoading(false); }
     })();
     return () => { alive = false; };
   }, [open]);
@@ -350,7 +371,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
           <DialogDescription className="text-white/60">Informações da sua assinatura.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 px-6 pb-6 pt-2 text-sm">
-          {!hasCreds && <p className="text-white/70">Faça login para ver os detalhes da conta.</p>}
+          {!hasCreds && <p className="text-white/70">Nenhuma lista Xtream encontrada. Faça login com DNS/usuário/senha para ver os detalhes da conta.</p>}
           {hasCreds && loading && <p className="text-white/70">Carregando…</p>}
           {hasCreds && !loading && info && (
             <>
@@ -362,7 +383,9 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
               {info.message && <p className="text-xs text-white/60">{info.message}</p>}
             </>
           )}
-          {hasCreds && !loading && !info && <p className="text-white/70">Não foi possível obter informações.</p>}
+          {hasCreds && !loading && !info && (
+            <p className="text-white/70">{error ?? "Não foi possível obter informações."}</p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
