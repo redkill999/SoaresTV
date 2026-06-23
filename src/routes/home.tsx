@@ -151,19 +151,15 @@ function HomePage() {
           A imagem usa object-fill em TV mode pra preencher toda a tela sem
           barras pretas (o body já é 16:9, então não distorce). */}
       <div
-        className="relative home-canvas"
-        style={{
-          aspectRatio: "16 / 9",
-          width: "min(100%, calc(100dvh * 16 / 9))",
-          height: "min(100%, calc(100vw * 9 / 16))",
-        }}
+        className="relative home-canvas h-full w-full"
       >
         <img
           src={homeBg.url}
           alt="SoaresTV"
           draggable={false}
-          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
         />
+
 
         {HOTSPOTS.map((h) => (
           <button
