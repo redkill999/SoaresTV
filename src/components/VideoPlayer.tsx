@@ -127,12 +127,14 @@ export function VideoPlayer({
   kind,
   initialPosition,
   onProgress,
+  controls = true,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
+  controls?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
