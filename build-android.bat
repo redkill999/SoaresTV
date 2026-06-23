@@ -242,47 +242,20 @@ echo       PortableGit instalado com sucesso (sem admin).
 exit /b 0
 
 :fix_styles_xml
-if not exist "android\app\src\main\res\values\styles.xml" exit /b 0
-(
-  echo ^<?xml version="1.0" encoding="utf-8"?^>
-  echo ^<!-- Android fullscreen theme. --^>
-  echo ^<resources xmlns:tools="http://schemas.android.com/tools"^>
-  echo.
-  echo     ^<style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar"^>
-  echo         ^<item name="android:background"^>@android:color/black^</item^>
-  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
-  echo         ^<item name="android:statusBarColor"^>@android:color/transparent^</item^>
-  echo         ^<item name="android:navigationBarColor"^>@android:color/transparent^</item^>
-  echo         ^<item name="android:windowDrawsSystemBarBackgrounds"^>true^</item^>
-  echo         ^<item name="android:windowTranslucentStatus"^>true^</item^>
-  echo         ^<item name="android:windowTranslucentNavigation"^>true^</item^>
-  echo         ^<item name="android:windowFullscreen"^>true^</item^>
-  echo         ^<item name="android:windowNoTitle"^>true^</item^>
-  echo         ^<item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27"^>shortEdges^</item^>
-  echo     ^</style^>
-  echo.
-  echo     ^<style name="AppTheme.NoActionBar" parent="AppTheme"^>
-  echo         ^<item name="android:windowActionBar"^>false^</item^>
-  echo         ^<item name="android:windowNoTitle"^>true^</item^>
-  echo         ^<item name="android:background"^>@android:color/black^</item^>
-  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
-  echo     ^</style^>
-  echo.
-  echo     ^<style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar"^>
-  echo         ^<item name="android:background"^>@android:color/black^</item^>
-  echo         ^<item name="android:windowBackground"^>@android:color/black^</item^>
-  echo         ^<item name="android:windowNoTitle"^>true^</item^>
-  echo         ^<item name="android:windowActionBar"^>false^</item^>
-  echo         ^<item name="android:windowFullscreen"^>true^</item^>
-  echo     ^</style^>
-  echo.
-  echo ^</resources^>
-) > "android\app\src\main\res\values\styles.xml"
+if not exist "android\app\src\main\res\values" exit /b 0
+if not exist "android-template\styles.xml" (
+  echo [ERRO] android-template\styles.xml ausente. >> "%LOG_FILE%"
+  exit /b 1
+)
+rem Copia o template (UTF-8 valido, sem BOM) por cima do styles.xml gerado.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = Get-Content -LiteralPath 'android-template\styles.xml' -Raw; [IO.File]::WriteAllText('android\app\src\main\res\values\styles.xml', $s, (New-Object Text.UTF8Encoding $false))" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
   echo [ERRO] Falha ao corrigir styles.xml.
   exit /b 1
 )
 exit /b 0
+
+
 
 :fix_build_gradle
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$targets=@(); if(Test-Path 'android\app\build.gradle'){$targets+='android\app\build.gradle'}; if(Test-Path 'node_modules'){$targets+=(Get-ChildItem -Path 'node_modules' -Recurse -Filter 'build.gradle' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\android\\' } | ForEach-Object { $_.FullName })}; foreach($p in $targets){ try { $s=Get-Content -LiteralPath $p -Raw; if($s -match 'proguard-android\.txt'){ $s=$s -replace 'proguard-android\.txt','proguard-android-optimize.txt'; [IO.File]::WriteAllText($p, $s, [Text.UTF8Encoding]::new($false)); Write-Host ('Patched: '+$p) } } catch {} }" >> "%LOG_FILE%" 2>&1
