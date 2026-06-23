@@ -333,6 +333,11 @@ function LoginPage() {
                 Lista M3U
               </div>
 
+              <div
+                className="absolute bg-[#030818]"
+                style={{ left: "50.5%", top: "33%", width: "46%", height: "59%" }}
+              />
+
               <M3UVisualField label="NOME DA LISTA" style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }} />
               <M3UVisualField label="URL M3U" style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }} />
               <div
