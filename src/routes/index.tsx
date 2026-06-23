@@ -355,17 +355,16 @@ function LoginPage() {
                 required
                 rightPad="12%"
               />
-              {/* Eye toggle — funcional sobre o ícone desenhado */}
+              {/* Eye toggle — área clicável transparente sobre o ícone desenhado */}
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 tabIndex={-1}
-                className="absolute z-30 grid place-items-center rounded-md text-white/80 hover:text-white hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/70 outline-none"
-                style={{ left: "89.5%", top: "64.5%", width: "5%", height: "9%" }}
-              >
-                {showPassword ? <EyeOff className="size-4 sm:size-5" /> : <Eye className="size-4 sm:size-5" />}
-              </button>
+                className="absolute z-30 rounded-md outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
+                style={{ left: "89%", top: "65%", width: "6%", height: "8%" }}
+              />
+
 
               {/* Botão Entrar Xtream (sobre o botão desenhado) */}
               <button
