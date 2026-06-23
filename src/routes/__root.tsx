@@ -152,7 +152,7 @@ const TV_MODE_SCRIPT = `(function(){
       var m = document.createElement('meta');
       m.setAttribute('name','viewport');
       m.setAttribute('content', isTV
-        ? 'width=1280, initial-scale=1, user-scalable=no'
+        ? 'width=1280, initial-scale=1, user-scalable=no, viewport-fit=cover'
         : 'width=device-width, initial-scale=1, viewport-fit=cover');
       document.head.appendChild(m);
       if (isTV) {
