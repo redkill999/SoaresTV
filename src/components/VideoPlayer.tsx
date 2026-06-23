@@ -853,12 +853,43 @@ export function VideoPlayer({
 
 
 
+  // Auto-hide controles nativos após inatividade do mouse/toque
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealNativeControls = useCallback(() => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    const v = videoRef.current;
+    const playing = !!v && !v.paused && !v.ended;
+    if (playing) {
+      controlsTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+    }
+  }, []);
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPlay = () => revealNativeControls();
+    const onPause = () => { setControlsVisible(true); if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    return () => {
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    };
+  }, [revealNativeControls]);
+
   return (
-    <div className="relative h-full w-full bg-player">
+    <div
+      className="relative h-full w-full bg-player"
+      onMouseMove={revealNativeControls}
+      onMouseEnter={revealNativeControls}
+      onTouchStart={revealNativeControls}
+    >
       <video
         ref={videoRef}
         poster={poster}
-        {...(controls ? { controls: true } : {})}
+        {...(controls && controlsVisible ? { controls: true } : {})}
         autoPlay
         playsInline
         style={{
@@ -866,6 +897,7 @@ export function VideoPlayer({
           // Realce visual estilo "HDR" (apenas CSS — não é HDR real).
           // Suave pra não estourar pele/branco. Se incomodar, é só reverter.
           filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
+          cursor: controlsVisible ? 'auto' : 'none',
         }}
         className={videoClass}
         hidden={playerMode === "native"}
