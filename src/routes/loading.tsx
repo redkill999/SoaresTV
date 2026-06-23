@@ -108,13 +108,12 @@ function LoadingPage() {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
-      {/* Caixa 16:9 que preserva a proporção da imagem para que os overlays caiam exatos sobre os cards */}
+      {/* Canvas full-bleed: preenche toda a viewport. A imagem usa
+          background-size 100% 100% (= object-fill), então acompanha o
+          container e os overlays % continuam alinhados sobre os cards. */}
       <div
-        className="relative"
+        className="relative h-full w-full"
         style={{
-          aspectRatio: "16 / 9",
-          width: "min(100vw, calc(100vh * 16 / 9))",
-          height: "min(100vh, calc(100vw * 9 / 16))",
           backgroundImage: `url(${bgAsset.url})`,
           backgroundSize: "100% 100%",
           backgroundPosition: "center",
@@ -122,6 +121,7 @@ function LoadingPage() {
           containerType: "size",
         } as React.CSSProperties}
       >
+
         {/* Rótulos de status sobre os 4 cards do fundo */}
         {(Object.keys(CARD_POS) as TestKey[]).map((k) => (
           <StatusLabel key={k} pos={CARD_POS[k]} status={status[k]} />
