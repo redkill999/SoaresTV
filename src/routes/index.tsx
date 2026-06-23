@@ -293,17 +293,10 @@ function LoginPage() {
           />
 
 
-          {/* Switchers (z-40 — dropdowns precisam ficar acima de tudo) */}
-          <div className="absolute z-40" style={{ left: "72.5%", top: "3.2%", width: "11%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
-              <LanguageSwitcher />
-            </div>
-          </div>
-          <div className="absolute z-40" style={{ left: "85%", top: "3.2%", width: "11%", height: "6.5%" }}>
-            <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
-              <ThemeSwitcher />
-            </div>
-          </div>
+          {/* Switchers de idioma/tema: a arte já mostra BR PT e Tema
+              desenhados como decoração. Não renderizamos os componentes
+              reais aqui para não duplicar visualmente. */}
+
 
 
 
