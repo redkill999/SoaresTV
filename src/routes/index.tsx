@@ -317,8 +317,8 @@ function LoginPage() {
                 style={{ left: "53%", top: "23%", width: "20.5%", height: "8%" }}
               />
               <div
-                className="absolute rounded-xl bg-brand-gradient shadow-glow"
-                style={{ left: "73.5%", top: "23%", width: "21%", height: "8%" }}
+                className="absolute rounded-xl bg-background/95 ring-1 ring-white/10"
+                style={{ left: "73.5%", top: "23%", width: "20.5%", height: "8%" }}
               />
               <div
                 className="absolute grid place-items-center text-center font-semibold text-white/65"
@@ -328,7 +328,7 @@ function LoginPage() {
               </div>
               <div
                 className="absolute grid place-items-center text-center font-semibold text-white"
-                style={{ left: "73.5%", top: "23%", width: "21%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
+                style={{ left: "73.5%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
               >
                 Lista M3U
               </div>
