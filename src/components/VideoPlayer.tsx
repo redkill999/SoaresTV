@@ -858,7 +858,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         poster={poster}
-        controls
+        {...(controls ? { controls: true } : {})}
         autoPlay
         playsInline
         style={{
