@@ -54,22 +54,20 @@ function LoginPage() {
 
   useEffect(() => {
     // Permite forçar logout/reset via ?reset=1 — limpa tudo e mostra o login.
-    if (typeof window !== "undefined" && /[?&]reset=1\b/.test(window.location.search)) {
+    const isReset = typeof window !== "undefined" && /[?&]reset=1\b/.test(window.location.search);
+    if (isReset) {
       try { window.localStorage.clear(); } catch { /* noop */ }
       try { window.sessionStorage.clear(); } catch { /* noop */ }
       window.history.replaceState(null, "", window.location.pathname);
-    } else {
-      // Auto-login: if creds (or a saved playlist) already exist, skip the
-      // login screen entirely and go straight to /home — same as XCIPTV.
-      const hasCreds = !!store.getCreds();
-      const hasList = (store.getM3U() ?? []).length > 0;
-      if (hasCreds || hasList) {
-        navigate({ to: "/loading", replace: true });
-        return;
-      }
     }
-    // Splash animado estilo XCIPTV: ~2.8s no APK Android (celular/TV),
-    // splash curto de 600ms na web (sem mudar o que já funciona).
+    const hasCreds = !isReset && !!store.getCreds();
+    const hasList = !isReset && (store.getM3U() ?? []).length > 0;
+    const autoLogin = hasCreds || hasList;
+
+    // Splash animado estilo XCIPTV: ~5s no APK Android (celular/TV),
+    // splash curto de 600ms na web. No auto-login mantemos a splash do
+    // APK por completo antes de pular pra /loading — sem ela, o usuário
+    // nunca vê a animação porque a navegação acontece em milissegundos.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     void isNativeApp().then((native) => {
@@ -77,7 +75,17 @@ function LoginPage() {
       setIsNative(native);
       if (native) {
         setNativeSplash(true);
+        if (autoLogin) {
+          // Após a splash terminar, handleNativeSplashDone vai esconder a
+          // splash e este timer redireciona pra /loading.
+          timer = setTimeout(() => { if (!cancelled) navigate({ to: "/loading", replace: true }); }, 5000);
+        }
       } else {
+        if (autoLogin) {
+          navigate({ to: "/loading", replace: true });
+          setSplashReady(true);
+          return;
+        }
         setSplash(true);
         timer = setTimeout(() => { if (!cancelled) setSplash(false); }, 600);
       }
