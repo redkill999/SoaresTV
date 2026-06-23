@@ -250,9 +250,26 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
+    <div className="min-h-dvh flex items-center justify-center px-3 sm:px-4 py-3 sm:py-6 relative overflow-hidden">
       <Toaster theme="dark" />
-      {isNative && <div className="fixed inset-0 z-0 bg-black pointer-events-none" />}
+      {/* Background full-bleed: ocupa toda a viewport sem barras pretas em
+          cima/embaixo. No APK nativo mantemos a cor preta porque o painel
+          esquerdo abaixo já mostra a arte da marca. */}
+      {isNative ? (
+        <div className="fixed inset-0 z-0 bg-black pointer-events-none" />
+      ) : (
+        <>
+          <img
+            src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className="fixed inset-0 z-0 h-full w-full select-none object-fill pointer-events-none"
+          />
+          {/* leve escurecimento pra dar contraste com o card de login */}
+          <div className="fixed inset-0 z-0 bg-black/30 pointer-events-none" />
+        </>
+      )}
 
       <div className="fixed top-2 right-2 sm:top-3 sm:right-3 z-50 flex items-center gap-2">
         <LanguageSwitcher />
@@ -268,8 +285,11 @@ function LoginPage() {
           <span className="font-semibold text-base sm:text-lg truncate">{t("auth.appName")}</span>
         </div>
 
-      <div className="w-full grid lg:grid-cols-2 gap-6">
-        {/* Left — brand panel: só no app nativo. Na web a imagem de fundo já mostra esse painel. */}
+      <div className="w-full grid lg:grid-cols-2 gap-6 items-center">
+        {/* Left — brand panel: só no app nativo. Na web o background full-bleed
+            já mostra a arte do painel esquerdo, então não renderizamos imagem
+            duplicada aqui (evita também o ícone de imagem quebrada que
+            aparecia quando o asset não carregava). */}
         {isNative ? (
           <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
             <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
@@ -295,22 +315,13 @@ function LoginPage() {
             </div>
           </div>
         ) : (
-          <div className="hidden lg:block relative overflow-hidden rounded-3xl bg-black aspect-[8/9] w-full lg:mt-20">
-            {/* A imagem original é 1280×720 (16:9) com dois painéis lado a lado.
-                Cada metade é 640×720 (8:9). Damos ao container aspect-[8/9] e à imagem
-                largura 200% alinhada à esquerda — assim a METADE ESQUERDA (SoaresTV)
-                preenche o painel inteiro sem cortar nada. */}
-            <img
-              src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
-              alt=""
-              aria-hidden
-              className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none object-cover object-left"
-            />
-          </div>
+          // Coluna esquerda vazia no web — o background full-bleed já cobre.
+          <div className="hidden lg:block" aria-hidden />
         )}
 
         {/* Right — login card */}
-        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col lg:mt-20">
+        <div className="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-card border border-white/10 lg:min-h-[420px] xl:min-h-[460px] flex flex-col">
+
           <h2 className="text-2xl font-bold">{t("auth.signIn")}</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-5">
             {t("auth.signInSub")}
