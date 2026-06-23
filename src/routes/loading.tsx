@@ -108,12 +108,16 @@ function LoadingPage() {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
-      {/* Canvas full-bleed: preenche toda a viewport. A imagem usa
-          background-size 100% 100% (= object-fill), então acompanha o
-          container e os overlays % continuam alinhados sobre os cards. */}
+      {/* Canvas mantém 16:9 da arte (sem esticar = sem perder qualidade) e
+          dimensiona com max() pra COBRIR toda a viewport. O overflow do
+          eixo mais curto é cortado pelas bordas — sem barras pretas, sem
+          distorção. Hotspots % continuam alinhados sobre os cards. */}
       <div
-        className="relative h-full w-full"
+        className="relative"
         style={{
+          aspectRatio: "16 / 9",
+          width: "max(100vw, calc(100vh * 16 / 9))",
+          height: "max(100vh, calc(100vw * 9 / 16))",
           backgroundImage: `url(${bgAsset.url})`,
           backgroundSize: "100% 100%",
           backgroundPosition: "center",
@@ -121,6 +125,7 @@ function LoadingPage() {
           containerType: "size",
         } as React.CSSProperties}
       >
+
 
         {/* Rótulos de status sobre os 4 cards do fundo */}
         {(Object.keys(CARD_POS) as TestKey[]).map((k) => (
