@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, loadM3U } from "@/lib/xtream";
-import homeBg from "@/assets/loading-bg.png.asset.json";
+
 
 export const Route = createFileRoute("/loading")({
   head: () => ({ meta: [{ title: "Carregando — SoaresTV" }] }),
