@@ -160,25 +160,60 @@ where git >nul 2>&1
 if not errorlevel 1 exit /b 0
 
 echo [aviso] Git nao encontrado. O npm precisa dele para instalar uma dependencia do player.
-echo         Tentando instalar Git automaticamente pelo winget...
+
+REM 1) Tenta winget se existir
 where winget >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] winget nao encontrado para instalar o Git automaticamente.
-  echo        Instale Git manualmente: https://git-scm.com/download/win
-  echo        Depois feche esta janela e rode o .bat de novo.
+if not errorlevel 1 (
+  echo         Tentando instalar Git pelo winget...
+  call winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements >> "%LOG_FILE%" 2>&1
+  if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+  if exist "%ProgramFiles(x86)%\Git\cmd\git.exe" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
+  where git >nul 2>&1
+  if not errorlevel 1 (
+    echo       Git instalado via winget.
+    exit /b 0
+  )
+)
+
+REM 2) Fallback: baixa PortableGit (nao precisa de admin nem winget)
+set "PORTABLE_GIT_DIR=%CD%\.tools\PortableGit"
+set "PORTABLE_GIT_EXE=%PORTABLE_GIT_DIR%\cmd\git.exe"
+if exist "%PORTABLE_GIT_EXE%" (
+  set "PATH=%PORTABLE_GIT_DIR%\cmd;%PATH%"
+  echo       PortableGit ja existia em %PORTABLE_GIT_DIR%.
+  exit /b 0
+)
+
+echo         Baixando PortableGit (~50MB) - aguarde...
+if not exist "%CD%\.tools" mkdir "%CD%\.tools" >nul 2>&1
+set "PORTABLE_GIT_URL=https://github.com/git-for-windows/git/releases/download/v2.46.0.windows.1/PortableGit-2.46.0-64-bit.7z.exe"
+set "PORTABLE_GIT_PKG=%CD%\.tools\PortableGit.7z.exe"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%PORTABLE_GIT_URL%' -OutFile '%PORTABLE_GIT_PKG%' } catch { Write-Host $_; exit 1 }" >> "%LOG_FILE%" 2>&1
+if not exist "%PORTABLE_GIT_PKG%" (
+  echo [ERRO] Falha ao baixar PortableGit. Verifique sua conexao.
+  echo        Ou instale Git manualmente: https://git-scm.com/download/win
   exit /b 1
 )
 
-call winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements >> "%LOG_FILE%" 2>&1
-if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
-if exist "%ProgramFiles(x86)%\Git\cmd\git.exe" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
-where git >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] Git foi solicitado, mas ainda nao entrou no PATH.
-  echo        Feche esta janela, abra novamente o .bat, ou reinicie o Windows.
+echo         Extraindo PortableGit em %PORTABLE_GIT_DIR%...
+mkdir "%PORTABLE_GIT_DIR%" >nul 2>&1
+"%PORTABLE_GIT_PKG%" -y -o"%PORTABLE_GIT_DIR%" >> "%LOG_FILE%" 2>&1
+del /q "%PORTABLE_GIT_PKG%" >nul 2>&1
+
+if not exist "%PORTABLE_GIT_EXE%" (
+  echo [ERRO] PortableGit nao foi extraido corretamente.
+  echo        Instale Git manualmente: https://git-scm.com/download/win
   exit /b 1
 )
-echo       Git instalado/detectado com sucesso.
+
+set "PATH=%PORTABLE_GIT_DIR%\cmd;%PATH%"
+where git >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Git extraido mas nao detectado no PATH.
+  exit /b 1
+)
+echo       PortableGit instalado com sucesso (sem admin).
 exit /b 0
 
 :fail
