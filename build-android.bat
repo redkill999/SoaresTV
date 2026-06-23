@@ -243,12 +243,18 @@ exit /b 0
 
 :fix_styles_xml
 if not exist "android\app\src\main\res\values" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$xml = @'`r`n<?xml version=\"1.0\" encoding=\"utf-8\"?>`r`n<!-- Android fullscreen theme. -->`r`n<resources xmlns:tools=\"http://schemas.android.com/tools\">`r`n`r`n    <style name=\"AppTheme\" parent=\"Theme.AppCompat.DayNight.NoActionBar\">`r`n        <item name=\"android:background\">@android:color/black</item>`r`n        <item name=\"android:windowBackground\">@android:color/black</item>`r`n        <item name=\"android:statusBarColor\">@android:color/transparent</item>`r`n        <item name=\"android:navigationBarColor\">@android:color/transparent</item>`r`n        <item name=\"android:windowDrawsSystemBarBackgrounds\">true</item>`r`n        <item name=\"android:windowTranslucentStatus\">true</item>`r`n        <item name=\"android:windowTranslucentNavigation\">true</item>`r`n        <item name=\"android:windowFullscreen\">true</item>`r`n        <item name=\"android:windowNoTitle\">true</item>`r`n        <item name=\"android:windowLayoutInDisplayCutoutMode\" tools:targetApi=\"27\">shortEdges</item>`r`n    </style>`r`n`r`n    <style name=\"AppTheme.NoActionBar\" parent=\"AppTheme\">`r`n        <item name=\"android:windowActionBar\">false</item>`r`n        <item name=\"android:windowNoTitle\">true</item>`r`n        <item name=\"android:background\">@android:color/black</item>`r`n        <item name=\"android:windowBackground\">@android:color/black</item>`r`n    </style>`r`n`r`n    <style name=\"AppTheme.NoActionBarLaunch\" parent=\"AppTheme.NoActionBar\">`r`n        <item name=\"android:background\">@android:color/black</item>`r`n        <item name=\"android:windowBackground\">@android:color/black</item>`r`n        <item name=\"android:windowNoTitle\">true</item>`r`n        <item name=\"android:windowActionBar\">false</item>`r`n        <item name=\"android:windowFullscreen\">true</item>`r`n    </style>`r`n`r`n</resources>`r`n'@; $xml = $xml -replace '`r`n',[Environment]::NewLine; [IO.File]::WriteAllText('android\app\src\main\res\values\styles.xml', $xml, (New-Object Text.UTF8Encoding $false))" >> "%LOG_FILE%" 2>&1
+if not exist "android-template\styles.xml" (
+  echo [ERRO] android-template\styles.xml ausente. >> "%LOG_FILE%"
+  exit /b 1
+)
+rem Copia o template (UTF-8 valido, sem BOM) por cima do styles.xml gerado.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = Get-Content -LiteralPath 'android-template\styles.xml' -Raw; [IO.File]::WriteAllText('android\app\src\main\res\values\styles.xml', $s, (New-Object Text.UTF8Encoding $false))" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
   echo [ERRO] Falha ao corrigir styles.xml.
   exit /b 1
 )
 exit /b 0
+
 
 
 :fix_build_gradle
