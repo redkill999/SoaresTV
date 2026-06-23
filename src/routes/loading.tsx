@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { store } from "@/lib/storage";
 import { api, loadM3U } from "@/lib/xtream";
 import bgAsset from "@/assets/loading-bg.png.asset.json";
@@ -60,15 +60,14 @@ function LoadingPage() {
         { k: "series", action: "get_series_categories" },
         { k: "epg",    action: "get_live_streams" },
       ];
-      for (const t of tests) {
+      await Promise.all(tests.map(async (t) => {
         try {
           const data = await api<unknown[]>(creds, t.action);
           set(t.k, Array.isArray(data) ? "ok" : "fail");
         } catch {
           set(t.k, "fail");
         }
-        await wait(250);
-      }
+      }));
       return true;
     };
 
@@ -120,7 +119,8 @@ function LoadingPage() {
           backgroundSize: "100% 100%",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
-        }}
+          containerType: "size",
+        } as React.CSSProperties}
       >
         {/* Rótulos de status sobre os 4 cards do fundo */}
         {(Object.keys(CARD_POS) as TestKey[]).map((k) => (
@@ -187,7 +187,7 @@ function StatusLabel({
         left: pos.left,
         top: pos.top,
         width: pos.width,
-        fontSize: "clamp(10px, 1.6vw, 20px)",
+        fontSize: "clamp(11px, 1.6cqi, 22px)",
         textShadow: "0 1px 2px rgba(0,0,0,0.6)",
       }}
     >

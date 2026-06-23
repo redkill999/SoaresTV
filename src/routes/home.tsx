@@ -1,13 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { api, xtreamCredsFromUrl } from "@/lib/xtream";
+import { clearPersisted } from "@/lib/query-persist";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import homeBg from "@/assets/home-bg.png.asset.json";
+
+const APP_VERSION = "1.0.0";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -52,6 +56,7 @@ const HOTSPOTS: Hotspot[] = [
 
 function HomePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
   const [openConta, setOpenConta] = useState(false);
 
@@ -113,6 +118,8 @@ function HomePage() {
       Object.keys(localStorage)
         .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
         .forEach((k) => localStorage.removeItem(k));
+      clearPersisted();
+      queryClient.clear();
       toast.success("Conteúdos atualizados");
       setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
     } catch { toast.error("Falha ao atualizar"); }
@@ -158,12 +165,12 @@ function HomePage() {
           className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
         />
 
-        {HOTSPOTS.map((h, i) => (
+        {HOTSPOTS.map((h) => (
           <button
             key={h.key}
             type="button"
             onClick={() => onHotspot(h)}
-            data-tv-default-focus={i === 5 ? "" : undefined}
+            data-tv-default-focus={h.key === "live" ? "" : undefined}
             title={h.label}
             aria-label={h.label}
             className="group absolute rounded-2xl outline-none transition-all duration-150 hover:bg-white/[0.07] focus-visible:bg-white/[0.10] focus-visible:ring-2 focus-visible:ring-white/80 active:scale-[0.97]"
@@ -272,7 +279,7 @@ function MsgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         <div className="space-y-2 max-h-72 overflow-auto">
           <div className="rounded-lg bg-white/5 px-3 py-2 text-sm">
             <div className="font-medium">Bem-vindo ao SoaresTV</div>
-            <div className="text-xs text-muted-foreground">App pronto para uso. Versão 1.0.0</div>
+            <div className="text-xs text-muted-foreground">App pronto para uso. Versão {APP_VERSION}</div>
           </div>
           {items.length === 0 && <p className="text-xs text-muted-foreground">Sem atividade ainda.</p>}
           {items.map((it) => (
