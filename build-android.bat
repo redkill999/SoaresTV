@@ -128,20 +128,42 @@ call npx cap sync android >> "%LOG_FILE%" 2>&1
 echo       OK
 echo.
 
-echo ============================================================
-echo   PRONTO! Projeto Android preparado.
-echo ============================================================
-echo.
-echo Dentro do Android Studio:
-echo   1. Aguarde o Gradle sincronizar
-echo   2. Menu Build -^> Build Bundle(s)/APK(s) -^> Build APK(s)
-echo   3. O APK fica em: android\app\build\outputs\apk\debug\
-echo.
+echo [8/8] Compilando APK debug com Gradle (assembleDebug)...
+pushd android >nul
+if exist "gradlew.bat" (
+  call gradlew.bat assembleDebug >> "%LOG_FILE%" 2>&1
+  set "GRADLE_RC=!errorlevel!"
+) else (
+  echo [ERRO] gradlew.bat nao encontrado em android\
+  set "GRADLE_RC=1"
+)
+popd >nul
+if not "!GRADLE_RC!"=="0" (
+  echo [ERRO] Falha ao gerar APK pelo Gradle.
+  echo        Abrindo Android Studio para voce gerar manualmente...
+  call npx cap open android >> "%LOG_FILE%" 2>&1
+  goto :fail
+)
 
-call npx cap open android >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-  echo [aviso] Nao consegui abrir automaticamente o Android Studio.
-  echo         Abra manualmente a pasta: %CD%\android
+set "APK_DIR=%CD%\android\app\build\outputs\apk\debug"
+set "APK_FILE=%APK_DIR%\app-debug.apk"
+
+echo.
+echo ============================================================
+echo   PRONTO! APK gerado com sucesso.
+echo ============================================================
+echo.
+if exist "%APK_FILE%" (
+  echo APK: %APK_FILE%
+) else (
+  echo Pasta do APK: %APK_DIR%
+)
+echo.
+echo Abrindo a pasta do APK no Explorador...
+if exist "%APK_FILE%" (
+  explorer.exe /select,"%APK_FILE%"
+) else (
+  if exist "%APK_DIR%" explorer.exe "%APK_DIR%"
 )
 
 echo.
