@@ -243,17 +243,7 @@ function LoginPage() {
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
       <Toaster theme="dark" />
-      {isNative && (
-        <div className="fixed inset-0 z-0 overflow-hidden bg-black pointer-events-none hidden lg:block">
-          <img
-            src={`${loginBgAsset.url}?v=${loginBgAsset.asset_id}`}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-black/55" />
-        </div>
-      )}
+      {isNative && <div className="fixed inset-0 z-0 bg-black pointer-events-none" />}
 
       <div className="fixed top-2 right-2 sm:top-3 sm:right-3 z-50 flex items-center gap-2">
         <LanguageSwitcher />
