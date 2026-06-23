@@ -27,15 +27,14 @@ function LoadingPage() {
   });
   const ran = useRef(false);
 
-  // Aplica o fundo da home no letterbox
+  // Mantém o letterbox preto; a imagem é renderizada apenas uma vez no container abaixo.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
     const prevH = html.style.background;
     const prevB = body.style.background;
-    const bg = `url(${homeBg.url}) center/contain no-repeat #082968`;
-    html.style.background = bg;
-    body.style.background = bg;
+    html.style.background = "#000";
+    body.style.background = "#000";
     return () => { html.style.background = prevH; body.style.background = prevB; };
   }, []);
 
