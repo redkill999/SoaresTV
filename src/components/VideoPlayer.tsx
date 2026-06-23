@@ -127,12 +127,14 @@ export function VideoPlayer({
   kind,
   initialPosition,
   onProgress,
+  controls = true,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
+  controls?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -856,7 +858,7 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         poster={poster}
-        controls
+        {...(controls ? { controls: true } : {})}
         autoPlay
         playsInline
         style={{
