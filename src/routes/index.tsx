@@ -338,8 +338,8 @@ function LoginPage() {
                 style={{ left: "50.5%", top: "33%", width: "46%", height: "59%" }}
               />
 
-              <M3UVisualField label="NOME DA LISTA" style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }} />
-              <M3UVisualField label="URL M3U" style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }} />
+              <M3UVisualField style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }} />
+              <M3UVisualField style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }} />
               <div
                 className="absolute rounded-2xl bg-brand-gradient shadow-glow"
                 style={{ left: "52.5%", top: "75%", width: "42%", height: "9%" }}
@@ -449,19 +449,17 @@ function LoginPage() {
                 id="m3u-name"
                 value={m3uName}
                 onChange={setM3uName}
-                placeholder=""
+                placeholder="NOME DA LISTA"
                 style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
-                leftPad="14%"
               />
               <OverlayInput
                 id="m3u-url"
                 value={m3uUrl}
                 onChange={setM3uUrl}
-                placeholder=""
+                placeholder="URL M3U"
                 style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
                 inputMode="url"
                 required
-                leftPad="14%"
               />
               <button
                 type="submit"
@@ -530,19 +528,12 @@ function OverlayInput({
   );
 }
 
-function M3UVisualField({ label, style }: { label: string; style: React.CSSProperties }) {
+function M3UVisualField({ style }: { style: React.CSSProperties }) {
   return (
     <div
       className="absolute rounded-2xl bg-background/95 ring-1 ring-white/15"
       style={style}
-    >
-      <span
-        className="absolute font-semibold uppercase text-white/58"
-        style={{ left: "14%", top: "50%", transform: "translateY(-50%)", fontSize: "clamp(9px,1.05vw,12px)" }}
-      >
-        {label}
-      </span>
-    </div>
+    />
   );
 }
 
