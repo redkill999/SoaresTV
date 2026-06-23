@@ -251,8 +251,7 @@ if errorlevel 1 (
 exit /b 0
 
 :fix_build_gradle
-if not exist "android\app\build.gradle" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='android\app\build.gradle'; $s=Get-Content -LiteralPath $p -Raw; $s=$s -replace 'proguard-android\.txt','proguard-android-optimize.txt'; [IO.File]::WriteAllText((Resolve-Path $p), $s, [Text.UTF8Encoding]::new($false))" >> "%LOG_FILE%" 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$targets=@(); if(Test-Path 'android\app\build.gradle'){$targets+='android\app\build.gradle'}; if(Test-Path 'node_modules'){$targets+=(Get-ChildItem -Path 'node_modules' -Recurse -Filter 'build.gradle' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\android\\' } | ForEach-Object { $_.FullName })}; foreach($p in $targets){ try { $s=Get-Content -LiteralPath $p -Raw; if($s -match 'proguard-android\.txt'){ $s=$s -replace 'proguard-android\.txt','proguard-android-optimize.txt'; [IO.File]::WriteAllText($p, $s, [Text.UTF8Encoding]::new($false)); Write-Host ('Patched: '+$p) } } catch {} }" >> "%LOG_FILE%" 2>&1
 exit /b 0
 
 
