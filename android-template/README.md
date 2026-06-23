@@ -8,7 +8,27 @@ Google TV, Fire TV, etc.).
 
 - `AndroidManifest.xml` — template comentado com `LEANBACK_LAUNCHER`,
   banner e `uses-feature` corretos.
+- `styles.xml` — tema fullscreen + DisplayCutout (notch / câmera).
+- `MainActivity.java` — modo IMERSIVO REAL (status bar, navigation bar
+  e botões voltar/home/multitarefa escondidos, edge-to-edge cobrindo
+  notch). Compatível Android 8 → 15.
 - Use `resources/tv-banner.png` (na raiz do projeto) como banner 320×180.
+
+## Fullscreen imersivo (celular + TV)
+
+Depois de `bunx cap add android`, copie em ordem:
+
+```bash
+cp android-template/styles.xml      android/app/src/main/res/values/styles.xml
+cp android-template/MainActivity.java android/app/src/main/java/com/soarestv/app/MainActivity.java
+```
+
+Em seguida abra `android/app/src/main/AndroidManifest.xml` e garanta que
+a `MainActivity` use `android:theme="@style/AppTheme.NoActionBar"` (já
+está assim no template). Recompile o APK — o app abrirá em
+landscape, cobrindo notch/câmera, sem barra superior nem botões
+inferiores.
+
 
 ## Onde colar em cada caminho de build
 
