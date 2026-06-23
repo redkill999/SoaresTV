@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { store } from "@/lib/storage";
 import { api, loadM3U } from "@/lib/xtream";
-
+import bgAsset from "@/assets/loading-bg.png.asset.json";
 
 export const Route = createFileRoute("/loading")({
   head: () => ({ meta: [{ title: "Carregando — SoaresTV" }] }),
@@ -13,11 +12,13 @@ export const Route = createFileRoute("/loading")({
 type Status = "pending" | "ok" | "fail";
 type TestKey = "live" | "vod" | "series" | "epg";
 
-const LABELS: Record<TestKey, string> = {
-  live:   "TV AO VIVO",
-  vod:    "VOD",
-  series: "SÉRIES",
-  epg:    "GUIA DA TV",
+// Posições (em % do canvas 16:9 da imagem 1280x720) dos rótulos de status
+// sobre cada card já desenhado no fundo (TV AO VIVO, VOD, SÉRIES, GUIA DA TV).
+const CARD_POS: Record<TestKey, { left: string; top: string; width: string }> = {
+  live:   { left: "13.5%", top: "35.3%", width: "16%" },
+  vod:    { left: "37.5%", top: "35.3%", width: "16%" },
+  series: { left: "60.5%", top: "35.3%", width: "16%" },
+  epg:    { left: "83.0%", top: "35.3%", width: "16%" },
 };
 
 function LoadingPage() {
@@ -27,7 +28,6 @@ function LoadingPage() {
   });
   const ran = useRef(false);
 
-  // Mantém o letterbox preto; a imagem é renderizada apenas uma vez no container abaixo.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -67,7 +67,7 @@ function LoadingPage() {
         } catch {
           set(t.k, "fail");
         }
-        await new Promise((r) => setTimeout(r, 250));
+        await wait(250);
       }
       return true;
     };
@@ -77,17 +77,13 @@ function LoadingPage() {
       if (!first) return false;
       try {
         const entries = await loadM3U(first.url, first.username, first.password);
-        // M3U não distingue por tipo de forma estrita — marcamos pelos grupos.
         const groups = entries.map((e) => (e.group || "").toLowerCase());
         const hasLive   = entries.some((e) => !/movie|filme|serie|série|vod/i.test(e.group || ""));
         const hasVod    = groups.some((g) => /movie|filme|vod/.test(g));
         const hasSeries = groups.some((g) => /serie|série/.test(g));
-        set("live",   hasLive   || entries.length > 0 ? "ok" : "fail");
-        await wait(200);
-        set("vod",    hasVod    ? "ok" : "fail");
-        await wait(200);
-        set("series", hasSeries ? "ok" : "fail");
-        await wait(200);
+        set("live",   hasLive   || entries.length > 0 ? "ok" : "fail"); await wait(200);
+        set("vod",    hasVod    ? "ok" : "fail"); await wait(200);
+        set("series", hasSeries ? "ok" : "fail"); await wait(200);
         set("epg",    entries.length > 0 ? "ok" : "fail");
       } catch {
         set("live", "fail"); set("vod", "fail"); set("series", "fail"); set("epg", "fail");
@@ -99,8 +95,6 @@ function LoadingPage() {
       if (creds) await runXtream();
       else await runM3U();
       await wait(700);
-      // Só avança para /home se TODOS os testes passarem.
-      // Se qualquer um falhar, mantém o usuário aqui com botões de ação.
       setStatus((p) => {
         const allOk = (Object.keys(p) as TestKey[]).every((k) => p[k] === "ok");
         if (allOk) navigate({ to: "/home", replace: true });
@@ -114,41 +108,41 @@ function LoadingPage() {
   const finishedWithFailure = !anyPending && anyFail;
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#082968] text-white">
-      {/* Header */}
-      <div className="relative z-10 mx-auto mt-6 w-[94%] max-w-5xl rounded-md bg-gradient-to-b from-white/85 to-white/70 px-4 py-3 text-center">
-        <div className="text-base sm:text-xl tracking-wide text-slate-700/90">
-          Atualizar Conteúdos de Mídia
-        </div>
-      </div>
-
-      {/* Grid de testes */}
-      <div className="relative z-10 mx-auto mt-2 grid w-[94%] max-w-5xl grid-cols-2 gap-[2px] sm:grid-cols-4">
-        {(Object.keys(LABELS) as TestKey[]).map((k) => (
-          <TestCell key={k} title={LABELS[k]} status={status[k]} />
+    <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
+      {/* Caixa 16:9 que preserva a proporção da imagem para que os overlays caiam exatos sobre os cards */}
+      <div
+        className="relative"
+        style={{
+          aspectRatio: "16 / 9",
+          width: "min(100vw, calc(100vh * 16 / 9))",
+          height: "min(100vh, calc(100vw * 9 / 16))",
+          backgroundImage: `url(${bgAsset.url})`,
+          backgroundSize: "100% 100%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        {/* Rótulos de status sobre os 4 cards do fundo */}
+        {(Object.keys(CARD_POS) as TestKey[]).map((k) => (
+          <StatusLabel key={k} pos={CARD_POS[k]} status={status[k]} />
         ))}
-      </div>
 
-      {/* Spinner + mensagem (única instância) */}
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center px-4">
-        {!finishedWithFailure ? (
-          <>
-            <Loader2 className="size-10 text-emerald-400 animate-spin" strokeWidth={2.2} />
-            <div className="mt-4 text-lg sm:text-xl text-white/90 tracking-wide">
-              Por favor, aguarde........
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-lg sm:text-xl text-red-300 font-semibold">
+        {/* Mensagem de erro (sobre a faixa do rodapé) quando tudo falhar */}
+        {finishedWithFailure && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+            style={{ top: "82%", width: "90%" }}
+          >
+            <div className="text-base sm:text-lg text-red-300 font-semibold text-center drop-shadow">
               Falha ao carregar a lista. Verifique sua conexão ou os dados de acesso.
             </div>
-            <div className="mt-2 text-sm text-white/70">
-              Não vamos abrir o app enquanto algum conteúdo essencial estiver com falha.
-            </div>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <button
-                onClick={() => { ran.current = false; setStatus({ live: "pending", vod: "pending", series: "pending", epg: "pending" }); window.location.reload(); }}
+                onClick={() => {
+                  ran.current = false;
+                  setStatus({ live: "pending", vod: "pending", series: "pending", epg: "pending" });
+                  window.location.reload();
+                }}
                 className="px-4 py-2 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold"
               >
                 Tentar novamente
@@ -164,26 +158,40 @@ function LoadingPage() {
                 Voltar ao login
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function TestCell({ title, status }: { title: string; status: Status }) {
+function StatusLabel({
+  pos,
+  status,
+}: {
+  pos: { left: string; top: string; width: string };
+  status: Status;
+}) {
   const label =
     status === "pending" ? "Esperando..." :
     status === "ok"      ? "SUCESSO!" :
                             "FALHOU!";
   const color =
-    status === "pending" ? "text-white/80" :
+    status === "pending" ? "text-cyan-200" :
     status === "ok"      ? "text-emerald-300" :
                             "text-red-400";
   return (
-    <div className="bg-[#0a1430]/90 px-3 py-3 text-center">
-      <div className="text-xs sm:text-sm font-semibold tracking-wider text-white">{title}</div>
-      <div className={`mt-1.5 text-sm sm:text-base ${color}`}>{label}</div>
+    <div
+      className={`absolute text-center font-semibold tracking-wide ${color}`}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        fontSize: "clamp(10px, 1.6vw, 20px)",
+        textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+      }}
+    >
+      {label}
     </div>
   );
 }
