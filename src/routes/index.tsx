@@ -316,7 +316,16 @@ function LoginPage() {
                 className="absolute rounded-xl bg-background/95 ring-1 ring-white/10"
                 style={{ left: "53%", top: "23%", width: "20.5%", height: "8%" }}
               />
-              {/* sem overlay no botão Lista M3U — deixa a arte original aparecer, mesma cor do Xtream */}
+              <div
+                className="absolute rounded-xl ring-1 ring-white/10"
+                style={{
+                  left: "73.5%",
+                  top: "23%",
+                  width: "20.5%",
+                  height: "8%",
+                  background: "linear-gradient(105deg, rgb(0 61 188) 0%, rgb(14 48 166) 24%, rgb(74 23 117) 50%, rgb(129 15 71) 76%, rgb(155 15 57) 100%)",
+                }}
+              />
               <div
                 className="absolute grid place-items-center text-center font-semibold text-white/65"
                 style={{ left: "53%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
