@@ -15,6 +15,8 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginNewBg from "@/assets/login-new.png";
+import loginV2Bg from "@/assets/login-v2.png";
+
 
 
 
@@ -285,151 +287,18 @@ function LoginPage() {
         />
       ) : (
         <div className="relative h-full w-full">
+          {/* Web/desktop: somente a nova arte ocupando 100% da tela.
+              Sem overlays, sem inputs, sem botões — o usuário pediu
+              limpar tudo antes de definir os próximos passos. */}
           <img
-            src={loginNewBg}
-            alt="SoaresTV — Entrar"
+            src={loginV2Bg}
+            alt=""
+            aria-hidden
             draggable={false}
             className="pointer-events-none absolute inset-0 z-0 h-full w-full select-none object-fill"
           />
-
-
-          {/* Switchers de idioma/tema: a arte já mostra BR PT e Tema
-              desenhados como decoração. Não renderizamos os componentes
-              reais aqui para não duplicar visualmente. */}
-
-
-
-
-          {/* Abas (clicáveis sobre as abas desenhadas) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("xtream")}
-            aria-label={t("auth.tabXtream")}
-            className="absolute z-10 rounded-xl outline-none transition hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-white/70"
-            style={{ left: "53%", top: "23%", width: "20.5%", height: "8%" }}
-          />
-          <button
-            type="button"
-            onClick={() => setActiveTab("m3u")}
-            aria-label={t("auth.tabM3U")}
-            className="absolute z-10 rounded-xl outline-none transition hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-white/70"
-            style={{ left: "73.5%", top: "23%", width: "21%", height: "8%" }}
-          />
-
-          {activeTab === "xtream" ? (
-            <form onSubmit={onXtream}>
-              <OverlayInput
-                id="server"
-                value={server}
-                onChange={setServer}
-                placeholder=""
-                style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
-                inputMode="url"
-                autoComplete="url"
-                required
-              />
-              <OverlayInput
-                id="user"
-                value={username}
-                onChange={setUsername}
-                placeholder=""
-                style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
-                autoComplete="username"
-                required
-              />
-              <OverlayInput
-                id="pass"
-                value={password}
-                onChange={setPassword}
-                placeholder=""
-                style={{ left: "52.5%", top: "63%", width: "42%", height: "8.5%" }}
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                required
-                rightPad="12%"
-              />
-
-              {/* Eye toggle — área clicável transparente sobre o ícone desenhado */}
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                tabIndex={-1}
-                className="absolute z-30 rounded-md outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
-                style={{ left: "89%", top: "65%", width: "6%", height: "8%" }}
-              />
-
-
-              {/* Botão Entrar Xtream (sobre o botão desenhado) */}
-              <button
-                type="submit"
-                disabled={loading}
-                aria-label={t("auth.signInXtream")}
-                className="absolute z-10 rounded-xl outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60 grid place-items-center"
-                style={{ left: "53.5%", top: "76%", width: "41%", height: "9%" }}
-              >
-                {loading && <Loader2 className="size-5 animate-spin text-white" />}
-              </button>
-
-              {/* Reproduzir primeiro canal */}
-              <button
-                type="button"
-                onClick={playFirstChannel}
-                aria-label={t("auth.playFirst")}
-                className="absolute z-10 rounded-md outline-none transition hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-white/70"
-                style={{ left: "58%", top: "87%", width: "32%", height: "5.5%" }}
-              />
-
-              {result && (
-                <pre
-                  className="absolute z-50 max-h-32 overflow-auto text-[10px] bg-black/70 border border-white/10 rounded-lg p-3 text-white/80 whitespace-pre-wrap break-all"
-                  style={{ left: "53.5%", top: "93%", width: "41%" }}
-                >
-                  {result}
-                </pre>
-              )}
-
-            </form>
-          ) : (
-            <form onSubmit={onM3U}>
-              <OverlayInput
-                id="m3u-name"
-                value={m3uName}
-                onChange={setM3uName}
-                placeholder={t("auth.listNamePh")}
-                style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
-              />
-              <OverlayInput
-                id="m3u-url"
-                value={m3uUrl}
-                onChange={setM3uUrl}
-                placeholder="http://..."
-                style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
-                inputMode="url"
-                required
-              />
-
-
-              <button
-                type="submit"
-                disabled={m3uLoading}
-                aria-label={t("auth.loadM3U")}
-                className="absolute z-10 rounded-xl outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-60 grid place-items-center"
-                style={{ left: "53.5%", top: "64.5%", width: "41%", height: "9%" }}
-              >
-                {m3uLoading && <Loader2 className="size-5 animate-spin text-white" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={loadSample}
-                aria-label={t("auth.useSample")}
-                className="absolute z-10 rounded-md outline-none transition hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-white/70"
-                style={{ left: "58%", top: "76%", width: "32%", height: "5.5%" }}
-              />
-            </form>
-          )}
         </div>
+
       )}
     </div>
   );
