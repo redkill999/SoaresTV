@@ -77,7 +77,7 @@ function LoginPage() {
         if (autoLogin) {
           // Após a splash terminar, handleNativeSplashDone vai esconder a
           // splash e este timer redireciona pra /loading.
-          timer = setTimeout(() => { if (!cancelled) navigate({ to: "/loading", replace: true }); }, 5000);
+          timer = setTimeout(() => { if (!cancelled) navigate({ to: "/loading", replace: true }); }, 2800);
         }
       } else {
         if (autoLogin) {

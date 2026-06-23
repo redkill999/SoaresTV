@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
  * Splash de abertura estilo XCIPTV — somente APK Android (celular/TV).
  * Anima ~3s e chama onDone(). Sem usar vídeo: 100% CSS pra carregar instantâneo.
  */
-export function NativeSplash({ onDone, duration = 5000 }: { onDone: () => void; duration?: number }) {
+export function NativeSplash({ onDone, duration = 2800 }: { onDone: () => void; duration?: number }) {
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
@@ -144,6 +144,12 @@ export function NativeSplash({ onDone, duration = 5000 }: { onDone: () => void; 
           animation-duration: 14s;
           animation-direction: reverse;
           filter: blur(1px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ns-logo, .ns-logo-glow, .ns-ring, .ns-title, .ns-tagline, .ns-bar-fill, .ns-stars {
+            animation: none !important;
+          }
+          .ns-title { opacity: 1; transform: none; }
         }
       `}</style>
     </div>
