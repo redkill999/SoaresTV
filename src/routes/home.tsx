@@ -143,25 +143,16 @@ function HomePage() {
         paddingRight: "env(safe-area-inset-right)",
       }}
     >
-      {/* Canvas 16:9 dimensionado com max() para cobrir 100% da viewport
-          em qualquer aspect ratio. A imagem fica nítida (object-fill em
-          canvas 16:9 = sem distorção), sem barras pretas e sem blur.
-          O excesso transborda e é cortado pelo overflow-hidden do wrapper.
-          Hotspots em % seguem a imagem porque escalam juntos com o canvas. */}
-      <div
-        className="relative home-canvas"
-        style={{
-          aspectRatio: "16 / 9",
-          width: "max(100%, calc(100dvh * 16 / 9))",
-          height: "max(100dvh, calc(100% * 9 / 16))",
-        }}
-      >
+      {/* Canvas ocupa 100% da viewport. Imagem esticada (object-fill)
+          preenche tudo sem barras pretas; hotspots em % seguem a imagem. */}
+      <div className="relative home-canvas h-full w-full">
         <img
           src={homeBg.url}
           alt="SoaresTV"
           draggable={false}
           className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
         />
+
 
 
 

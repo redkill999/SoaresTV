@@ -108,16 +108,11 @@ function LoadingPage() {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
-      {/* Canvas 16:9 dimensionado com max() para cobrir 100% da viewport
-          sem barras pretas e sem blur. Imagem fica nítida; o excesso
-          transborda e é cortado pelo overflow-hidden do wrapper.
-          Rótulos em % seguem a imagem porque escalam juntos com o canvas. */}
+      {/* Canvas ocupa 100% da viewport. Imagem esticada preenche tudo
+          sem barras pretas; rótulos em % seguem a imagem. */}
       <div
-        className="relative"
+        className="relative h-full w-full"
         style={{
-          aspectRatio: "16 / 9",
-          width: "max(100vw, calc(100vh * 16 / 9))",
-          height: "max(100vh, calc(100vw * 9 / 16))",
           backgroundImage: `url(${bgAsset.url})`,
           backgroundSize: "100% 100%",
           backgroundPosition: "center",
@@ -125,6 +120,7 @@ function LoadingPage() {
           containerType: "size",
         } as React.CSSProperties}
       >
+
 
 
 
