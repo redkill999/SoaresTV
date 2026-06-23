@@ -419,9 +419,11 @@ function LoginPage() {
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                 tabIndex={-1}
-                className="absolute z-30 rounded-md outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
+                className="absolute z-30 grid place-items-center rounded-md text-white outline-none transition hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/70"
                 style={{ left: "87%", top: "63.25%", width: "6%", height: "8%" }}
-              />
+              >
+                {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+              </button>
               {/* Entrar Xtream */}
               <button
                 type="submit"
