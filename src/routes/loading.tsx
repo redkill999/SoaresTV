@@ -12,13 +12,13 @@ export const Route = createFileRoute("/loading")({
 type Status = "pending" | "ok" | "fail";
 type TestKey = "live" | "vod" | "series" | "epg";
 
-// Posições (em % do canvas 16:9 da imagem 1280x720) dos rótulos de status
-// sobre cada card já desenhado no fundo (TV AO VIVO, VOD, SÉRIES, GUIA DA TV).
+// Posições (em % do canvas 16:9) dos rótulos de status logo abaixo do título
+// dentro de cada card desenhado na imagem de fundo.
 const CARD_POS: Record<TestKey, { left: string; top: string; width: string }> = {
-  live:   { left: "13.5%", top: "35.3%", width: "16%" },
-  vod:    { left: "37.5%", top: "35.3%", width: "16%" },
-  series: { left: "60.5%", top: "35.3%", width: "16%" },
-  epg:    { left: "83.0%", top: "35.3%", width: "16%" },
+  live:   { left: "14.0%", top: "40.5%", width: "16%" },
+  vod:    { left: "37.0%", top: "40.5%", width: "16%" },
+  series: { left: "60.0%", top: "40.5%", width: "16%" },
+  epg:    { left: "82.5%", top: "40.5%", width: "16%" },
 };
 
 function LoadingPage() {
