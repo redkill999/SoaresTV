@@ -20,7 +20,7 @@ export const Route = createFileRoute("/playlist")({
   head: () => ({ meta: [{ title: "Lista M3U — SoaresTV" }] }),
   component: PlaylistPage,
   errorComponent: ({ error }) => (
-    <div className="min-h-screen flex items-center justify-center p-6 text-center">
+    <div className="min-h-dvh flex items-center justify-center p-6 text-center">
       <div>
         <h2 className="text-lg font-semibold mb-2">Erro ao carregar a lista</h2>
         <p className="text-sm text-muted-foreground mb-4 max-w-md">{error.message}</p>
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/playlist")({
     </div>
   ),
   notFoundComponent: () => (
-    <div className="min-h-screen flex items-center justify-center p-6 text-center">
+    <div className="min-h-dvh flex items-center justify-center p-6 text-center">
       <a href="/" className="text-primary underline">Voltar para o login</a>
     </div>
   ),
@@ -120,7 +120,7 @@ function PlaylistPage() {
 
   if (!cached && !fallbackUrl) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 text-center">
+      <div className="min-h-dvh flex items-center justify-center p-6 text-center">
         <div>
           <h2 className="text-lg font-semibold mb-2">Nenhuma lista selecionada</h2>
           <p className="text-sm text-muted-foreground mb-4">
@@ -133,7 +133,7 @@ function PlaylistPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6">
+    <div className="min-h-dvh p-4 md:p-6">
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/home" })}>
           <ArrowLeft className="size-4" /> Voltar

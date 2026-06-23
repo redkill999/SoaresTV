@@ -222,7 +222,7 @@ function LoginPage() {
   };
 
   if (!splashReady) {
-    return <div className="min-h-screen bg-background" />;
+    return <div className="min-h-dvh bg-background" />;
   }
 
   if (nativeSplash) {
@@ -231,7 +231,7 @@ function LoginPage() {
 
   if (splash) {
     return (
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      <div className="min-h-dvh flex items-center justify-center relative overflow-hidden">
         <img
           src={`${loginBgWebAsset.url}?v=${loginBgWebAsset.asset_id}`}
           alt=""

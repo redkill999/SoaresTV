@@ -59,6 +59,26 @@ export function PremiumChrome({
     if (alarmTimerRef.current) clearTimeout(alarmTimerRef.current);
   }, []);
 
+  // Fecha modal de status (alarm/vpn/msg) ao apertar ESC / Back / Return
+  // (Backspace 8, Esc 27, Tizen Return 10009, WebOS Back 461).
+  // Capture phase para rodar antes do tv-dpad global, que senão chamaria history.back().
+  useEffect(() => {
+    if (!openStatus) return;
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key;
+      const c = (e as KeyboardEvent & { keyCode?: number }).keyCode ?? 0;
+      const isBack =
+        k === "Escape" || k === "Backspace" || k === "GoBack" || k === "BrowserBack" ||
+        c === 27 || c === 8 || c === 10009 || c === 461;
+      if (!isBack) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpenStatus(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [openStatus]);
+
   const runUpdate = () => {
     try {
       Object.keys(localStorage)
