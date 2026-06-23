@@ -1,29 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  =====================================================================
-  TEMPLATE de res/values/styles.xml — Fullscreen imersivo + DisplayCutout
-  =====================================================================
-
-  COMO USAR
-  ---------
-  Copie este arquivo para:
-    android/app/src/main/res/values/styles.xml
-
-  E, opcionalmente, crie uma cópia equivalente em values-v27/styles.xml
-  para reforçar o `windowLayoutInDisplayCutoutMode` (API 27+) em
-  aparelhos com notch.
-
-  O QUE ESTE TEMPLATE FAZ
-  -----------------------
-  * Fundo PRETO (#000) — evita "flash" branco antes da WebView pintar.
-  * `windowFullscreen=true` — cobre status bar.
-  * `windowTranslucentNavigation/Status=true` — cobre barra inferior.
-  * `windowLayoutInDisplayCutoutMode=shortEdges` — usa a área do notch
-    e do recorte da câmera, deixando o app realmente edge-to-edge.
-  * `AppTheme.NoActionBar` sem `Launch` no nome — desliga a splash
-    estática do Android e abre direto em tela preta + WebView.
--->
-<resources>
+<!-- Template de res/values/styles.xml para fullscreen imersivo e DisplayCutout. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:background">@android:color/black</item>
