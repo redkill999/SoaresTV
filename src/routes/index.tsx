@@ -289,20 +289,22 @@ function LoginPage() {
             src={loginNewBg}
             alt="SoaresTV — Entrar"
             draggable={false}
-            className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full select-none object-fill"
           />
 
-          {/* Switchers (canto superior — sobre os botões desenhados BR/PT e Tema) */}
-          <div className="absolute z-20" style={{ left: "72.5%", top: "3.2%", width: "11%", height: "6.5%" }}>
+
+          {/* Switchers (z-40 — dropdowns precisam ficar acima de tudo) */}
+          <div className="absolute z-40" style={{ left: "72.5%", top: "3.2%", width: "11%", height: "6.5%" }}>
             <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
               <LanguageSwitcher />
             </div>
           </div>
-          <div className="absolute z-20" style={{ left: "85%", top: "3.2%", width: "11%", height: "6.5%" }}>
+          <div className="absolute z-40" style={{ left: "85%", top: "3.2%", width: "11%", height: "6.5%" }}>
             <div className="h-full w-full opacity-0 hover:opacity-90 focus-within:opacity-90 transition">
               <ThemeSwitcher />
             </div>
           </div>
+
 
 
           {/* Abas (clicáveis sobre as abas desenhadas) */}
@@ -387,12 +389,13 @@ function LoginPage() {
 
               {result && (
                 <pre
-                  className="absolute z-30 max-h-32 overflow-auto text-[10px] bg-black/70 border border-white/10 rounded-lg p-3 text-white/80 whitespace-pre-wrap break-all"
+                  className="absolute z-50 max-h-32 overflow-auto text-[10px] bg-black/70 border border-white/10 rounded-lg p-3 text-white/80 whitespace-pre-wrap break-all"
                   style={{ left: "53.5%", top: "93%", width: "41%" }}
                 >
                   {result}
                 </pre>
               )}
+
             </form>
           ) : (
             <form onSubmit={onM3U}>
