@@ -264,8 +264,9 @@ function LoginPage() {
             alt=""
             aria-hidden
             draggable={false}
-            className="fixed inset-0 z-0 h-full w-full select-none object-fill pointer-events-none"
+            className="fixed inset-0 z-0 h-full w-full select-none object-cover pointer-events-none"
           />
+
           {/* leve escurecimento pra dar contraste com o card de login */}
           <div className="fixed inset-0 z-0 bg-black/30 pointer-events-none" />
         </>
