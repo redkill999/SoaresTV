@@ -313,11 +313,11 @@ function LoginPage() {
           {activeTab === "m3u" && (
             <div className="pointer-events-none absolute inset-0 z-[5]">
               <div
-                className="absolute rounded-xl bg-[#101827]/95 ring-1 ring-white/10"
+                className="absolute rounded-xl bg-background/95 ring-1 ring-white/10"
                 style={{ left: "53%", top: "23%", width: "20.5%", height: "8%" }}
               />
               <div
-                className="absolute rounded-xl bg-gradient-to-r from-[#0066ff] to-[#e21b5b] shadow-[0_0_20px_rgba(0,102,255,0.35)]"
+                className="absolute rounded-xl bg-brand-gradient shadow-glow"
                 style={{ left: "73.5%", top: "23%", width: "21%", height: "8%" }}
               />
               <div
@@ -334,14 +334,14 @@ function LoginPage() {
               </div>
 
               <div
-                className="absolute bg-[#030818]"
+                className="absolute bg-background"
                 style={{ left: "50.5%", top: "33%", width: "46%", height: "59%" }}
               />
 
               <M3UVisualField label="NOME DA LISTA" style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }} />
               <M3UVisualField label="URL M3U" style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }} />
               <div
-                className="absolute rounded-2xl bg-gradient-to-r from-[#0066ff] to-[#e21b5b] shadow-[0_0_22px_rgba(226,27,91,0.35)]"
+                className="absolute rounded-2xl bg-brand-gradient shadow-glow"
                 style={{ left: "52.5%", top: "75%", width: "42%", height: "9%" }}
               />
               <div
@@ -533,7 +533,7 @@ function OverlayInput({
 function M3UVisualField({ label, style }: { label: string; style: React.CSSProperties }) {
   return (
     <div
-      className="absolute rounded-2xl bg-[#0a1022]/95 ring-1 ring-white/15 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
+      className="absolute rounded-2xl bg-background/95 ring-1 ring-white/15"
       style={style}
     >
       <span
