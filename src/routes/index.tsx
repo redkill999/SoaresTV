@@ -309,6 +309,51 @@ function LoginPage() {
             </div>
           </div>
 
+          {/* Estado visual real da aba M3U por cima da arte estática */}
+          {activeTab === "m3u" && (
+            <div className="pointer-events-none absolute inset-0 z-[5]">
+              <div
+                className="absolute rounded-xl bg-[#101827]/95 ring-1 ring-white/10"
+                style={{ left: "53%", top: "23%", width: "20.5%", height: "8%" }}
+              />
+              <div
+                className="absolute rounded-xl bg-gradient-to-r from-[#0066ff] to-[#e21b5b] shadow-[0_0_20px_rgba(0,102,255,0.35)]"
+                style={{ left: "73.5%", top: "23%", width: "21%", height: "8%" }}
+              />
+              <div
+                className="absolute grid place-items-center text-center font-semibold text-white/65"
+                style={{ left: "53%", top: "23%", width: "20.5%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
+              >
+                Xtream Codes
+              </div>
+              <div
+                className="absolute grid place-items-center text-center font-semibold text-white"
+                style={{ left: "73.5%", top: "23%", width: "21%", height: "8%", fontSize: "clamp(11px,1.35vw,16px)" }}
+              >
+                Lista M3U
+              </div>
+
+              <M3UVisualField label="NOME DA LISTA" style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }} />
+              <M3UVisualField label="URL M3U" style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }} />
+              <div
+                className="absolute rounded-2xl bg-gradient-to-r from-[#0066ff] to-[#e21b5b] shadow-[0_0_22px_rgba(226,27,91,0.35)]"
+                style={{ left: "52.5%", top: "75%", width: "42%", height: "9%" }}
+              />
+              <div
+                className="absolute grid place-items-center text-center font-bold text-white"
+                style={{ left: "52.5%", top: "75%", width: "42%", height: "9%", fontSize: "clamp(12px,1.45vw,17px)" }}
+              >
+                CARREGAR M3U
+              </div>
+              <div
+                className="absolute grid place-items-center text-center font-medium text-white/70"
+                style={{ left: "58%", top: "86%", width: "32%", height: "5.5%", fontSize: "clamp(10px,1.15vw,14px)" }}
+              >
+                Usar lista de teste
+              </div>
+            </div>
+          )}
+
           {/* Abas (clicáveis sobre as abas desenhadas) */}
           <button
             type="button"
@@ -399,17 +444,19 @@ function LoginPage() {
                 id="m3u-name"
                 value={m3uName}
                 onChange={setM3uName}
-                placeholder={t("auth.listNamePh")}
+                placeholder=""
                 style={{ left: "52.5%", top: "36%", width: "42%", height: "8.5%" }}
+                leftPad="14%"
               />
               <OverlayInput
                 id="m3u-url"
                 value={m3uUrl}
                 onChange={setM3uUrl}
-                placeholder="http://..."
+                placeholder=""
                 style={{ left: "52.5%", top: "49.5%", width: "42%", height: "8.5%" }}
                 inputMode="url"
                 required
+                leftPad="14%"
               />
               <button
                 type="submit"
@@ -439,7 +486,7 @@ function LoginPage() {
 /* -------- Overlay input that sits on top of the drawn field -------- */
 function OverlayInput({
   id, value, onChange, placeholder, style, type = "text",
-  autoComplete, inputMode, required, rightPad = "4%",
+  autoComplete, inputMode, required, rightPad = "4%", leftPad = "11%",
 }: {
   id: string;
   value: string;
@@ -451,6 +498,7 @@ function OverlayInput({
   inputMode?: "url" | "text" | "email" | "search" | "none" | "tel" | "numeric" | "decimal";
   required?: boolean;
   rightPad?: string;
+  leftPad?: string;
 }) {
   return (
     <input
@@ -469,11 +517,27 @@ function OverlayInput({
       className="absolute z-20 bg-transparent text-white placeholder:text-white/40 outline-none focus:bg-black/40 focus:ring-2 focus:ring-white/40 rounded-xl"
       style={{
         ...style,
-        paddingLeft: "11%",
+        paddingLeft: leftPad,
         paddingRight: rightPad,
         fontSize: "clamp(12px, 1.6vw, 18px)",
       }}
     />
+  );
+}
+
+function M3UVisualField({ label, style }: { label: string; style: React.CSSProperties }) {
+  return (
+    <div
+      className="absolute rounded-2xl bg-[#0a1022]/95 ring-1 ring-white/15 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
+      style={style}
+    >
+      <span
+        className="absolute font-semibold uppercase text-white/58"
+        style={{ left: "14%", top: "50%", transform: "translateY(-50%)", fontSize: "clamp(9px,1.05vw,12px)" }}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
 
