@@ -432,6 +432,17 @@ export function VideoPlayer({
           return url;
         }
       })();
+      if (import.meta.env.DEV) {
+        console.debug("[player] playDirect", {
+          vodIdx,
+          total: playbackCandidates.length,
+          url,
+          format: detectFormat(decodedUrl),
+          isLive,
+          isVod,
+        });
+      }
+
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
@@ -472,7 +483,29 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      if (import.meta.env.DEV) console.debug("[player] attachHls", { url, isLive, kind, forcedUA });
+      // Watchdog de abertura para LIVE: se o manifesto não for parseado em 15s,
+      // abandona o caminho HLS e cai direto pro .ts (mpegts.js/native).
+      // Painéis Xtream que não expõem variante .m3u8 retornam 404 em todos os
+      // UAs e o hls.js gastaria ~30s+ em retries antes de desistir sozinho.
+      let hlsStartupTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearHlsStartup = () => {
+        if (hlsStartupTimer) { clearTimeout(hlsStartupTimer); hlsStartupTimer = null; }
+      };
+      if (isLive) {
+        hlsStartupTimer = setTimeout(() => {
+          if (cancelled) return;
+          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return;
+          if (import.meta.env.DEV) console.warn("[player] HLS startup timeout — fallback para .ts direto", { url });
+          detachStallListeners?.();
+          try { hls?.destroy(); } catch { /* noop */ }
+          hls = null;
+          // Vai pro playDirect() (mpegts.js .ts via proxy / native), sem travar UI.
+          playDirect();
+        }, 15_000);
+      }
       if (Hls.isSupported()) {
+
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
@@ -519,8 +552,11 @@ export function VideoPlayer({
         // autoPlay do browser engatar, reduz delay até primeiro frame.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
+          clearHlsStartup();
+          if (import.meta.env.DEV) console.debug("[player] HLS manifest parseado", { url });
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
+
 
         let netRetries = 0;
         const MAX_NET_RETRIES = 5;
@@ -610,6 +646,8 @@ export function VideoPlayer({
 
         detachStallListeners = () => {
           clearStall();
+          clearHlsStartup();
+
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
