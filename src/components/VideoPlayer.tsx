@@ -378,6 +378,35 @@ export function VideoPlayer({
         disableHlsConversion: liveDisableHls,
         preferTs: livePreferTs,
       });
+
+      // ===== [LIVE DEBUG] probe assíncrono via /api/stream (HEAD + UA cycle) =
+      // Não bloqueia o playback. Só descobre status/content-type/UA do canal.
+      // Se nenhum UA aceitar (todos 401/403/404), grava no host-profile o UA
+      // que respondeu — playlist subsequente já tenta com ele direto.
+      void (async () => {
+        try {
+          const report = await probeLiveStream(workingSrc, forcedUA);
+          logLiveProbeReport(report, { originalSrc: src, finalCandidates: playbackCandidates });
+          // Se um UA não-preferido foi o único que funcionou, memoriza para
+          // reuso (apenas log; aplicação efetiva via compat fica para o user
+          // por enquanto, evitando regressões silenciosas).
+          if (report.best?.ok && report.best.ua !== "preferred" && !forcedUA) {
+            console.log("[LIVE DEBUG] UA recomendado para este host:", {
+              host: liveHost,
+              ua: report.best.ua,
+              uaString: report.best.uaString,
+              dica: "Para fixar: Settings → User-Agent da lista, ou updateHostProfile(host, { ... }).",
+            });
+          }
+          // Se content-type vier como HLS mas estamos pulando HLS (preset),
+          // sinaliza para o usuário que talvez valha reativar HLS neste host.
+          if (report.best?.ok && liveDisableHls && liveContentKind(report.best.contentType) === "hls") {
+            console.warn("[LIVE DEBUG] Host responde HLS mas disableHlsConversion=true. Considere updateHostProfile(host, { disableHlsConversion: false, preferTs: false }).");
+          }
+        } catch (e) {
+          console.warn("[LIVE DEBUG] probe falhou:", (e as Error).message);
+        }
+      })();
     }
 
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
