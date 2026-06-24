@@ -1210,6 +1210,16 @@ export function VideoPlayer({
     };
   }, [src, kind, playerMode]);
 
+  // [LIVE DIAG] Quando setError dispara em LIVE, marca falha e abre painel.
+  // Cobre todos os caminhos (HLS NETWORK/MEDIA/default, esgotamento de candidatos).
+  useEffect(() => {
+    if (!error) return;
+    if (kind !== "live") return;
+    const id = diagSessionIdRef.current;
+    if (id) liveDiagMarkFailed(id, error);
+    setDiagOpen(true);
+  }, [error, kind]);
+
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
   // ScreenOrientation.lock no boot). Desbloquear aqui fazia o app voltar
