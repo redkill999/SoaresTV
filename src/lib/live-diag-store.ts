@@ -19,6 +19,28 @@ export type LivePlayerAttempt = {
   at: number;
 };
 
+export type LiveMediaInfo = {
+  videoCodec?: string;
+  audioCodec?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  bitrate?: number;
+};
+
+export type LiveFreezeEvent = {
+  at: number;
+  trigger: "waiting" | "stalled" | "suspend" | "watchdog";
+  currentTime: number;
+  bufferedAhead: number;
+  bufferedRanges: string;
+  readyState: number;
+  networkState: number;
+  decodedFrames?: number;
+  droppedFrames?: number;
+  speedKbps?: number;
+};
+
 export type LiveDiagSession = {
   id: string;
   startedAt: number;
@@ -35,6 +57,8 @@ export type LiveDiagSession = {
   attempts: LivePlayerAttempt[];
   result: "in-progress" | "playing" | "failed";
   failureReason?: string;
+  mediaInfo?: LiveMediaInfo;
+  freezes?: LiveFreezeEvent[];
 };
 
 const MAX_SESSIONS = 50;
@@ -138,6 +162,18 @@ export function liveDiagMarkFailed(id: string, reason: string): void {
   });
 }
 
+export function liveDiagSetMediaInfo(id: string, info: LiveMediaInfo): void {
+  update(id, (s) => { s.mediaInfo = { ...(s.mediaInfo ?? {}), ...info }; });
+}
+
+export function liveDiagRecordFreeze(id: string, ev: LiveFreezeEvent): void {
+  update(id, (s) => {
+    const next = [...(s.freezes ?? []), ev];
+    // Mantém só os 20 últimos por sessão para não inflar localStorage.
+    s.freezes = next.slice(-20);
+  });
+}
+
 export function liveDiagLatestFailedFor(originalUrl: string): LiveDiagSession | null {
   loadOnce();
   for (const s of sessions) {
@@ -198,6 +234,42 @@ export function liveDiagFormat(s: LiveDiagSession): string {
       if (a.error) lines.push(`   erro:  ${a.error}`);
       if (a.videoErrorCode != null) lines.push(`   code:  ${a.videoErrorCode}`);
     });
+  }
+  lines.push("");
+  lines.push("--- Mídia detectada ---");
+  if (s.mediaInfo) {
+    const m = s.mediaInfo;
+    lines.push(`codec vídeo:  ${m.videoCodec ?? "(desconhecido)"}`);
+    lines.push(`codec áudio:  ${m.audioCodec ?? "(desconhecido)"}`);
+    lines.push(`resolução:    ${m.width ?? "?"}x${m.height ?? "?"}`);
+    lines.push(`fps:          ${m.fps ?? "?"}`);
+    lines.push(`bitrate:      ${m.bitrate ?? "?"} kbps`);
+  } else {
+    lines.push("(não capturado)");
+  }
+  lines.push("");
+  lines.push("--- Congelamentos / instabilidade ---");
+  const freezes = s.freezes ?? [];
+  if (!freezes.length) {
+    lines.push("(nenhum)");
+  } else {
+    freezes.forEach((f, i) => {
+      lines.push(`${i + 1}. [${f.trigger}] @t=${f.currentTime.toFixed(2)}s buf=${f.bufferedAhead.toFixed(2)}s ready=${f.readyState} net=${f.networkState}`);
+      lines.push(`   buffered: ${f.bufferedRanges}`);
+      if (f.decodedFrames != null) lines.push(`   frames decoded=${f.decodedFrames} dropped=${f.droppedFrames ?? 0} speed=${f.speedKbps ?? 0} kbps`);
+    });
+    // Diagnóstico automático
+    const lastBuf = freezes[freezes.length - 1].bufferedAhead;
+    const dropRatio = (() => {
+      const f = freezes[freezes.length - 1];
+      if (!f.decodedFrames) return 0;
+      return (f.droppedFrames ?? 0) / f.decodedFrames;
+    })();
+    lines.push("");
+    lines.push("DIAGNÓSTICO AUTOMÁTICO:");
+    if (lastBuf < 1) lines.push("  → BUFFER STARVATION (buffer < 1s no travamento)");
+    if (dropRatio > 0.1) lines.push(`  → POSSÍVEL INCOMPATIBILIDADE DE CODEC (${Math.round(dropRatio * 100)}% frames descartados — H.265/HEVC sem decoder de hardware?)`);
+    if (lastBuf > 5 && dropRatio < 0.05) lines.push("  → buffer cheio sem drop — possível SourceBuffer overflow ou limpeza agressiva do player");
   }
   lines.push("");
   lines.push("--- Candidatos (ordem de tentativa) ---");
