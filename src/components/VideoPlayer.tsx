@@ -694,13 +694,29 @@ export function VideoPlayer({
           }
           playDirect();
         } else {
-          const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+          // FIX D11 (audit IPTV): mensagem específica baseada no último motivo
+          // de falha detectado, em vez de uma única genérica para todos os modos.
+          const ve = videoRef.current?.error ?? null;
+          const code = ve?.code ?? null;
+          let msg: string;
+          if (isLive) {
+            if (code === 4) msg = "Formato deste canal não é compatível com o navegador. Tente no app Android.";
+            else if (code === 3) msg = "Erro de decodificação. Pode ser codec não suportado (ex.: HEVC/EAC3).";
+            else if (code === 2) msg = "Falha de rede ao conectar ao canal. Verifique sua conexão.";
+            else msg = `Não foi possível reproduzir este canal após ${playbackCandidates.length} tentativas.`;
+          } else {
+            if (code === 4) msg = "Formato deste vídeo não é compatível com seu navegador.";
+            else if (code === 3) msg = "Erro de decodificação do vídeo.";
+            else if (code === 2) msg = "Falha de rede ao carregar este vídeo.";
+            else msg = "Não foi possível reproduzir esta mídia.";
+          }
           console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
             arquivo: "src/components/VideoPlayer.tsx",
             linha: 429,
             funcao: "tryNextVod()",
             motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
             mensagem: msg,
+            videoErrorCode: code,
             vodIdx,
             totalCandidatos: playbackCandidates.length,
           });
@@ -708,19 +724,22 @@ export function VideoPlayer({
             host: hostOf(workingSrc),
             tentativas: playbackCandidates.length,
             ultimaEstrategia: lastPlayerStrategy,
+            videoErrorCode: code,
           });
           auditEvent(diagSessionIdRef.current, "final-fail", {
             host: hostOf(workingSrc),
             attempts: playbackCandidates.length,
             lastStrategy: lastPlayerStrategy,
+            videoErrorCode: code,
           });
-          void reportPlaybackFailure("Todos os candidatos falharam");
+          void reportPlaybackFailure(msg);
           if (isLive && diagSessionIdRef.current) {
-            liveDiagMarkFailed(diagSessionIdRef.current, "Todos os candidatos falharam");
+            liveDiagMarkFailed(diagSessionIdRef.current, msg);
             setDiagOpen(true);
           }
           setError(msg);
         }
+
       });
     };
 
