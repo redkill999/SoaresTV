@@ -542,13 +542,26 @@ export function VideoPlayer({
     const maybeInject503Bypass = async () => {
       try {
         const failedUrl = playbackCandidates[vodIdx];
+        // [HTTPS SKIP] Se o candidato que falhou era https de um host cuja
+        // origem é http, marcamos o host para nunca mais promover.
+        if (failedUrl) {
+          const decoded = (() => { try { return decodeURIComponent(failedUrl.replace(/^.*?[?&]u=/, "")); } catch { return failedUrl; } })();
+          const target = failedUrl.startsWith("/api/stream") ? decoded : failedUrl;
+          try {
+            const t = new URL(target);
+            const original = new URL(workingSrc);
+            if (t.protocol === "https:" && original.protocol === "http:" && t.host.toLowerCase() === original.host.toLowerCase()) {
+              rememberNoHttps(t.host.toLowerCase());
+            }
+          } catch { /* noop */ }
+        }
         if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
         const res = await fetch(failedUrl, { method: "HEAD" });
         const upstream = res.headers.get("X-Upstream-Status") ?? "";
         const is503 = res.status === 503 || upstream === "503";
         if (!is503) return false;
         const host = hostOf(workingSrc);
-        if (host) bypass503Hosts.add(host);
+        if (host) rememberBypass503(host);
         // Constrói diretos não presentes ainda na fila
         const directs: string[] = [];
         for (const u of directCandidates) {
@@ -556,6 +569,7 @@ export function VideoPlayer({
           const secure = httpsVariant(u);
           if (secure && !playbackCandidates.includes(secure)) directs.push(secure);
         }
+
         if (!directs.length) {
           console.log("[503 BYPASS] proxy falhou (503) — sem diretos novos para injetar", { host, failedUrl });
           return false;
