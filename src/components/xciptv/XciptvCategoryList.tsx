@@ -65,7 +65,9 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
       </ul>
     </aside>
   );
-}
+});
+
+
 
 function Row({ active, onClick, label, count, icon }: { active?: boolean; onClick: () => void; label: string; count?: number; icon?: React.ReactNode }) {
   return (
