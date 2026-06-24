@@ -339,6 +339,56 @@ export function VideoPlayer({
       tsPlayer = null;
     };
 
+    const reportPlaybackFailure = async (reason: string) => {
+      try {
+        const currentUrl = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+        const isProxy = currentUrl.startsWith("/api/stream");
+        let probeStatus: number | string = "n/a";
+        let upstreamStatus = "";
+        let upstreamCt = "";
+        let upstreamFinal = "";
+        let upstreamUA = "";
+        let upstreamOriginHdrs = "";
+        let upstreamRedirected = "";
+        if (isProxy) {
+          try {
+            const res = await fetch(currentUrl, { method: "HEAD" });
+            probeStatus = res.status;
+            upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
+            upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
+            upstreamFinal = res.headers.get("X-Upstream-Final-Url") ?? "";
+            upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
+            upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
+            upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
+          } catch (e) {
+            probeStatus = `probe-fail: ${(e as Error).message}`;
+          }
+        }
+        // eslint-disable-next-line no-console
+        console.error("[player] RELATÓRIO DE FALHA DE REPRODUÇÃO", {
+          motivo: reason,
+          urlOriginal: src,
+          urlTrabalho: workingSrc,
+          urlFinalCliente: currentUrl,
+          totalCandidatos: playbackCandidates.length,
+          tentativaAtual: vodIdx,
+          isLive,
+          isVod,
+          formato: detectFormat(workingSrc),
+          forcedUA: forcedUA ?? "(auto)",
+          httpStatusProxy: probeStatus,
+          httpStatusUpstream: upstreamStatus,
+          contentTypeUpstream: upstreamCt,
+          urlFinalUpstream: upstreamFinal,
+          uaUsadoUpstream: upstreamUA,
+          headersOrigemReferer: upstreamOriginHdrs === "1",
+          redirecionado: upstreamRedirected === "1",
+        });
+      } catch {
+        /* noop */
+      }
+    };
+
     const tryNextVod = () => {
       clearWatchdog();
       if (hls) {
@@ -348,7 +398,11 @@ export function VideoPlayer({
       destroyTsPlayer();
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) playDirect();
-      else setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
+      else {
+        const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+        void reportPlaybackFailure("Todos os candidatos falharam");
+        setError(msg);
+      }
     };
 
     const armVodWatchdog = () => {
