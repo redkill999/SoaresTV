@@ -219,7 +219,7 @@ function GuidePage() {
           </div>
 
           {/* Rows */}
-          <div className="flex max-h-[calc(100dvh-22rem)] overflow-y-auto">
+          <div className="flex flex-1 min-h-0 overflow-y-auto">
             {/* Channel column */}
             <div className="shrink-0 border-r border-white/10 bg-black/20" style={{ width: CHANNEL_COL }}>
               {visibleChannels.map((s) => (
