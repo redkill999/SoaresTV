@@ -407,6 +407,7 @@ export function VideoPlayer({
         try {
           const report = await probeLiveStream(workingSrc, forcedUA);
           logLiveProbeReport(report, { originalSrc: src, finalCandidates: playbackCandidates });
+          if (diagSessionIdRef.current) liveDiagAttachProbe(diagSessionIdRef.current, report);
           // Se um UA não-preferido foi o único que funcionou, memoriza para
           // reuso (apenas log; aplicação efetiva via compat fica para o user
           // por enquanto, evitando regressões silenciosas).
