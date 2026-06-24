@@ -340,6 +340,22 @@ export function VideoPlayer({
         })
       : directCandidates.map((url) => proxiedX(url, kind));
 
+    // ===== [503 BYPASS] — host já marcado nesta sessão =====================
+    // Se já vimos esse host responder 503 antes, prioriza diretos.
+    const srcHost = hostOf(workingSrc);
+    if (srcHost && bypass503Hosts.has(srcHost) && !forceProxy) {
+      const directs: string[] = [];
+      for (const url of directCandidates) {
+        directs.push(url);
+        const secure = httpsVariant(url);
+        if (secure) directs.push(secure);
+      }
+      const merged = Array.from(new Set([...directs, ...playbackCandidates]));
+      playbackCandidates.splice(0, playbackCandidates.length, ...merged);
+      console.log("[503 BYPASS] host previamente marcado — diretos priorizados", { host: srcHost, candidates: playbackCandidates });
+    }
+
+
     // ===== [STREAM DEBUG] inicialização =====================================
     // Bloco puramente informativo. Não altera nenhuma lógica de reprodução —
     // só lista o que o player vai tentar e como (para diagnóstico de canais
