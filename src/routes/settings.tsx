@@ -36,7 +36,7 @@ export const Route = createFileRoute("/settings")({
 type TileKey =
   | "app" | "conta" | "playerSettings" | "player" | "tipoFluxo" | "atualizar"
   | "parental" | "teste" | "backup" | "remoto" | "language" | "socorro"
-  | "outras" | "clearCache" | "sair";
+  | "diag" | "outras" | "clearCache" | "sair";
 
 type Tile = {
   key: TileKey;
