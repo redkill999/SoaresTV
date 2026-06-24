@@ -847,9 +847,14 @@ export function VideoPlayer({
         // como fallback. Para VOD/outros casos, mantém heurística por host.
         const h = hostOf(workingSrc) ?? "";
         const profile = getHostProfile(h);
+        // FIX 5.1: navegador web desktop (Chrome/Edge/Firefox) NÃO decodifica
+        // MPEG-TS via <video src=".ts"> — tentar HTML5 primeiro desperdiça ~3s
+        // até o erro 4 (SRC_NOT_SUPPORTED) e força fallback para mpegts.js.
+        // Em APK nativo (ExoPlayer) e em hosts com profile.preferPlayer="html5"
+        // memorizado, mantém o comportamento atual.
         const preferHtml5 =
-          isLive ||
           profile.preferPlayer === "html5" ||
+          (shouldUseNativePlayer && isLive) ||
           (profile.disableProxy && profile.preferPlayer !== "mpegts");
         const tStart = performance.now();
         if (preferHtml5) {
