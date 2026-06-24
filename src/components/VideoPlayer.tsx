@@ -26,6 +26,7 @@ import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live
 import {
   liveDiagStart, liveDiagAttachProbe, liveDiagRecordAttempt,
   liveDiagMarkPlaying, liveDiagMarkFailed, liveDiagLatestFailedFor,
+  liveDiagSetMediaInfo, liveDiagRecordFreeze,
   type LivePlayerKind,
 } from "@/lib/live-diag-store";
 import { LiveDiagPanel } from "@/components/LiveDiagPanel";
