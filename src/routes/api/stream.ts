@@ -189,6 +189,12 @@ async function handle(request: Request) {
   let upstream: Response | null = null;
   let lastError: unknown = null;
   let lastStatus = 0;
+  // Diagnóstico: registra qual UA / header set / URL final realmente respondeu
+  // (independente de 2xx). Vai como X-Upstream-* na resposta pro client logar.
+  let usedUA = "";
+  let usedOriginHeaders = false;
+  let usedFinalUrl = upstreamUrl.toString();
+  let usedRedirected = false;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, range, null]))
     : playlistPath
@@ -212,6 +218,10 @@ async function handle(request: Request) {
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           if (!retryBlocked && !retryBadRange) {
             upstream = res;
+            usedUA = ua;
+            usedOriginHeaders = includeOriginHeaders;
+            usedFinalUrl = res.url || upstreamUrl.toString();
+            usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
             break attempt;
           }
           try { await res.body?.cancel(); } catch { /* noop */ }
@@ -222,9 +232,13 @@ async function handle(request: Request) {
     }
   }
   if (!upstream) {
+    const failHeaders = new Headers(CORS);
+    failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
+    failHeaders.set("X-Upstream-Final-Url", upstreamUrl.toString());
+    failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: lastStatus === 401 || lastStatus === 403 ? lastStatus : 502,
-      headers: CORS,
+      headers: failHeaders,
     });
   }
 
