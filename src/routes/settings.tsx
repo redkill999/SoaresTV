@@ -170,6 +170,7 @@ function SettingsPage() {
       <LanguageDialog     open={open === "language"}       onClose={() => setOpen(null)} />
       <AboutDialog        open={open === "socorro"}        onClose={() => setOpen(null)} />
       <OutrasDialog       open={open === "outras"}         onClose={() => setOpen(null)} />
+      <DiagDialog         open={open === "diag"}           onClose={() => setOpen(null)} />
     </div>
   );
 }
