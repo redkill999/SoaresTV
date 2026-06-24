@@ -295,17 +295,22 @@ export function VideoPlayer({
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
-    // ===== [LIVE PRESET] — perfil de host específico para canais ao vivo ====
-    // Hosts conhecidos (ex.: esma26.top) ou marcados em runtime podem pedir:
-    //   - bypassProxyForLive: pular /api/stream em LIVE (VOD continua via proxy)
-    //   - disableHlsConversion: NÃO converter .ts → .m3u8 automaticamente
-    //   - preferTs: priorizar candidato .ts sobre .m3u8
-    // Isso só afeta o fluxo LIVE; VOD/séries/filmes seguem o caminho atual.
+    // ===== [LIVE PRESET] — padrão global para canais ao vivo ================
+    // Empiricamente, painéis Xtream se comportam melhor em LIVE quando:
+    //   - bypassProxyForLive: pular /api/stream (proxy reescreve headers/range
+    //     e quebra o .ts ao vivo em muitos painéis).
+    //   - disableHlsConversion: NÃO converter .ts → .m3u8 (muitos painéis não
+    //     expõem variante HLS e o hls.js gasta o watchdog antes de desistir).
+    //   - preferTs: priorizar .ts sobre .m3u8.
+    // Esses três são DEFAULT TRUE para LIVE em todos os hosts; qualquer host
+    // pode desativar individualmente setando o campo como `false` via
+    // updateHostProfile(). VOD/séries/filmes seguem o caminho atual.
     const liveHost = hostOf(workingSrc);
     const liveProfile = liveHost ? getHostProfile(liveHost) : {};
     const isLiveUrl = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const liveDisableHls = isLiveUrl && (liveProfile.disableHlsConversion === true || liveProfile.preferTs === true);
-    const liveBypassProxy = isLiveUrl && liveProfile.bypassProxyForLive === true;
+    const liveDisableHls = isLiveUrl && liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false;
+    const liveBypassProxy = isLiveUrl && liveProfile.bypassProxyForLive !== false;
+    const livePreferTs = isLiveUrl && liveProfile.preferTs !== false;
 
     const skipHls =
       compat.streamFormat === "ts" ||
