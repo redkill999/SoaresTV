@@ -432,6 +432,17 @@ export function VideoPlayer({
           return url;
         }
       })();
+      if (import.meta.env.DEV) {
+        console.debug("[player] playDirect", {
+          vodIdx,
+          total: playbackCandidates.length,
+          url,
+          format: detectFormat(decodedUrl),
+          isLive,
+          isVod,
+        });
+      }
+
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
