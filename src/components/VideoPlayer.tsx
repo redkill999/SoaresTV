@@ -138,6 +138,20 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // ===== Painel DEBUG VISUAL (apenas exibe; não interfere na reprodução) =====
+  const [debugInfo, setDebugInfo] = useState<{
+    canal: string;
+    streamId: string;
+    urlOriginal: string;
+    urlFinal: string;
+    formato: string;
+    httpStatus: string;
+    contentType: string;
+    redirect: string;
+    player: string;
+    userAgent: string;
+    motivo: string;
+  } | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
