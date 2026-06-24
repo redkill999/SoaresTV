@@ -393,7 +393,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
 }
 
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between border-b border-white/5 py-2">
       <span className="text-white/60">{label}</span>
