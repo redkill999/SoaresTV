@@ -715,6 +715,10 @@ export function VideoPlayer({
       return 0;
     };
 
+    // [LIVE STABILITY] estatísticas mais recentes do mpegts.js (usado nos
+    // logs de freeze e no relatório de diagnóstico).
+    const mpegtsStats = { decodedFrames: 0, droppedFrames: 0, speedKbps: 0 };
+
     const playMpegTs = async (url: string) => {
       if (!isLive) return false;
       try {
@@ -725,20 +729,54 @@ export function VideoPlayer({
         video.removeAttribute("src");
         video.load();
         lastPlayerStrategy = "mpegts.js";
+        // [LIVE STABILITY] Config relaxada para H.265/HEVC FHD:
+        //  - liveBufferLatencyChasing OFF: deixava o player descartar buffer
+        //    agressivamente para perseguir o edge, causando starvation em
+        //    streams pesados (HEVC FHD).
+        //  - liveBufferLatencyMaxLatency 30s + MinRemain 10s: tolera variação
+        //    de chegada de pacotes sem cortar.
+        //  - enableStashBuffer ON + autoCleanup desligado em janela curta:
+        //    mantém pelo menos ~20s à frente; SourceBuffer só limpa o passado.
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: true, url },
           {
             isLive: true,
             enableWorker: true,
-            enableStashBuffer: false,
-            liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 6,
-            liveBufferLatencyMinRemain: 1,
+            enableStashBuffer: true,
+            stashInitialSize: 384,            // KB inicial — preenche antes de tocar
+            liveBufferLatencyChasing: false,
+            liveBufferLatencyMaxLatency: 30,
+            liveBufferLatencyMinRemain: 10,
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 30,
+            autoCleanupMinBackwardDuration: 10,
+            lazyLoad: false,
+            seekType: "range",
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (...args: unknown[]) => {
           console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
           if (!cancelled) tryNextVod();
+        });
+        // Captura codec/resolução real do stream.
+        tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
+          const m = info as {
+            videoCodec?: string; audioCodec?: string;
+            width?: number; height?: number; fps?: number;
+          };
+          const payload = {
+            videoCodec: m.videoCodec, audioCodec: m.audioCodec,
+            width: m.width, height: m.height, fps: m.fps,
+          };
+          console.log("[LIVE STABILITY] MEDIA_INFO", payload);
+          if (diagSessionIdRef.current) liveDiagSetMediaInfo(diagSessionIdRef.current, payload);
+        });
+        // Estatísticas contínuas (frames/speed).
+        tsPlayer.on(mpegts.Events.STATISTICS_INFO, (info: unknown) => {
+          const s = info as { decodedFrames?: number; droppedFrames?: number; speed?: number };
+          if (s.decodedFrames != null) mpegtsStats.decodedFrames = s.decodedFrames;
+          if (s.droppedFrames != null) mpegtsStats.droppedFrames = s.droppedFrames;
+          if (s.speed != null) mpegtsStats.speedKbps = Math.round(s.speed); // KB/s reportado
         });
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
