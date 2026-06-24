@@ -165,12 +165,21 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   if (!(await canUseNativeHttp())) return null;
   const base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
+  // Se o usuário já forneceu porta explícita (ex.: http://host:8080),
+  // confiamos nela e NÃO expandimos para o waterfall de 10 candidatos.
+  // Isso evitava ~90s preso no botão "Entrando..." no APK cold-start
+  // quando o painel responde de primeira mas a heurística ainda tentava
+  // todas as portas comuns.
+  let hasExplicitPort = false;
   try {
     const u = new URL(base);
-    // Mantemos o origin original sempre como primeira tentativa.
-    for (const scheme of ["http", "https"]) {
-      for (const port of COMMON_XTREAM_PORTS) {
-        candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+    hasExplicitPort = !!u.port;
+    if (!hasExplicitPort) {
+      // Sem porta explícita: expande para portas Xtream comuns.
+      for (const scheme of ["http", "https"]) {
+        for (const port of COMMON_XTREAM_PORTS) {
+          candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+        }
       }
     }
   } catch {
@@ -188,13 +197,13 @@ async function nativeApiWithFallbackPorts<T = unknown>(
       lastError = err;
       consecutiveFailures += 1;
       // Fail-fast: 3 falhas seguidas significam servidor offline / DNS quebrado.
-      // Sem isso, no pior caso esperaríamos timeoutMs × 10 candidatas = 120s.
       if (consecutiveFailures >= 3) break;
     }
   }
   if (lastError) throw lastError;
   return null;
 }
+
 
 export async function api<T = unknown>(
   c: XtreamCreds,
