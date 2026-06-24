@@ -953,6 +953,82 @@ export function VideoPlayer({
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
 
+    // ===== [LIVE STABILITY] Telemetria de estabilidade do <video> ===========
+    // Loga waiting/stalled/suspend/canplay/canplaythrough + currentTime,
+    // buffered, readyState, networkState, bytes/s (estimado pelo crescimento
+    // de buffered). Só ativa para LIVE; VOD segue inalterado.
+    let stabCleanup: (() => void) | null = null;
+    if (isLive) {
+      const fmtRanges = () => {
+        try {
+          const r: string[] = [];
+          for (let i = 0; i < video.buffered.length; i++) {
+            r.push(`[${video.buffered.start(i).toFixed(2)}-${video.buffered.end(i).toFixed(2)}]`);
+          }
+          return r.join(",") || "(vazio)";
+        } catch { return "(erro)"; }
+      };
+      const snapshot = () => ({
+        currentTime: video.currentTime,
+        bufferedAhead: bufferedAhead(),
+        bufferedRanges: fmtRanges(),
+        readyState: video.readyState,
+        networkState: video.networkState,
+        decodedFrames: mpegtsStats.decodedFrames,
+        droppedFrames: mpegtsStats.droppedFrames,
+        speedKbps: mpegtsStats.speedKbps,
+      });
+      const logFreeze = (trigger: "waiting" | "stalled" | "suspend" | "watchdog") => {
+        const snap = snapshot();
+        const payload = { trigger, ...snap, host: hostOf(workingSrc), strategy: lastPlayerStrategy };
+        console.warn("[LIVE STABILITY] FREEZE", payload);
+        if (diagSessionIdRef.current) {
+          liveDiagRecordFreeze(diagSessionIdRef.current, { at: Date.now(), ...snap, trigger });
+        }
+      };
+      const onWaitingStab   = () => logFreeze("waiting");
+      const onStalledStab   = () => logFreeze("stalled");
+      const onSuspendStab   = () => {
+        // suspend é comum quando o browser pausa downloads — só registra se
+        // não estamos com buffer suficiente, evita ruído.
+        if (bufferedAhead() < 5) logFreeze("suspend");
+      };
+      const onCanPlayStab        = () => console.log("[LIVE STABILITY] canplay",        snapshot());
+      const onCanPlayThroughStab = () => console.log("[LIVE STABILITY] canplaythrough", snapshot());
+
+      // Telemetria periódica + estimativa de bytes/s via mpegts.speed.
+      let lastBufEnd = 0;
+      let lastT = performance.now();
+      const tick = setInterval(() => {
+        if (cancelled) return;
+        const now = performance.now();
+        let curBufEnd = 0;
+        try { curBufEnd = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0; } catch { /* noop */ }
+        const dt = (now - lastT) / 1000;
+        const bufGrowthSec = dt > 0 ? (curBufEnd - lastBufEnd) / dt : 0;
+        lastT = now; lastBufEnd = curBufEnd;
+        console.log("[LIVE STABILITY] tick", {
+          ...snapshot(),
+          bufGrowthSecPerSec: Number(bufGrowthSec.toFixed(2)),
+        });
+      }, 5_000);
+
+      video.addEventListener("waiting", onWaitingStab);
+      video.addEventListener("stalled", onStalledStab);
+      video.addEventListener("suspend", onSuspendStab);
+      video.addEventListener("canplay", onCanPlayStab);
+      video.addEventListener("canplaythrough", onCanPlayThroughStab);
+      stabCleanup = () => {
+        clearInterval(tick);
+        video.removeEventListener("waiting", onWaitingStab);
+        video.removeEventListener("stalled", onStalledStab);
+        video.removeEventListener("suspend", onSuspendStab);
+        video.removeEventListener("canplay", onCanPlayStab);
+        video.removeEventListener("canplaythrough", onCanPlayThroughStab);
+      };
+    }
+
+
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
