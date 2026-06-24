@@ -496,6 +496,7 @@ export function VideoPlayer({
     });
 
 
+    const effectStartT = performance.now();
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
     let cancelled = false;
