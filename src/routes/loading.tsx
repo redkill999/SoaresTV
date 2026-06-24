@@ -38,6 +38,16 @@ function LoadingPage() {
     return () => { html.style.background = prevH; body.style.background = prevB; };
   }, []);
 
+  // Guard contra setState pós-unmount: a rota /loading pode ser substituída
+  // (navigate para /home ou /) enquanto runXtream/runM3U ainda têm Promises
+  // pendentes. Sem este flag, React avisa "state update on unmounted" e o
+  // navigate disparado dentro do setStatus final podia rodar 2x.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
@@ -50,7 +60,10 @@ function LoadingPage() {
       return;
     }
 
-    const set = (k: TestKey, s: Status) => setStatus((p) => ({ ...p, [k]: s }));
+    const set = (k: TestKey, s: Status) => {
+      if (!mountedRef.current) return;
+      setStatus((p) => ({ ...p, [k]: s }));
+    };
 
     const runXtream = async () => {
       if (!creds) return false;
@@ -91,12 +104,18 @@ function LoadingPage() {
     };
 
     (async () => {
-      if (creds) await runXtream();
-      else await runM3U();
+      try {
+        if (creds) await runXtream();
+        else await runM3U();
+      } catch {
+        /* runXtream/runM3U já tratam internamente — try/catch defensivo */
+      }
       await wait(700);
+      if (!mountedRef.current) return;
+      // navigate fora do setStatus para evitar trigger duplo via re-render.
       setStatus((p) => {
         const allOk = (Object.keys(p) as TestKey[]).every((k) => p[k] === "ok");
-        if (allOk) navigate({ to: "/home", replace: true });
+        if (allOk && mountedRef.current) navigate({ to: "/home", replace: true });
         return p;
       });
     })();
