@@ -8,6 +8,17 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type List
 // seguintes reusam a mesma referência (sem reparse de bundle nem nova Promise).
 let mpegtsModule: typeof import("mpegts.js").default | null = null;
 let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
+
+// ===== [503 BYPASS] memória de sessão =====================================
+// Hosts (ex.: "esma26.top") cujo proxy /api/stream respondeu 503 ao menos uma
+// vez nesta sessão. Para esses hosts, priorizamos candidatos diretos (sem
+// proxy) já na próxima reprodução, evitando perder tempo no proxy. NÃO é
+// persistido — reinicia a cada recarregamento. Não altera nada para hosts
+// que continuam funcionando via proxy.
+const bypass503Hosts = new Set<string>();
+function hostOf(u: string): string | null {
+  try { return new URL(u).host.toLowerCase(); } catch { return null; }
+}
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
   if (!mpegtsLoading) {
