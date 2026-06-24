@@ -136,6 +136,11 @@ function migrateLegacyOnce(map: ProfileMap): ProfileMap {
 
 // Cache em memória — leitura síncrona, escrita propaga pro storage.
 const memory: ProfileMap = migrateLegacyOnce(readStorage());
+// Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
+// sobrescrevendo: preset → storage → updateHostProfile.
+for (const [host, preset] of Object.entries(HOST_PRESETS)) {
+  memory[host] = { ...preset, ...memory[host] };
+}
 if (Object.keys(memory).length) {
   console.log("[HOST PROFILE] perfis carregados", {
     hosts: Object.keys(memory),
