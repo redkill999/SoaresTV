@@ -737,7 +737,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else setError("Conexão instável com o canal. Tente novamente.");
+                  else { void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
                   return;
                 }
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
