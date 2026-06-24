@@ -274,7 +274,7 @@ function PlayerPage() {
               onProgress={handleProgress}
             />
           ) : (
-            <PlayerLoadingOrError type={type} onBack={closePlayer} />
+            <PlayerLoadingOrError type={type ?? "movie"} onBack={closePlayer} />
           )}
 
         </div>
