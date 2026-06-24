@@ -692,7 +692,8 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, () => {
+        tsPlayer.on(mpegts.Events.ERROR, (...args: unknown[]) => {
+          console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
           if (!cancelled) tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
