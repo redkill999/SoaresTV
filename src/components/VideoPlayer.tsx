@@ -375,7 +375,7 @@ export function VideoPlayer({
         host: liveHost,
         bypassProxyForLive: liveBypassProxy,
         disableHlsConversion: liveDisableHls,
-        preferTs: liveProfile.preferTs === true,
+        preferTs: livePreferTs,
       });
     }
 
