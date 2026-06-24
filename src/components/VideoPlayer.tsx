@@ -657,6 +657,10 @@ export function VideoPlayer({
             ultimaEstrategia: lastPlayerStrategy,
           });
           void reportPlaybackFailure("Todos os candidatos falharam");
+          if (isLive && diagSessionIdRef.current) {
+            liveDiagMarkFailed(diagSessionIdRef.current, "Todos os candidatos falharam");
+            setDiagOpen(true);
+          }
           setError(msg);
         }
       });
