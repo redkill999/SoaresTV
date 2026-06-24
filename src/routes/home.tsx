@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { api, xtreamCredsFromUrl } from "@/lib/xtream";
