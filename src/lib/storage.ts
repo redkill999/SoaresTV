@@ -114,9 +114,21 @@ function read<T>(k: string, fallback: T): T {
     const raw = localStorage.getItem(k);
     const cached = snapshots[k];
     if (cached && cached.raw === raw) return cached.value as T;
-    const value = raw ? (JSON.parse(raw) as T) : fallback;
-    snapshots[k] = { raw, value };
-    return value;
+    if (!raw) {
+      snapshots[k] = { raw, value: fallback };
+      return fallback;
+    }
+    const parsed = JSON.parse(raw) as T;
+    // Defensivo: se o fallback é array mas o parsed não é (corrupção / mudança
+    // de formato em versão antiga), devolve fallback em vez de quebrar caller
+    // que faria .filter/.some/.map. Não apaga o registro — usuário pode
+    // recuperar manualmente; só evita crash silencioso.
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) {
+      snapshots[k] = { raw, value: fallback };
+      return fallback;
+    }
+    snapshots[k] = { raw, value: parsed };
+    return parsed;
   } catch {
     return fallback;
   }
