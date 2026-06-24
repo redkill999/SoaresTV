@@ -31,6 +31,7 @@ import {
 } from "@/lib/live-diag-store";
 import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 import { DEBUG } from "@/lib/debug";
+import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -486,6 +487,13 @@ export function VideoPlayer({
         candidatos: playbackCandidates.length,
       });
     } catch { /* noop */ }
+
+    auditEvent(diagSessionIdRef.current, "channel-open", {
+      src, kind, host: hostOf(workingSrc), isLive, isVod, candidates: playbackCandidates.length,
+    });
+    auditEvent(diagSessionIdRef.current, "engine-pick", {
+      ordem: decideEngineOrder(hostOf(workingSrc), kind, shouldUseNativePlayer ? "native-apk" : "web"),
+    });
 
 
     let hls: Hls | null = null;
