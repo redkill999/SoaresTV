@@ -249,6 +249,13 @@ async function handle(request: Request) {
     /\.m3u(\?|$)/i.test(upstreamUrl.pathname);
 
   const respHeaders = new Headers(CORS);
+  // Diagnóstico (lido pelo player no client p/ relatório de "Erro de reprodução")
+  respHeaders.set("X-Upstream-Status", String(upstream.status));
+  respHeaders.set("X-Upstream-Content-Type", ct || "");
+  respHeaders.set("X-Upstream-Final-Url", usedFinalUrl);
+  respHeaders.set("X-Upstream-User-Agent", usedUA);
+  respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
+  respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
   if (!upstream.ok) {
     if (isVod) {
       return Response.json(
