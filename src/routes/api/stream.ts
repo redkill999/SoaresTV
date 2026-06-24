@@ -303,7 +303,17 @@ async function handle(request: Request) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
     return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
   }
-  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
+  // FIX WEB-LIVE: NÃO converter 200→206 em LIVE .ts. mpegts.js no navegador
+  // desktop fetcha o stream esperando entrega contínua (Transfer-Encoding:
+  // chunked / open-ended). Se forçarmos 206 + Content-Range finito, ele
+  // assume "arquivo de N bytes", para de ler quando atinge N e dispara
+  // ERROR sem ter recebido frame algum (causa do bug "buffer starvation"
+  // no relatório). Mantemos o ajuste só para fluxos que NÃO sejam .ts live.
+  const isLiveTs = /\.ts(\?|$)/i.test(upstreamUrl.pathname) && !isVod;
+  if (
+    requestedRange?.trim().toLowerCase() === "bytes=0-" &&
+    !isVod && !isLiveTs && status === 200 && contentLength
+  ) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
       status = 206;
