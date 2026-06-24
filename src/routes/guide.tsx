@@ -190,7 +190,7 @@ function GuidePage() {
       {streamsQ.isLoading ? (
         <div className="py-20 text-center text-sm text-muted-foreground">Carregando canais…</div>
       ) : (
-        <div className="rounded-2xl border border-white/10 bg-card/40 backdrop-blur overflow-hidden">
+        <div className="rounded-2xl border border-white/10 bg-card/40 backdrop-blur overflow-hidden flex-1 min-h-0 flex flex-col">
           {/* Hour ruler */}
           <div className="flex border-b border-white/10 bg-black/30">
             <div
