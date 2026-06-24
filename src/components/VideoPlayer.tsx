@@ -771,7 +771,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
+                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 774, funcao: "attachHls()/hls.on(ERROR) NETWORK_ERROR", motivo: "hls.js retornou NETWORK_ERROR fatal após esgotar netRetries e sem candidato direto restante." }); void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
                   return;
                 }
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
