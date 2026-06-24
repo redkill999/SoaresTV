@@ -757,7 +757,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else setError("Erro de mídia no canal. Tente novamente.");
+                  else { void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
                   return;
                 }
                 hls?.recoverMediaError();
