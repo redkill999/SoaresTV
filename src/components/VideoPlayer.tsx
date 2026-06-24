@@ -110,10 +110,11 @@ function httpsVariant(url: string): string | null {
     if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
     const host = parsed.host.toLowerCase();
     // [HTTPS SKIP] host marcado como IPTV sem HTTPS — manter http original.
-    if (noHttpsHosts.has(host)) {
+    if (getHostProfile(host).forceHttp) {
       console.log("[HTTPS SKIP] upgrade ignorado", { host, protocoloOriginal: "http", protocoloUtilizado: "http" });
       return null;
     }
+
     parsed.protocol = "https:";
     if (parsed.port === "80") parsed.port = "";
     return parsed.toString();
