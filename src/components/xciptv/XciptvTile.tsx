@@ -1,11 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { Heart } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
-export function XciptvTile({
+// FIX (audit TV): memo evita re-render dos 240 tiles visíveis quando o pai
+// (LivePage/LiveGrid) re-renderiza por outro motivo (clock, troca de
+// categoria, etc.). Combinado com useIsFavorite granular, um toggle de
+// favorito agora re-renderiza só o tile afetado.
+export const XciptvTile = memo(function XciptvTile({
+
   type,
   id,
   name,
