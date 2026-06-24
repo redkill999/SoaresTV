@@ -565,6 +565,11 @@ export function VideoPlayer({
             vodIdx,
             totalCandidatos: playbackCandidates.length,
           });
+          plog("final-fail", {
+            host: hostOf(workingSrc),
+            tentativas: playbackCandidates.length,
+            ultimaEstrategia: lastPlayerStrategy,
+          });
           void reportPlaybackFailure("Todos os candidatos falharam");
           setError(msg);
         }
