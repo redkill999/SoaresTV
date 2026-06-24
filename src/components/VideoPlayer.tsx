@@ -816,7 +816,15 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
-        currentPlaybackUrl = url;
+        // FIX WEB-LIVE: mpegts.js com enableWorker=true faz fetch dentro de um
+        // Web Worker (WorkerGlobalScope), que NÃO resolve URLs relativas
+        // (`/api/stream?...`) — erro "Failed to parse URL". Absolutizamos
+        // contra window.location.origin antes de criar o player.
+        const absoluteUrl =
+          /^https?:\/\//i.test(url) || typeof window === "undefined"
+            ? url
+            : new URL(url, window.location.origin).toString();
+        currentPlaybackUrl = absoluteUrl;
         lastPlayerStrategy = "mpegts.js";
         // [LIVE STABILITY] Config relaxada para H.265/HEVC FHD:
         //  - liveBufferLatencyChasing OFF: deixava o player descartar buffer
