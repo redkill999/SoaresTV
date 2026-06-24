@@ -425,6 +425,15 @@ export function VideoPlayer({
       if (vodIdx < playbackCandidates.length) playDirect();
       else {
         const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+        console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
+          arquivo: "src/components/VideoPlayer.tsx",
+          linha: 429,
+          funcao: "tryNextVod()",
+          motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
+          mensagem: msg,
+          vodIdx,
+          totalCandidatos: playbackCandidates.length,
+        });
         void reportPlaybackFailure("Todos os candidatos falharam");
         setError(msg);
       }
