@@ -495,6 +495,7 @@ export function VideoPlayer({
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
     let currentHlsUrl: string | null = null;
+    let currentPlaybackUrl: string | null = null;
     // Estratégia de player atualmente em uso (alimenta o painel DEBUG VISUAL).
     let lastPlayerStrategy = "(indef)";
     let detachStallListeners: (() => void) | null = null;
@@ -716,6 +717,10 @@ export function VideoPlayer({
       return 0;
     };
 
+    const safeDecodeUrl = (url: string) => {
+      try { return decodeURIComponent(url); } catch { return url; }
+    };
+
     // [LIVE STABILITY] estatísticas mais recentes do mpegts.js (usado nos
     // logs de freeze e no relatório de diagnóstico).
     const mpegtsStats = { decodedFrames: 0, droppedFrames: 0, speedKbps: 0 };
@@ -729,14 +734,15 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
+        currentPlaybackUrl = url;
         lastPlayerStrategy = "mpegts.js";
         // [LIVE STABILITY] Config relaxada para H.265/HEVC FHD:
         //  - liveBufferLatencyChasing OFF: deixava o player descartar buffer
         //    agressivamente para perseguir o edge, causando starvation em
         //    streams pesados (HEVC FHD).
-        //  - liveBufferLatencyMaxLatency 30s + MinRemain 10s: tolera variação
+        //  - liveBufferLatencyMaxLatency 45s + MinRemain 20s: tolera variação
         //    de chegada de pacotes sem cortar.
-        //  - enableStashBuffer ON + autoCleanup desligado em janela curta:
+        //  - enableStashBuffer ON + autoCleanup agressivo desligado:
         //    mantém pelo menos ~20s à frente; SourceBuffer só limpa o passado.
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: true, url },
@@ -744,13 +750,11 @@ export function VideoPlayer({
             isLive: true,
             enableWorker: true,
             enableStashBuffer: true,
-            stashInitialSize: 384,            // KB inicial — preenche antes de tocar
+            stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
             liveBufferLatencyChasing: false,
-            liveBufferLatencyMaxLatency: 30,
-            liveBufferLatencyMinRemain: 10,
-            autoCleanupSourceBuffer: true,
-            autoCleanupMaxBackwardDuration: 30,
-            autoCleanupMinBackwardDuration: 10,
+            liveBufferLatencyMaxLatency: 45,
+            liveBufferLatencyMinRemain: 20,
+            autoCleanupSourceBuffer: false,
             lazyLoad: false,
             seekType: "range",
           },
@@ -801,13 +805,8 @@ export function VideoPlayer({
       destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
-      const decodedUrl = (() => {
-        try {
-          return decodeURIComponent(url);
-        } catch {
-          return url;
-        }
-      })();
+      currentPlaybackUrl = url;
+      const decodedUrl = safeDecodeUrl(url);
       if (import.meta.env.DEV) {
         console.debug("[player] playDirect", {
           vodIdx,
@@ -974,8 +973,14 @@ export function VideoPlayer({
         bufferedRanges: fmtRanges(),
         readyState: video.readyState,
         networkState: video.networkState,
-        decodedFrames: mpegtsStats.decodedFrames,
-        droppedFrames: mpegtsStats.droppedFrames,
+        decodedFrames: (() => {
+          const q = typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality() : null;
+          return mpegtsStats.decodedFrames || q?.totalVideoFrames || 0;
+        })(),
+        droppedFrames: (() => {
+          const q = typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality() : null;
+          return mpegtsStats.droppedFrames || q?.droppedVideoFrames || 0;
+        })(),
         speedKbps: mpegtsStats.speedKbps,
       });
       const logFreeze = (trigger: "waiting" | "stalled" | "suspend" | "watchdog") => {
@@ -986,19 +991,120 @@ export function VideoPlayer({
           liveDiagRecordFreeze(diagSessionIdRef.current, { at: Date.now(), ...snap, trigger });
         }
       };
-      const onWaitingStab   = () => logFreeze("waiting");
-      const onStalledStab   = () => logFreeze("stalled");
+      let liveRecoveryBusy = false;
+      let lastLiveRecoveryAt = 0;
+      let html5LiveReconnects = 0;
+      let pendingRecoverTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearPendingRecover = () => {
+        if (pendingRecoverTimer) clearTimeout(pendingRecoverTimer);
+        pendingRecoverTimer = null;
+      };
+      const nudgeIntoBufferedRange = () => {
+        const ahead = bufferedAhead();
+        if (ahead <= 2) return false;
+        try {
+          video.currentTime = Math.min(video.currentTime + 0.35, video.currentTime + Math.max(0.1, ahead - 0.5));
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const recoverLiveWebStall = (reason: "waiting" | "stalled" | "suspend" | "watchdog") => {
+        if (cancelled || liveRecoveryBusy) return;
+        const now = Date.now();
+        if (now - lastLiveRecoveryAt < 7_000) return;
+        lastLiveRecoveryAt = now;
+        const url = currentPlaybackUrl ?? playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+        const decoded = safeDecodeUrl(url);
+        const ahead = bufferedAhead();
+        console.warn("[LIVE STABILITY] RECOVERY", {
+          reason,
+          strategy: lastPlayerStrategy,
+          url,
+          bufferAhead: Number(ahead.toFixed(2)),
+          html5LiveReconnects,
+        });
+        liveRecoveryBusy = true;
+        const finish = () => { liveRecoveryBusy = false; };
+
+        // HTML5 direto com .ts consegue abrir em vários Androids, mas às vezes
+        // congela sem disparar erro. Reconecta ao edge LIVE sem recarregar a tela;
+        // se repetir, troca para mpegts.js como fallback do mesmo candidato.
+        if (lastPlayerStrategy.startsWith("HTML5") && /\.ts(\?|&|$)/i.test(decoded)) {
+          if (html5LiveReconnects < 2) {
+            html5LiveReconnects += 1;
+            try {
+              video.pause();
+              video.src = url;
+              video.load();
+              void video.play().finally(finish);
+            } catch {
+              finish();
+            }
+            return;
+          }
+          void playMpegTs(url).finally(finish);
+          return;
+        }
+
+        if (lastPlayerStrategy.startsWith("mpegts") && tsPlayer) {
+          try {
+            if (!nudgeIntoBufferedRange()) {
+              tsPlayer.unload();
+              tsPlayer.load();
+            }
+            const p = tsPlayer.play();
+            if (p && typeof p.then === "function") void p.finally(finish);
+            else finish();
+          } catch {
+            finish();
+          }
+          return;
+        }
+
+        if (lastPlayerStrategy.startsWith("HLS") && hls) {
+          try {
+            hls.startLoad();
+            nudgeIntoBufferedRange();
+            void video.play().finally(finish);
+          } catch {
+            finish();
+          }
+          return;
+        }
+
+        if (!nudgeIntoBufferedRange()) {
+          try { video.load(); } catch { /* noop */ }
+        }
+        void video.play().finally(finish);
+      };
+      const scheduleRecovery = (trigger: "waiting" | "stalled" | "suspend" | "watchdog") => {
+        clearPendingRecover();
+        pendingRecoverTimer = setTimeout(() => {
+          pendingRecoverTimer = null;
+          if (cancelled || video.paused || video.ended) return;
+          if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 2) {
+            logFreeze(trigger);
+            recoverLiveWebStall(trigger);
+          }
+        }, 4_000);
+      };
+      const onWaitingStab   = () => { logFreeze("waiting"); scheduleRecovery("waiting"); };
+      const onStalledStab   = () => { logFreeze("stalled"); scheduleRecovery("stalled"); };
       const onSuspendStab   = () => {
         // suspend é comum quando o browser pausa downloads — só registra se
         // não estamos com buffer suficiente, evita ruído.
-        if (bufferedAhead() < 5) logFreeze("suspend");
+        if (bufferedAhead() < 5) { logFreeze("suspend"); scheduleRecovery("suspend"); }
       };
       const onCanPlayStab        = () => console.log("[LIVE STABILITY] canplay",        snapshot());
       const onCanPlayThroughStab = () => console.log("[LIVE STABILITY] canplaythrough", snapshot());
+      const onPlayingStab        = () => { clearPendingRecover(); };
 
       // Telemetria periódica + estimativa de bytes/s via mpegts.speed.
       let lastBufEnd = 0;
       let lastT = performance.now();
+      let lastMediaTime = video.currentTime;
+      let noProgressTicks = 0;
       const tick = setInterval(() => {
         if (cancelled) return;
         const now = performance.now();
@@ -1007,9 +1113,19 @@ export function VideoPlayer({
         const dt = (now - lastT) / 1000;
         const bufGrowthSec = dt > 0 ? (curBufEnd - lastBufEnd) / dt : 0;
         lastT = now; lastBufEnd = curBufEnd;
+        const moved = Math.abs(video.currentTime - lastMediaTime);
+        lastMediaTime = video.currentTime;
+        if (!video.paused && !video.ended && moved < 0.15) noProgressTicks += 1;
+        else noProgressTicks = 0;
+        if (noProgressTicks >= 2) {
+          noProgressTicks = 0;
+          logFreeze("watchdog");
+          recoverLiveWebStall("watchdog");
+        }
         console.log("[LIVE STABILITY] tick", {
           ...snapshot(),
           bufGrowthSecPerSec: Number(bufGrowthSec.toFixed(2)),
+          noProgressTicks,
         });
       }, 5_000);
 
@@ -1018,13 +1134,16 @@ export function VideoPlayer({
       video.addEventListener("suspend", onSuspendStab);
       video.addEventListener("canplay", onCanPlayStab);
       video.addEventListener("canplaythrough", onCanPlayThroughStab);
+      video.addEventListener("playing", onPlayingStab);
       stabCleanup = () => {
         clearInterval(tick);
+        clearPendingRecover();
         video.removeEventListener("waiting", onWaitingStab);
         video.removeEventListener("stalled", onStalledStab);
         video.removeEventListener("suspend", onSuspendStab);
         video.removeEventListener("canplay", onCanPlayStab);
         video.removeEventListener("canplaythrough", onCanPlayThroughStab);
+        video.removeEventListener("playing", onPlayingStab);
       };
     }
 
@@ -1032,6 +1151,7 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      currentPlaybackUrl = url;
       if (import.meta.env.DEV) console.debug("[player] attachHls", { url, isLive, kind, forcedUA });
       // Watchdog de abertura para LIVE: se o manifesto não for parseado em 15s,
       // abandona o caminho HLS e cai direto pro .ts (mpegts.js/native).
@@ -1059,16 +1179,15 @@ export function VideoPlayer({
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Config estável (revertida da versão agressiva que travava abertura).
-          // Live: buffer enxuto, como o player nativo do APK trabalha.
+          // Config estável para LIVE: buffer mais folgado, sem latência agressiva.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          // hls.js mantém ainda assim ~30-90s de buffer à frente — suficiente.
-          backBufferLength: isLive ? 10 : 30,
-          maxBufferLength: isLive ? 30 : 60,
-          maxMaxBufferLength: isLive ? 60 : 180,
-          maxBufferSize: isLive ? 60 * 1000 * 1000 : 90 * 1000 * 1000,
-          maxBufferHole: isLive ? 1.5 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 2 : 3,
+          // hls.js mantém ~20-45s à frente em LIVE para reduzir starvation.
+          backBufferLength: isLive ? 20 : 30,
+          maxBufferLength: isLive ? 45 : 60,
+          maxMaxBufferLength: isLive ? 90 : 180,
+          maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
+          maxBufferHole: isLive ? 2 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 3 : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
           fragLoadingMaxRetry: 8,
@@ -1080,8 +1199,8 @@ export function VideoPlayer({
           levelLoadingTimeOut: 15_000,
           // Fica mais perto do edge (como nativo) e re-sincroniza rápido
           // quando a latência sobe — evita travar acumulando atraso.
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10,
+          liveSyncDurationCount: 5,
+          liveMaxLatencyDurationCount: 15,
           // Live: começa pelo nível mais baixo e sem teste de banda — muitos
           // servidores IPTV não respondem ao probe de bandwidth do hls.js
           // (era o que travava a abertura dos canais no APK).
