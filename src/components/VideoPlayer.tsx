@@ -295,9 +295,22 @@ export function VideoPlayer({
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
+    // ===== [LIVE PRESET] — perfil de host específico para canais ao vivo ====
+    // Hosts conhecidos (ex.: esma26.top) ou marcados em runtime podem pedir:
+    //   - bypassProxyForLive: pular /api/stream em LIVE (VOD continua via proxy)
+    //   - disableHlsConversion: NÃO converter .ts → .m3u8 automaticamente
+    //   - preferTs: priorizar candidato .ts sobre .m3u8
+    // Isso só afeta o fluxo LIVE; VOD/séries/filmes seguem o caminho atual.
+    const liveHost = hostOf(workingSrc);
+    const liveProfile = liveHost ? getHostProfile(liveHost) : {};
+    const isLiveUrl = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
+    const liveDisableHls = isLiveUrl && (liveProfile.disableHlsConversion === true || liveProfile.preferTs === true);
+    const liveBypassProxy = isLiveUrl && liveProfile.bypassProxyForLive === true;
+
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
+      liveDisableHls ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -306,7 +319,7 @@ export function VideoPlayer({
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
+    const isLive = isLiveUrl;
     const vodCandidates: string[] = [];
     const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
     if (vodMatch && (!hlsCandidate || isVod)) {
@@ -342,7 +355,24 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : directCandidates.map((url) => proxiedX(url, kind));
+      : liveBypassProxy
+        // LIVE com bypass de proxy: ORIGINAL direto → https direto → proxy (fallback).
+        ? Array.from(new Set(directCandidates.flatMap((url) => {
+            const secure = httpsVariant(url);
+            return [url, secure, proxiedX(url, kind)].filter(Boolean) as string[];
+          })))
+        : directCandidates.map((url) => proxiedX(url, kind));
+
+    if (isLive) {
+      console.log("[LIVE ORIGINAL URL]", src);
+      console.log("[LIVE FINAL URL] ordem de tentativa:", playbackCandidates);
+      console.log("[LIVE PROXY STATUS]", {
+        host: liveHost,
+        bypassProxyForLive: liveBypassProxy,
+        disableHlsConversion: liveDisableHls,
+        preferTs: liveProfile.preferTs === true,
+      });
+    }
 
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
     // Se já vimos esse host responder 503 antes, prioriza diretos.
