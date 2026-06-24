@@ -842,8 +842,20 @@ export function VideoPlayer({
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (...args: unknown[]) => {
-          console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
-          if (!cancelled) tryNextVod();
+          // mpegts.js emite ERROR como (type, details, info?). Capturamos
+          // tudo para que o diagnóstico LIVE mostre o motivo real (Network
+          // EarlyEof, CodeError, MediaError MSE_ADD_SOURCEBUFFER, etc.) em
+          // vez do genérico "mpegts.js".
+          const [errType, errDetails, errInfo] = args as [unknown, unknown, unknown];
+          const detailMsg =
+            (errInfo && typeof errInfo === "object" && "msg" in (errInfo as Record<string, unknown>)
+              ? String((errInfo as { msg?: unknown }).msg ?? "")
+              : "") ||
+            (typeof errDetails === "string" ? errDetails : "") ||
+            "";
+          const composed = [errType, errDetails, detailMsg].filter(Boolean).join(" | ");
+          console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, type: errType, details: errDetails, info: errInfo });
+          if (!cancelled) tryNextVod(`mpegts.js: ${composed || "unknown"}`);
         });
         // FIX D5 (audit IPTV): provedor que fecha a conexão TS graciosamente
         // (sem RST) dispara LOADING_COMPLETE — antes não havia handler e o
