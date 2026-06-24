@@ -4,7 +4,7 @@ import {
   Smartphone, User, SlidersHorizontal, PlayCircle, Network, RefreshCw,
   Lock, Gauge, CloudUpload, Tv2, Globe, LifeBuoy,
   Settings2, Eraser, LogOut, ArrowLeft, Plus, Trash2, ChevronRight,
-  Upload, Download, CheckCircle2, Sliders,
+  Upload, Download, CheckCircle2, Sliders, Stethoscope, ClipboardCopy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
