@@ -831,6 +831,7 @@ export function VideoPlayer({
         });
 
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        lastPlayerStrategy = "HTML5 nativo (HLS Safari/iOS)";
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
