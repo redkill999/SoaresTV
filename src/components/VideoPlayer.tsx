@@ -30,6 +30,7 @@ import {
   type LivePlayerKind,
 } from "@/lib/live-diag-store";
 import { LiveDiagPanel } from "@/components/LiveDiagPanel";
+import { DEBUG } from "@/lib/debug";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -1122,11 +1123,13 @@ export function VideoPlayer({
           logFreeze("watchdog");
           recoverLiveWebStall("watchdog");
         }
-        console.log("[LIVE STABILITY] tick", {
-          ...snapshot(),
-          bufGrowthSecPerSec: Number(bufGrowthSec.toFixed(2)),
-          noProgressTicks,
-        });
+        if (DEBUG) {
+          console.log("[LIVE STABILITY] tick", {
+            ...snapshot(),
+            bufGrowthSecPerSec: Number(bufGrowthSec.toFixed(2)),
+            noProgressTicks,
+          });
+        }
       }, 5_000);
 
       video.addEventListener("waiting", onWaitingStab);
