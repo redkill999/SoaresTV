@@ -103,8 +103,9 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 30_000,
+  timeoutMs = 8_000,
 ): Promise<NativeHttpResponse | null> {
+
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
@@ -164,12 +165,21 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   if (!(await canUseNativeHttp())) return null;
   const base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
+  // Se o usuário já forneceu porta explícita (ex.: http://host:8080),
+  // confiamos nela e NÃO expandimos para o waterfall de 10 candidatos.
+  // Isso evitava ~90s preso no botão "Entrando..." no APK cold-start
+  // quando o painel responde de primeira mas a heurística ainda tentava
+  // todas as portas comuns.
+  let hasExplicitPort = false;
   try {
     const u = new URL(base);
-    // Mantemos o origin original sempre como primeira tentativa.
-    for (const scheme of ["http", "https"]) {
-      for (const port of COMMON_XTREAM_PORTS) {
-        candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+    hasExplicitPort = !!u.port;
+    if (!hasExplicitPort) {
+      // Sem porta explícita: expande para portas Xtream comuns.
+      for (const scheme of ["http", "https"]) {
+        for (const port of COMMON_XTREAM_PORTS) {
+          candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+        }
       }
     }
   } catch {
@@ -187,13 +197,13 @@ async function nativeApiWithFallbackPorts<T = unknown>(
       lastError = err;
       consecutiveFailures += 1;
       // Fail-fast: 3 falhas seguidas significam servidor offline / DNS quebrado.
-      // Sem isso, no pior caso esperaríamos timeoutMs × 10 candidatas = 120s.
       if (consecutiveFailures >= 3) break;
     }
   }
   if (lastError) throw lastError;
   return null;
 }
+
 
 export async function api<T = unknown>(
   c: XtreamCreds,
@@ -245,18 +255,31 @@ export async function login(c: XtreamCreds) {
   }
 
   // 2) Se nativo não trouxe nada (web OU APK com painel bloqueando UA/IP),
-  //    usa o proxy do server-fn — que rotaciona UAs estilo Xciptv/Smarters.
-  const r =
-    nativeRes?.data ??
-    (await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
-      c,
-    ));
+  //    vai DIRETO pro proxy do server-fn — sem chamar api() de novo, porque
+  //    api() repetiria o waterfall nativo que já falhou acima (custo dobrado
+  //    no APK cold-start).
+  let r: { user_info?: { auth?: number | string; status?: string }; server_info?: unknown } | undefined =
+    nativeRes?.data;
+  if (!r) {
+    const preferredUA = getUAHint(c.server);
+    const proxied = await xtreamApi({ data: { ...c, preferredUA } });
+    if (!proxied.ok) {
+      const msg =
+        "error" in proxied && typeof proxied.error === "string"
+          ? proxied.error
+          : "Resposta inválida do servidor";
+      throw new Error(msg);
+    }
+    if ("ua" in proxied && typeof proxied.ua === "string") setUAHint(c.server, proxied.ua);
+    r = proxied.data as typeof r;
+  }
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
   if (nativeRes?.creds.server) c.server = nativeRes.creds.server;
   return r;
 }
+
 
 export async function discoverPanelServer(c: XtreamCreds) {
   return discoverPanelXtreamServer({ data: c });
