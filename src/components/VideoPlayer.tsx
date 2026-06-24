@@ -623,8 +623,27 @@ export function VideoPlayer({
       }
     };
 
+    const recordFailedAttempt = (errMsg?: string) => {
+      if (!isLive || !diagSessionIdRef.current) return;
+      let kind: LivePlayerKind = "unknown";
+      if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
+      else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
+      else if (lastPlayerStrategy.startsWith("HTML5")) kind = "html5";
+      const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+      const ve = videoRef.current?.error ?? null;
+      liveDiagRecordAttempt(diagSessionIdRef.current, {
+        player: kind,
+        url,
+        result: "fail",
+        error: errMsg ?? ve?.message ?? lastPlayerStrategy,
+        videoErrorCode: ve?.code ?? null,
+        at: Date.now(),
+      });
+    };
+
     const tryNextVod = () => {
       clearWatchdog();
+      recordFailedAttempt();
       if (hls) {
         hls.destroy();
         hls = null;
