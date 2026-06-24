@@ -1071,11 +1071,30 @@ export function VideoPlayer({
           return false;
         }
       };
+      // FIX D8 (audit IPTV): escalada de stalls recorrentes. Antes, o sistema
+      // ficava em loop eterno de recovery sem nunca trocar de candidato. Agora:
+      // 4 stalls em 60s do MESMO candidato → tryNextVod(). VOD usa watchdog
+      // próprio, então isso só vale para LIVE.
+      const webStallTimestamps: number[] = [];
       const recoverLiveWebStall = (reason: "waiting" | "stalled" | "suspend" | "watchdog") => {
         if (cancelled || liveRecoveryBusy) return;
         const now = Date.now();
         if (now - lastLiveRecoveryAt < 7_000) return;
         lastLiveRecoveryAt = now;
+        webStallTimestamps.push(now);
+        while (webStallTimestamps.length && now - webStallTimestamps[0] > 60_000) {
+          webStallTimestamps.shift();
+        }
+        if (webStallTimestamps.length >= 4) {
+          console.warn("[STALL ESCALATION] 4 stalls em 60s no mesmo candidato — escalando para próximo", {
+            strategy: lastPlayerStrategy,
+            vodIdx,
+            total: playbackCandidates.length,
+          });
+          webStallTimestamps.length = 0;
+          tryNextVod();
+          return;
+        }
         const url = currentPlaybackUrl ?? playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
         const decoded = safeDecodeUrl(url);
         const ahead = bufferedAhead();
@@ -1088,6 +1107,7 @@ export function VideoPlayer({
         });
         liveRecoveryBusy = true;
         const finish = () => { liveRecoveryBusy = false; };
+
 
         // HTML5 direto com .ts consegue abrir em vários Androids, mas às vezes
         // congela sem disparar erro. Reconecta ao edge LIVE sem recarregar a tela;
