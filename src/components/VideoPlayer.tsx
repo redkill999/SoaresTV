@@ -771,7 +771,7 @@ export function VideoPlayer({
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
-              else setError("Não foi possível reproduzir este canal.");
+              else { void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
           }
         });
 
