@@ -138,6 +138,20 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // ===== Painel DEBUG VISUAL (apenas exibe; não interfere na reprodução) =====
+  const [debugInfo, setDebugInfo] = useState<{
+    canal: string;
+    streamId: string;
+    urlOriginal: string;
+    urlFinal: string;
+    formato: string;
+    httpStatus: string;
+    contentType: string;
+    redirect: string;
+    player: string;
+    userAgent: string;
+    motivo: string;
+  } | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
@@ -243,6 +257,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
+    setDebugInfo(null);
     setCanManualPlay(false);
 
     // ---- Compatibilidade por lista ----------------------------------------
@@ -348,6 +363,8 @@ export function VideoPlayer({
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
     let currentHlsUrl: string | null = null;
+    // Estratégia de player atualmente em uso (alimenta o painel DEBUG VISUAL).
+    let lastPlayerStrategy = "(indef)";
     let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
@@ -408,11 +425,31 @@ export function VideoPlayer({
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
+          playerEstrategia: lastPlayerStrategy,
+        });
+        // Alimenta o painel DEBUG VISUAL na tela (APK sem acesso ao logcat).
+        const streamId = (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? "(n/d)";
+        const canalRotulo = (src.match(/\/live\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
+          ?? (src.match(/\/movie\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
+          ?? streamId;
+        setDebugInfo({
+          canal: canalRotulo,
+          streamId,
+          urlOriginal: src,
+          urlFinal: upstreamFinal || currentUrl,
+          formato: detectFormat(workingSrc),
+          httpStatus: `proxy=${probeStatus} • upstream=${upstreamStatus || "n/d"}`,
+          contentType: upstreamCt || "(n/d)",
+          redirect: upstreamRedirected === "1" ? `sim → ${upstreamFinal}` : "não",
+          player: lastPlayerStrategy,
+          userAgent: upstreamUA || forcedUA || "(auto)",
+          motivo: reason,
         });
       } catch {
         /* noop */
       }
     };
+
 
     const tryNextVod = () => {
       clearWatchdog();
@@ -477,6 +514,7 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
+        lastPlayerStrategy = "mpegts.js";
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: true, url },
           {
@@ -538,6 +576,7 @@ export function VideoPlayer({
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
+            lastPlayerStrategy = "HTML5 <video> (.ts direto)";
             video.pause();
             video.currentTime = 0;
             video.src = url;
@@ -547,6 +586,7 @@ export function VideoPlayer({
         });
         return;
       }
+      lastPlayerStrategy = "HTML5 <video>";
       video.pause();
       video.currentTime = 0;
       video.src = url;
@@ -594,6 +634,7 @@ export function VideoPlayer({
       }
       if (Hls.isSupported()) {
 
+        lastPlayerStrategy = "HLS (hls.js)";
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
@@ -810,6 +851,7 @@ export function VideoPlayer({
         });
 
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        lastPlayerStrategy = "HTML5 nativo (HLS Safari/iOS)";
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
@@ -1043,6 +1085,37 @@ export function VideoPlayer({
       {error && (
         <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
           {error}
+        </div>
+      )}
+      {error && debugInfo && (
+        <div
+          className="absolute left-2 right-2 top-2 max-h-[80%] overflow-auto rounded-md border border-white/20 bg-black/85 p-3 text-[11px] leading-snug text-white shadow-xl"
+          style={{ fontFamily: "monospace" }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-bold text-yellow-300">[STREAM DEBUG]</span>
+            <button
+              type="button"
+              onClick={() => setDebugInfo(null)}
+              className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
+              aria-label="Fechar diagnóstico"
+            >
+              fechar ✕
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            <div><span className="text-white/60">ETAPA 1 — Canal:</span> {debugInfo.canal}</div>
+            <div><span className="text-white/60">stream_id:</span> {debugInfo.streamId}</div>
+            <div><span className="text-white/60">ETAPA 2 — URL original:</span><br/><span className="break-all">{debugInfo.urlOriginal}</span></div>
+            <div><span className="text-white/60">ETAPA 3 — URL final:</span><br/><span className="break-all">{debugInfo.urlFinal}</span></div>
+            <div><span className="text-white/60">ETAPA 4 — Formato detectado:</span> {debugInfo.formato}</div>
+            <div><span className="text-white/60">ETAPA 5 — HTTP Status:</span> {debugInfo.httpStatus}</div>
+            <div><span className="text-white/60">ETAPA 6 — Content-Type:</span> {debugInfo.contentType}</div>
+            <div><span className="text-white/60">ETAPA 7 — Redirect detectado:</span> {debugInfo.redirect}</div>
+            <div><span className="text-white/60">ETAPA 8 — Player utilizado:</span> {debugInfo.player}</div>
+            <div><span className="text-white/60">ETAPA 9 — User-Agent:</span><br/><span className="break-all">{debugInfo.userAgent}</span></div>
+            <div><span className="text-white/60">ETAPA 10 — Motivo:</span> {debugInfo.motivo}</div>
+          </div>
         </div>
       )}
       {canManualPlay && !error && playerMode === "web" && (
