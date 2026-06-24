@@ -838,7 +838,13 @@ export function VideoPlayer({
           { type: "mpegts", isLive: true, url: absoluteUrl },
           {
             isLive: true,
-            enableWorker: true,
+            // FIX WEB-LIVE: enableWorker=true criava o demux worker via Blob
+            // URL, gerando origin "null". Em vários Chromium isso faz o
+            // fetch interno cair em "Failed to fetch" mesmo para same-origin
+            // (/api/stream). Demux na main thread custa muito pouco e
+            // elimina a classe inteira de bugs do worker (URL parsing,
+            // CORS de origin null, etc.).
+            enableWorker: false,
             enableStashBuffer: true,
             stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
             liveBufferLatencyChasing: false,
