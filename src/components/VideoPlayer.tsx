@@ -1404,6 +1404,22 @@ export function VideoPlayer({
         </div>
       )}
       {/* Painel visual de debug removido (apenas logs internos). */}
+      {kind === "live" && (
+        <LiveDiagPanel
+          session={diagSessionIdRef.current ? liveDiagLatestFailedFor(src) : null}
+          open={diagOpen}
+          onClose={() => setDiagOpen(false)}
+        />
+      )}
+      {error && kind === "live" && !diagOpen && (
+        <button
+          type="button"
+          onClick={() => setDiagOpen(true)}
+          className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
+        >
+          Ver diagnóstico
+        </button>
+      )}
 
       {canManualPlay && !error && playerMode === "web" && (
         <button
