@@ -339,3 +339,41 @@ function PlayerPage() {
     </AppShell>
   );
 }
+
+// FIX D6 (audit IPTV): antes mostrava "Carregando…" indefinidamente quando
+// playlist vazia ou stream URL não resolveu. Agora após 12s exibe mensagem
+// de erro com botão "Voltar" para o usuário não ficar preso.
+function PlayerLoadingOrError({
+  type,
+  onBack,
+}: {
+  type: PlayerType;
+  onBack: () => void;
+}) {
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), 12_000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!timedOut) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
+        {type === "series" ? "Carregando episódio…" : "Carregando…"}
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-player px-6 text-center text-muted-foreground">
+      <div className="text-base font-semibold text-foreground">
+        Não foi possível carregar este conteúdo.
+      </div>
+      <div className="text-sm">
+        Verifique sua conexão ou tente outro item.
+      </div>
+      <Button variant="outline" onClick={onBack} className="mt-2">
+        <ArrowLeft className="size-4 mr-1" /> Voltar
+      </Button>
+    </div>
+  );
+}
+
