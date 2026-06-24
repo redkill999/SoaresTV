@@ -22,6 +22,7 @@ import {
   type PlaybackStrategy,
 } from "@/lib/host-profile";
 import { decideEngineOrder, plog } from "@/lib/playback-engine";
+import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -377,6 +378,35 @@ export function VideoPlayer({
         disableHlsConversion: liveDisableHls,
         preferTs: livePreferTs,
       });
+
+      // ===== [LIVE DEBUG] probe assíncrono via /api/stream (HEAD + UA cycle) =
+      // Não bloqueia o playback. Só descobre status/content-type/UA do canal.
+      // Se nenhum UA aceitar (todos 401/403/404), grava no host-profile o UA
+      // que respondeu — playlist subsequente já tenta com ele direto.
+      void (async () => {
+        try {
+          const report = await probeLiveStream(workingSrc, forcedUA);
+          logLiveProbeReport(report, { originalSrc: src, finalCandidates: playbackCandidates });
+          // Se um UA não-preferido foi o único que funcionou, memoriza para
+          // reuso (apenas log; aplicação efetiva via compat fica para o user
+          // por enquanto, evitando regressões silenciosas).
+          if (report.best?.ok && report.best.ua !== "preferred" && !forcedUA) {
+            console.log("[LIVE DEBUG] UA recomendado para este host:", {
+              host: liveHost,
+              ua: report.best.ua,
+              uaString: report.best.uaString,
+              dica: "Para fixar: Settings → User-Agent da lista, ou updateHostProfile(host, { ... }).",
+            });
+          }
+          // Se content-type vier como HLS mas estamos pulando HLS (preset),
+          // sinaliza para o usuário que talvez valha reativar HLS neste host.
+          if (report.best?.ok && liveDisableHls && liveContentKind(report.best.contentType) === "hls") {
+            console.warn("[LIVE DEBUG] Host responde HLS mas disableHlsConversion=true. Considere updateHostProfile(host, { disableHlsConversion: false, preferTs: false }).");
+          }
+        } catch (e) {
+          console.warn("[LIVE DEBUG] probe falhou:", (e as Error).message);
+        }
+      })();
     }
 
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
@@ -662,7 +692,8 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, () => {
+        tsPlayer.on(mpegts.Events.ERROR, (...args: unknown[]) => {
+          console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
           if (!cancelled) tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
@@ -710,22 +741,20 @@ export function VideoPlayer({
         return;
       }
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
-        // [BUFFER OPTIMIZATION] Para hosts marcados (503 bypass) ou cuja
-        // estratégia preferida memorizada é HTML5, tenta <video> primeiro —
-        // mpegts.js fica como fallback. mpegts.js demulta em JS e tende a
-        // engasgar mais nesses painéis; o HTML5 com .ts direto, quando o
-        // dispositivo aceita, roda mais fluido.
+        // [LIVE DEBUG] Ordem para LIVE .ts: Native HTML5 → mpegts.js → (HLS).
+        // Empiricamente, <video> nativo com .ts entrega frame mais rápido em
+        // dispositivos que aceitam o container; mpegts.js (demux JS) fica
+        // como fallback. Para VOD/outros casos, mantém heurística por host.
         const h = hostOf(workingSrc) ?? "";
         const profile = getHostProfile(h);
         const preferHtml5 =
+          isLive ||
           profile.preferPlayer === "html5" ||
           (profile.disableProxy && profile.preferPlayer !== "mpegts");
         const tStart = performance.now();
         if (preferHtml5) {
-          console.log("[BUFFER OPTIMIZATION] estratégia HTML5 prioritária (.ts)", {
-            host: h,
-            url,
-            memorizada: profile.preferPlayer ?? "(nenhuma)",
+          console.log("[LIVE DEBUG] tentativa 1/2: HTML5 nativo (.ts direto)", {
+            host: h, url, memorizada: profile.preferPlayer ?? "(nenhuma)",
           });
 
           lastPlayerStrategy = "HTML5 <video> (.ts direto)";
@@ -734,9 +763,33 @@ export function VideoPlayer({
           video.src = url;
           video.load();
           armVodWatchdog();
+          // Se HTML5 falhar em LIVE, tenta mpegts.js antes de iterar candidatos.
+          let html5FellBack = false;
+          const onceErr = () => {
+            if (cancelled || html5FellBack) return;
+            html5FellBack = true;
+            video.removeEventListener("error", onceErr);
+            const err = video.error;
+            console.warn("[LIVE DEBUG] HTML5 falhou", {
+              host: h,
+              videoErrorCode: err?.code ?? null,
+              videoErrorMessage: err?.message ?? null,
+              ms: Math.round(performance.now() - tStart),
+            });
+            if (isLive) {
+              console.log("[LIVE DEBUG] tentativa 2/2: mpegts.js");
+              void playMpegTs(url).then((handled) => {
+                if (!handled && !cancelled) {
+                  console.warn("[LIVE DEBUG] mpegts.js também falhou — próximo candidato");
+                  tryNextVod();
+                }
+              });
+            }
+          };
+          video.addEventListener("error", onceErr, { once: true });
           video.play().then(() => {
             setCanManualPlay(false);
-            console.log("[BUFFER OPTIMIZATION] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
+            console.log("[LIVE DEBUG] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
           }).catch(() => setCanManualPlay(true));
         } else {
           void playMpegTs(url).then((handled) => {
