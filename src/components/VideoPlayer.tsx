@@ -314,6 +314,31 @@ export function VideoPlayer({
         })
       : directCandidates.map((url) => proxiedX(url, kind));
 
+    // ===== [STREAM DEBUG] inicialização =====================================
+    // Bloco puramente informativo. Não altera nenhuma lógica de reprodução —
+    // só lista o que o player vai tentar e como (para diagnóstico de canais
+    // que disparam "Não foi possível reproduzir este canal.").
+    try {
+      console.group("[STREAM DEBUG]");
+      console.log("ETAPA 1 — Canal selecionado:", {
+        src,
+        streamIdInferido: (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? null,
+        kind: kind ?? "(indef)",
+      });
+      console.log("ETAPA 2 — URL original (src recebido):", src);
+      console.log("ETAPA 3 — URLs finais montadas (ordem de tentativa):", playbackCandidates);
+      console.log("ETAPA 4 — Formato detectado:", detectFormat(workingSrc), {
+        hlsCandidate,
+        workingSrc,
+        httpsForçado: !!httpsSrc,
+      });
+      console.log("ETAPA 8 — Estratégia inicial de player:", hlsCandidate ? "HLS (hls.js)" : "Direto (mpegts.js/HTML5/ExoPlayer)");
+      console.log("ETAPA 9 — User-Agent forçado (compat):", forcedUA ?? "(auto: proxy cicla XCIPTV/TiviMate/IPTV Smarters/VLC/okhttp/…)");
+      console.log("Compat resolvida para esta lista:", compat);
+      console.log("Etapas 5/6/7 (HTTP Status, Content-Type, Redirects) serão impressas no relatório final via headers X-Upstream-*.");
+      console.groupEnd();
+    } catch { /* console pode não suportar group em algum runtime */ }
+
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
