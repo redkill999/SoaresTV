@@ -363,6 +363,8 @@ export function VideoPlayer({
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
     let currentHlsUrl: string | null = null;
+    // Estratégia de player atualmente em uso (alimenta o painel DEBUG VISUAL).
+    let lastPlayerStrategy = "(indef)";
     let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
