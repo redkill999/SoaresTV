@@ -4,7 +4,7 @@ import {
   Smartphone, User, SlidersHorizontal, PlayCircle, Network, RefreshCw,
   Lock, Gauge, CloudUpload, Tv2, Globe, LifeBuoy,
   Settings2, Eraser, LogOut, ArrowLeft, Plus, Trash2, ChevronRight,
-  Upload, Download, CheckCircle2, Sliders,
+  Upload, Download, CheckCircle2, Sliders, Stethoscope, ClipboardCopy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/settings")({
 type TileKey =
   | "app" | "conta" | "playerSettings" | "player" | "tipoFluxo" | "atualizar"
   | "parental" | "teste" | "backup" | "remoto" | "language" | "socorro"
-  | "outras" | "clearCache" | "sair";
+  | "diag" | "outras" | "clearCache" | "sair";
 
 type Tile = {
   key: TileKey;
@@ -57,6 +57,7 @@ const TILES: Tile[] = [
   { key: "remoto",          label: "Controle remoto",      icon: Tv2 },
   { key: "language",        label: "Language",             icon: Globe },
   { key: "socorro",         label: "Socorro",              icon: LifeBuoy },
+  { key: "diag",            label: "Diagnóstico\nIPTV",    icon: Stethoscope },
   { key: "outras",          label: "OUTRAS\nCONFIGURAÇÕES",icon: Settings2 },
   { key: "clearCache",      label: "Clear Cache",          icon: Eraser },
   { key: "sair",            label: "Sair",                 icon: LogOut },
@@ -75,7 +76,7 @@ function SettingsPage() {
     if (!k) return;
     const valid: OpenKey[] = [
       "app","conta","playerSettings","player","tipoFluxo","parental",
-      "teste","backup","remoto","language","socorro","outras",
+      "teste","backup","remoto","language","socorro","diag","outras",
     ];
     if (valid.includes(k)) {
       setOpen(k);
@@ -169,6 +170,7 @@ function SettingsPage() {
       <LanguageDialog     open={open === "language"}       onClose={() => setOpen(null)} />
       <AboutDialog        open={open === "socorro"}        onClose={() => setOpen(null)} />
       <OutrasDialog       open={open === "outras"}         onClose={() => setOpen(null)} />
+      <DiagDialog         open={open === "diag"}           onClose={() => setOpen(null)} />
     </div>
   );
 }
@@ -1069,5 +1071,133 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
       <span className="text-sm">{label}</span>
       <Switch checked={value} onCheckedChange={onChange} />
     </div>
+  );
+}
+
+/* --------------------------- Diagnóstico IPTV --------------------------- */
+
+import {
+  liveDiagGetSessions, liveDiagSubscribe, liveDiagClear, liveDiagFormat,
+  liveDiagFormatAll, copyToClipboard, type LiveDiagSession,
+} from "@/lib/live-diag-store";
+
+function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [sessions, setSessions] = useState<LiveDiagSession[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSessions(liveDiagGetSessions());
+    const off = liveDiagSubscribe(() => setSessions(liveDiagGetSessions()));
+    return off;
+  }, [open]);
+
+  const selected = sessions.find((s) => s.id === selectedId) ?? sessions[0] ?? null;
+
+  const copy = async (key: string, text: string) => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+      toast.success("Diagnóstico copiado");
+    } else {
+      toast.error("Falha ao copiar");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-4xl bg-black text-white border-white/10">
+        <DialogHeader>
+          <DialogTitle>Diagnóstico IPTV</DialogTitle>
+          <DialogDescription className="text-white/60">
+            Últimas {sessions.length} sessões LIVE registradas (máximo 50). Cada entrada inclui
+            URL original/final, status HTTP, content-type, User-Agent, player utilizado e erros.
+          </DialogDescription>
+        </DialogHeader>
+
+        {sessions.length === 0 ? (
+          <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-center text-sm text-white/60">
+            Nenhuma sessão registrada ainda. Tente reproduzir um canal LIVE.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-[260px_1fr]">
+            <div className="max-h-[55dvh] overflow-auto rounded-lg border border-white/10 bg-white/5 p-1">
+              {sessions.map((s) => {
+                const time = new Date(s.startedAt).toLocaleTimeString();
+                const date = new Date(s.startedAt).toLocaleDateString();
+                const tone =
+                  s.result === "playing" ? "text-emerald-400"
+                  : s.result === "failed" ? "text-red-400"
+                  : "text-amber-300";
+                const isSel = (selected?.id ?? sessions[0].id) === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedId(s.id)}
+                    className={[
+                      "block w-full rounded-md px-2 py-1.5 text-left text-[11px] transition",
+                      isSel ? "bg-white/10" : "hover:bg-white/5",
+                    ].join(" ")}
+                  >
+                    <div className={`font-medium ${tone}`}>
+                      {s.result === "playing" ? "OK" : s.result === "failed" ? "FALHA" : "..."}
+                      {" · "}
+                      {s.host ?? "(host?)"}
+                    </div>
+                    <div className="text-white/50">{date} {time}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex max-h-[55dvh] flex-col gap-2">
+              {selected && (
+                <>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => copy(`one-${selected.id}`, liveDiagFormat(selected))}
+                      className="gap-2"
+                    >
+                      {copiedKey === `one-${selected.id}`
+                        ? <><Check className="size-4" /> Copiado</>
+                        : <><ClipboardCopy className="size-4" /> Copiar esta</>}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => copy("all", liveDiagFormatAll())}
+                      className="gap-2"
+                    >
+                      {copiedKey === "all"
+                        ? <><Check className="size-4" /> Copiado</>
+                        : <><ClipboardCopy className="size-4" /> Copiar todas</>}
+                    </Button>
+                  </div>
+                  <pre className="flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] leading-relaxed text-white/85">
+                    {liveDiagFormat(selected)}
+                  </pre>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { liveDiagClear(); setSessions([]); setSelectedId(null); toast.success("Histórico limpo"); }}
+            className="text-white/60 hover:text-white"
+          >
+            Limpar histórico
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Fechar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -23,6 +23,12 @@ import {
 } from "@/lib/host-profile";
 import { decideEngineOrder, plog } from "@/lib/playback-engine";
 import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
+import {
+  liveDiagStart, liveDiagAttachProbe, liveDiagRecordAttempt,
+  liveDiagMarkPlaying, liveDiagMarkFailed, liveDiagLatestFailedFor,
+  type LivePlayerKind,
+} from "@/lib/live-diag-store";
+import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -165,8 +171,9 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-  // Painel visual de debug removido — diagnóstico vive nos console.logs
-  // (`[STREAM DEBUG]`, `[HOST PROFILE]`, `[BUFFER OPTIMIZATION]`, etc.).
+  // [LIVE DIAG] painel visível dentro do APK quando LIVE falha.
+  const [diagOpen, setDiagOpen] = useState(false);
+  const diagSessionIdRef = useRef<string | null>(null);
 
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
@@ -379,6 +386,19 @@ export function VideoPlayer({
         preferTs: livePreferTs,
       });
 
+      // [LIVE DIAG] cria sessão no buffer (consultável em Settings → Diagnóstico).
+      diagSessionIdRef.current = liveDiagStart({
+        originalUrl: src,
+        workingSrc,
+        host: liveHost,
+        forcedUA,
+        liveBypassProxy,
+        liveDisableHls,
+        livePreferTs,
+        finalCandidates: playbackCandidates.slice(),
+      });
+      setDiagOpen(false);
+
       // ===== [LIVE DEBUG] probe assíncrono via /api/stream (HEAD + UA cycle) =
       // Não bloqueia o playback. Só descobre status/content-type/UA do canal.
       // Se nenhum UA aceitar (todos 401/403/404), grava no host-profile o UA
@@ -387,6 +407,7 @@ export function VideoPlayer({
         try {
           const report = await probeLiveStream(workingSrc, forcedUA);
           logLiveProbeReport(report, { originalSrc: src, finalCandidates: playbackCandidates });
+          if (diagSessionIdRef.current) liveDiagAttachProbe(diagSessionIdRef.current, report);
           // Se um UA não-preferido foi o único que funcionou, memoriza para
           // reuso (apenas log; aplicação efetiva via compat fica para o user
           // por enquanto, evitando regressões silenciosas).
@@ -602,8 +623,27 @@ export function VideoPlayer({
       }
     };
 
+    const recordFailedAttempt = (errMsg?: string) => {
+      if (!isLive || !diagSessionIdRef.current) return;
+      let kind: LivePlayerKind = "unknown";
+      if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
+      else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
+      else if (lastPlayerStrategy.startsWith("HTML5")) kind = "html5";
+      const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+      const ve = videoRef.current?.error ?? null;
+      liveDiagRecordAttempt(diagSessionIdRef.current, {
+        player: kind,
+        url,
+        result: "fail",
+        error: errMsg ?? ve?.message ?? lastPlayerStrategy,
+        videoErrorCode: ve?.code ?? null,
+        at: Date.now(),
+      });
+    };
+
     const tryNextVod = () => {
       clearWatchdog();
+      recordFailedAttempt();
       if (hls) {
         hls.destroy();
         hls = null;
@@ -636,6 +676,10 @@ export function VideoPlayer({
             ultimaEstrategia: lastPlayerStrategy,
           });
           void reportPlaybackFailure("Todos os candidatos falharam");
+          if (isLive && diagSessionIdRef.current) {
+            liveDiagMarkFailed(diagSessionIdRef.current, "Todos os candidatos falharam");
+            setDiagOpen(true);
+          }
           setError(msg);
         }
       });
@@ -844,6 +888,14 @@ export function VideoPlayer({
           if (getHostProfile(h).preferPlayer !== strat) {
             rememberPreferredPlayer(h, strat);
             console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
+          }
+          // [LIVE DIAG] marca sucesso (LIVE só).
+          if (isLive && diagSessionIdRef.current) {
+            let kind: LivePlayerKind = "html5";
+            if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
+            else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
+            const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+            liveDiagMarkPlaying(diagSessionIdRef.current, kind, url);
           }
         }
 
@@ -1158,6 +1210,16 @@ export function VideoPlayer({
     };
   }, [src, kind, playerMode]);
 
+  // [LIVE DIAG] Quando setError dispara em LIVE, marca falha e abre painel.
+  // Cobre todos os caminhos (HLS NETWORK/MEDIA/default, esgotamento de candidatos).
+  useEffect(() => {
+    if (!error) return;
+    if (kind !== "live") return;
+    const id = diagSessionIdRef.current;
+    if (id) liveDiagMarkFailed(id, error);
+    setDiagOpen(true);
+  }, [error, kind]);
+
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
   // ScreenOrientation.lock no boot). Desbloquear aqui fazia o app voltar
@@ -1342,6 +1404,22 @@ export function VideoPlayer({
         </div>
       )}
       {/* Painel visual de debug removido (apenas logs internos). */}
+      {kind === "live" && (
+        <LiveDiagPanel
+          session={diagSessionIdRef.current ? liveDiagLatestFailedFor(src) : null}
+          open={diagOpen}
+          onClose={() => setDiagOpen(false)}
+        />
+      )}
+      {error && kind === "live" && !diagOpen && (
+        <button
+          type="button"
+          onClick={() => setDiagOpen(true)}
+          className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
+        >
+          Ver diagnóstico
+        </button>
+      )}
 
       {canManualPlay && !error && playerMode === "web" && (
         <button
