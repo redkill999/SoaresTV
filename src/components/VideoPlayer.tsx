@@ -1087,6 +1087,37 @@ export function VideoPlayer({
           {error}
         </div>
       )}
+      {error && debugInfo && (
+        <div
+          className="absolute left-2 right-2 top-2 max-h-[80%] overflow-auto rounded-md border border-white/20 bg-black/85 p-3 text-[11px] leading-snug text-white shadow-xl"
+          style={{ fontFamily: "monospace" }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-bold text-yellow-300">[STREAM DEBUG]</span>
+            <button
+              type="button"
+              onClick={() => setDebugInfo(null)}
+              className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
+              aria-label="Fechar diagnóstico"
+            >
+              fechar ✕
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            <div><span className="text-white/60">ETAPA 1 — Canal:</span> {debugInfo.canal}</div>
+            <div><span className="text-white/60">stream_id:</span> {debugInfo.streamId}</div>
+            <div><span className="text-white/60">ETAPA 2 — URL original:</span><br/><span className="break-all">{debugInfo.urlOriginal}</span></div>
+            <div><span className="text-white/60">ETAPA 3 — URL final:</span><br/><span className="break-all">{debugInfo.urlFinal}</span></div>
+            <div><span className="text-white/60">ETAPA 4 — Formato detectado:</span> {debugInfo.formato}</div>
+            <div><span className="text-white/60">ETAPA 5 — HTTP Status:</span> {debugInfo.httpStatus}</div>
+            <div><span className="text-white/60">ETAPA 6 — Content-Type:</span> {debugInfo.contentType}</div>
+            <div><span className="text-white/60">ETAPA 7 — Redirect detectado:</span> {debugInfo.redirect}</div>
+            <div><span className="text-white/60">ETAPA 8 — Player utilizado:</span> {debugInfo.player}</div>
+            <div><span className="text-white/60">ETAPA 9 — User-Agent:</span><br/><span className="break-all">{debugInfo.userAgent}</span></div>
+            <div><span className="text-white/60">ETAPA 10 — Motivo:</span> {debugInfo.motivo}</div>
+          </div>
+        </div>
+      )}
       {canManualPlay && !error && playerMode === "web" && (
         <button
           type="button"
