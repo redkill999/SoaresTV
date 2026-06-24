@@ -556,6 +556,7 @@ export function VideoPlayer({
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
+            lastPlayerStrategy = "HTML5 <video> (.ts direto)";
             video.pause();
             video.currentTime = 0;
             video.src = url;
@@ -565,6 +566,7 @@ export function VideoPlayer({
         });
         return;
       }
+      lastPlayerStrategy = "HTML5 <video>";
       video.pause();
       video.currentTime = 0;
       video.src = url;
