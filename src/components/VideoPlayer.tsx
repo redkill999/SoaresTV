@@ -9,64 +9,21 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type List
 let mpegtsModule: typeof import("mpegts.js").default | null = null;
 let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 
-// ===== [503 BYPASS] memória persistida ====================================
-// Hosts (ex.: "esma26.top") cujo proxy /api/stream respondeu 503 ao menos
-// uma vez. Persistido em localStorage para sobreviver a logout/reload.
-// Para esses hosts priorizamos candidatos diretos (sem proxy) já na próxima
-// reprodução. Não altera nada para hosts que continuam funcionando via proxy.
-const PERSIST_KEY_BYPASS = "iptv.bypass503Hosts.v1";
-// ===== [HTTPS SKIP] whitelist de hosts IPTV sem HTTPS =====================
-// Hosts cuja variante https falhou. Para eles, jamais promovemos http→https
-// (nem como candidato alternativo). Persistido.
-const PERSIST_KEY_NOHTTPS = "iptv.noHttpsHosts.v1";
+// Gerenciador central de perfil por host (persistido). Substitui a coleção
+// de Sets módulo-locais por uma única fonte da verdade — ver host-profile.ts.
+import {
+  getHostProfile,
+  updateHostProfile,
+  rememberProxyDead,
+  rememberHttpsFailure,
+  rememberPreferredPlayer,
+  isProxyDeadStatus,
+  hostOf,
+  type PlaybackStrategy,
+} from "@/lib/host-profile";
+export type { PlaybackStrategy } from "@/lib/host-profile";
 
-function loadPersistedHosts(key: string): string[] {
-  try {
-    if (typeof localStorage === "undefined") return [];
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr.filter((x): x is string => typeof x === "string");
-  } catch { /* noop */ }
-  return [];
-}
-function persistHosts(key: string, set: Set<string>) {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, JSON.stringify(Array.from(set)));
-  } catch { /* noop */ }
-}
 
-const bypass503Hosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_BYPASS));
-const noHttpsHosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_NOHTTPS));
-if (bypass503Hosts.size) console.log("[PERSIST BYPASS] hosts carregados", { hosts: Array.from(bypass503Hosts) });
-if (noHttpsHosts.size) console.log("[HTTPS SKIP] hosts carregados (sem HTTPS)", { hosts: Array.from(noHttpsHosts) });
-
-function rememberBypass503(host: string) {
-  if (!host || bypass503Hosts.has(host)) return;
-  bypass503Hosts.add(host);
-  persistHosts(PERSIST_KEY_BYPASS, bypass503Hosts);
-  console.log("[PERSIST BYPASS] host salvo", { host });
-  // Co-causa típica: o upstream também não aceita https. Marcamos para
-  // nunca mais tentarmos promover http→https desse host.
-  rememberNoHttps(host);
-}
-function rememberNoHttps(host: string) {
-  if (!host || noHttpsHosts.has(host)) return;
-  noHttpsHosts.add(host);
-  persistHosts(PERSIST_KEY_NOHTTPS, noHttpsHosts);
-  console.log("[HTTPS SKIP] host adicionado à whitelist sem-HTTPS", { host });
-}
-
-// ===== [BUFFER OPTIMIZATION] memória de estratégia por host ===============
-// Estratégia que efetivamente começou a reproduzir num host. Usada para já
-// abrir os próximos canais do mesmo painel pelo caminho que funcionou (evita
-// retentativas e reduz tempo até primeiro frame). Sessão apenas.
-export type PlaybackStrategy = "exo-native" | "html5" | "mpegts" | "hls";
-const hostStrategy = new Map<string, PlaybackStrategy>();
-function hostOf(u: string): string | null {
-  try { return new URL(u).host.toLowerCase(); } catch { return null; }
-}
 
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
@@ -153,10 +110,11 @@ function httpsVariant(url: string): string | null {
     if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
     const host = parsed.host.toLowerCase();
     // [HTTPS SKIP] host marcado como IPTV sem HTTPS — manter http original.
-    if (noHttpsHosts.has(host)) {
+    if (getHostProfile(host).forceHttp) {
       console.log("[HTTPS SKIP] upgrade ignorado", { host, protocoloOriginal: "http", protocoloUtilizado: "http" });
       return null;
     }
+
     parsed.protocol = "https:";
     if (parsed.port === "80") parsed.port = "";
     return parsed.toString();
@@ -205,20 +163,9 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-  // ===== Painel DEBUG VISUAL (apenas exibe; não interfere na reprodução) =====
-  const [debugInfo, setDebugInfo] = useState<{
-    canal: string;
-    streamId: string;
-    urlOriginal: string;
-    urlFinal: string;
-    formato: string;
-    httpStatus: string;
-    contentType: string;
-    redirect: string;
-    player: string;
-    userAgent: string;
-    motivo: string;
-  } | null>(null);
+  // Painel visual de debug removido — diagnóstico vive nos console.logs
+  // (`[STREAM DEBUG]`, `[HOST PROFILE]`, `[BUFFER OPTIMIZATION]`, etc.).
+
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
@@ -324,7 +271,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
-    setDebugInfo(null);
+    
     setCanManualPlay(false);
 
     // ---- Compatibilidade por lista ----------------------------------------
@@ -399,7 +346,7 @@ export function VideoPlayer({
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
     // Se já vimos esse host responder 503 antes, prioriza diretos.
     const srcHost = hostOf(workingSrc);
-    if (srcHost && bypass503Hosts.has(srcHost) && !forceProxy) {
+    if (srcHost && getHostProfile(srcHost).disableProxy && !forceProxy) {
       const directs: string[] = [];
       for (const url of directCandidates) {
         directs.push(url);
@@ -510,24 +457,8 @@ export function VideoPlayer({
           redirecionado: upstreamRedirected === "1",
           playerEstrategia: lastPlayerStrategy,
         });
-        // Alimenta o painel DEBUG VISUAL na tela (APK sem acesso ao logcat).
-        const streamId = (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? "(n/d)";
-        const canalRotulo = (src.match(/\/live\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
-          ?? (src.match(/\/movie\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
-          ?? streamId;
-        setDebugInfo({
-          canal: canalRotulo,
-          streamId,
-          urlOriginal: src,
-          urlFinal: upstreamFinal || currentUrl,
-          formato: detectFormat(workingSrc),
-          httpStatus: `proxy=${probeStatus} • upstream=${upstreamStatus || "n/d"}`,
-          contentType: upstreamCt || "(n/d)",
-          redirect: upstreamRedirected === "1" ? `sim → ${upstreamFinal}` : "não",
-          player: lastPlayerStrategy,
-          userAgent: upstreamUA || forcedUA || "(auto)",
-          motivo: reason,
-        });
+        // Painel visual removido — diagnóstico fica nos logs acima.
+
       } catch {
         /* noop */
       }
@@ -551,17 +482,20 @@ export function VideoPlayer({
             const t = new URL(target);
             const original = new URL(workingSrc);
             if (t.protocol === "https:" && original.protocol === "http:" && t.host.toLowerCase() === original.host.toLowerCase()) {
-              rememberNoHttps(t.host.toLowerCase());
+              rememberHttpsFailure(t.host.toLowerCase());
             }
           } catch { /* noop */ }
         }
         if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
         const res = await fetch(failedUrl, { method: "HEAD" });
         const upstream = res.headers.get("X-Upstream-Status") ?? "";
-        const is503 = res.status === 503 || upstream === "503";
-        if (!is503) return false;
+        // 502/503/504 → proxy não conseguiu falar com upstream. Marca o host
+        // como "proxy morto" e injeta candidatos diretos no fluxo.
+        const proxyDead = isProxyDeadStatus(res.status) || isProxyDeadStatus(upstream);
+        if (!proxyDead) return false;
         const host = hostOf(workingSrc);
-        if (host) rememberBypass503(host);
+        if (host) rememberProxyDead(host, upstream || String(res.status));
+
         // Constrói diretos não presentes ainda na fila
         const directs: string[] = [];
         for (const u of directCandidates) {
@@ -727,16 +661,18 @@ export function VideoPlayer({
         // engasgar mais nesses painéis; o HTML5 com .ts direto, quando o
         // dispositivo aceita, roda mais fluido.
         const h = hostOf(workingSrc) ?? "";
+        const profile = getHostProfile(h);
         const preferHtml5 =
-          hostStrategy.get(h) === "html5" ||
-          (bypass503Hosts.has(h) && hostStrategy.get(h) !== "mpegts");
+          profile.preferPlayer === "html5" ||
+          (profile.disableProxy && profile.preferPlayer !== "mpegts");
         const tStart = performance.now();
         if (preferHtml5) {
           console.log("[BUFFER OPTIMIZATION] estratégia HTML5 prioritária (.ts)", {
             host: h,
             url,
-            memorizada: hostStrategy.get(h) ?? "(nenhuma)",
+            memorizada: profile.preferPlayer ?? "(nenhuma)",
           });
+
           lastPlayerStrategy = "HTML5 <video> (.ts direto)";
           video.pause();
           video.currentTime = 0;
@@ -797,11 +733,12 @@ export function VideoPlayer({
           if (lastPlayerStrategy.startsWith("HLS")) strat = "hls";
           else if (lastPlayerStrategy.startsWith("mpegts")) strat = "mpegts";
           else if (lastPlayerStrategy.startsWith("HTML5")) strat = "html5";
-          if (hostStrategy.get(h) !== strat) {
-            hostStrategy.set(h, strat);
+          if (getHostProfile(h).preferPlayer !== strat) {
+            rememberPreferredPlayer(h, strat);
             console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
           }
         }
+
         try {
           const ahead = bufferedAhead();
           console.log("[BUFFER OPTIMIZATION] playing", {
@@ -1296,37 +1233,8 @@ export function VideoPlayer({
           {error}
         </div>
       )}
-      {error && debugInfo && (
-        <div
-          className="absolute left-2 right-2 top-2 max-h-[80%] overflow-auto rounded-md border border-white/20 bg-black/85 p-3 text-[11px] leading-snug text-white shadow-xl"
-          style={{ fontFamily: "monospace" }}
-        >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-bold text-yellow-300">[STREAM DEBUG]</span>
-            <button
-              type="button"
-              onClick={() => setDebugInfo(null)}
-              className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/20"
-              aria-label="Fechar diagnóstico"
-            >
-              fechar ✕
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            <div><span className="text-white/60">ETAPA 1 — Canal:</span> {debugInfo.canal}</div>
-            <div><span className="text-white/60">stream_id:</span> {debugInfo.streamId}</div>
-            <div><span className="text-white/60">ETAPA 2 — URL original:</span><br/><span className="break-all">{debugInfo.urlOriginal}</span></div>
-            <div><span className="text-white/60">ETAPA 3 — URL final:</span><br/><span className="break-all">{debugInfo.urlFinal}</span></div>
-            <div><span className="text-white/60">ETAPA 4 — Formato detectado:</span> {debugInfo.formato}</div>
-            <div><span className="text-white/60">ETAPA 5 — HTTP Status:</span> {debugInfo.httpStatus}</div>
-            <div><span className="text-white/60">ETAPA 6 — Content-Type:</span> {debugInfo.contentType}</div>
-            <div><span className="text-white/60">ETAPA 7 — Redirect detectado:</span> {debugInfo.redirect}</div>
-            <div><span className="text-white/60">ETAPA 8 — Player utilizado:</span> {debugInfo.player}</div>
-            <div><span className="text-white/60">ETAPA 9 — User-Agent:</span><br/><span className="break-all">{debugInfo.userAgent}</span></div>
-            <div><span className="text-white/60">ETAPA 10 — Motivo:</span> {debugInfo.motivo}</div>
-          </div>
-        </div>
-      )}
+      {/* Painel visual de debug removido (apenas logs internos). */}
+
       {canManualPlay && !error && playerMode === "web" && (
         <button
           type="button"
