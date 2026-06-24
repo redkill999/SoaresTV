@@ -258,14 +258,20 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
   if (!upstream.ok) {
     if (isVod) {
+      // FIX D7 (audit IPTV): antes retornávamos 200+JSON em erro VOD, o que
+      // fazia o player decodificar JSON como vídeo → MediaError code=4 sem
+      // mensagem útil. Agora propagamos o status HTTP real (404/403/503/…)
+      // para o player acionar tryNextVod() pela via normal de erro de rede.
+      // Mantemos o corpo JSON para diagnóstico em logs.
       return Response.json(
         { error: `UPSTREAM_${upstream.status}`, fallback: true },
-        { status: 200, headers: respHeaders },
+        { status: upstream.status, headers: respHeaders },
       );
     }
     respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   }
+
   // forward useful headers
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
     const v = upstream.headers.get(h);
