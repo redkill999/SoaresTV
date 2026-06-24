@@ -1314,6 +1314,7 @@ export function VideoPlayer({
       cancelled = true;
       clearWatchdog();
       detachStallListeners?.();
+      stabCleanup?.();
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
