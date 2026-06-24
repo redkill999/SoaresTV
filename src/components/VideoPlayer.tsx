@@ -21,6 +21,7 @@ import {
   hostOf,
   type PlaybackStrategy,
 } from "@/lib/host-profile";
+import { decideEngineOrder, plog } from "@/lib/playback-engine";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -384,6 +385,20 @@ export function VideoPlayer({
       console.groupEnd();
     } catch { /* console pode não suportar group em algum runtime */ }
 
+    // [PLAYBACK ENGINE] Decisão determinística da ordem de engines.
+    // Apenas log/telemetria — a execução continua via candidate URLs.
+    try {
+      const envForLog: "native-apk" | "web" = shouldUseNativePlayer ? "native-apk" : "web";
+      const order = decideEngineOrder(hostOf(workingSrc), kind, envForLog);
+      plog("start", { host: hostOf(workingSrc), kind, env: envForLog, src });
+      plog("engine-pick", {
+        host: hostOf(workingSrc),
+        ordem: order,
+        memorizada: hostOf(workingSrc) ? getHostProfile(hostOf(workingSrc)!).preferPlayer ?? null : null,
+        candidatos: playbackCandidates.length,
+      });
+    } catch { /* noop */ }
+
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
@@ -549,6 +564,11 @@ export function VideoPlayer({
             mensagem: msg,
             vodIdx,
             totalCandidatos: playbackCandidates.length,
+          });
+          plog("final-fail", {
+            host: hostOf(workingSrc),
+            tentativas: playbackCandidates.length,
+            ultimaEstrategia: lastPlayerStrategy,
           });
           void reportPlaybackFailure("Todos os candidatos falharam");
           setError(msg);
