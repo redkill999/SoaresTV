@@ -76,7 +76,7 @@ function SettingsPage() {
     if (!k) return;
     const valid: OpenKey[] = [
       "app","conta","playerSettings","player","tipoFluxo","parental",
-      "teste","backup","remoto","language","socorro","outras",
+      "teste","backup","remoto","language","socorro","diag","outras",
     ];
     if (valid.includes(k)) {
       setOpen(k);
