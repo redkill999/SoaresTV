@@ -979,12 +979,24 @@ export function VideoPlayer({
     const onVideoError = () => {
       if (cancelled || hls) return;
       if (hasStartedPlaying) {
+        // FIX D12 (audit IPTV): MediaError code=3 (MEDIA_ERR_DECODE) e code=4
+        // (SRC_NOT_SUPPORTED) pós-início são fatais — apenas chamar play() não
+        // recupera. Escalamos para o próximo candidato. code=1/2 (transitório)
+        // continua tratado pelo recovery silencioso anterior.
+        const errCode = video.error?.code;
+        if (errCode === 3 || errCode === 4) {
+          console.warn("[VIDEO ERROR] erro fatal pós-início (code=" + errCode + ") — próximo candidato");
+          hasStartedPlaying = false;
+          tryNextVod();
+          return;
+        }
         console.log("[BUFFER OPTIMIZATION] engasgo após início — recover sem trocar player");
         void video.play().catch(() => undefined);
         return;
       }
       tryNextVod();
     };
+
     const onVideoReady = () => clearWatchdog();
     const onPlaying = () => {
       clearWatchdog();
