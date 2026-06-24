@@ -657,16 +657,44 @@ export function VideoPlayer({
         return;
       }
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
-        void playMpegTs(url).then((handled) => {
-          if (!handled && !cancelled) {
-            lastPlayerStrategy = "HTML5 <video> (.ts direto)";
-            video.pause();
-            video.currentTime = 0;
-            video.src = url;
-            video.load();
-            video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
-          }
-        });
+        // [BUFFER OPTIMIZATION] Para hosts marcados (503 bypass) ou cuja
+        // estratégia preferida memorizada é HTML5, tenta <video> primeiro —
+        // mpegts.js fica como fallback. mpegts.js demulta em JS e tende a
+        // engasgar mais nesses painéis; o HTML5 com .ts direto, quando o
+        // dispositivo aceita, roda mais fluido.
+        const h = hostOf(workingSrc) ?? "";
+        const preferHtml5 =
+          hostStrategy.get(h) === "html5" ||
+          (bypass503Hosts.has(h) && hostStrategy.get(h) !== "mpegts");
+        const tStart = performance.now();
+        if (preferHtml5) {
+          console.log("[BUFFER OPTIMIZATION] estratégia HTML5 prioritária (.ts)", {
+            host: h,
+            url,
+            memorizada: hostStrategy.get(h) ?? "(nenhuma)",
+          });
+          lastPlayerStrategy = "HTML5 <video> (.ts direto)";
+          video.pause();
+          video.currentTime = 0;
+          video.src = url;
+          video.load();
+          armVodWatchdog();
+          video.play().then(() => {
+            setCanManualPlay(false);
+            console.log("[BUFFER OPTIMIZATION] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
+          }).catch(() => setCanManualPlay(true));
+        } else {
+          void playMpegTs(url).then((handled) => {
+            if (!handled && !cancelled) {
+              lastPlayerStrategy = "HTML5 <video> (.ts direto)";
+              video.pause();
+              video.currentTime = 0;
+              video.src = url;
+              video.load();
+              video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+            }
+          });
+        }
         return;
       }
       lastPlayerStrategy = "HTML5 <video>";
@@ -678,19 +706,53 @@ export function VideoPlayer({
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
 
+    // [BUFFER OPTIMIZATION] Marca quando o vídeo começou a tocar de fato.
+    // Depois disso, falhas transitórias não reiniciam a estratégia inteira:
+    // tentamos só video.play() e deixamos o stall-watchdog do hls.js/MSE
+    // recuperar. Evita o flicker de trocar de player no meio do canal.
+    let hasStartedPlaying = false;
     const onVideoError = () => {
       if (cancelled || hls) return;
+      if (hasStartedPlaying) {
+        console.log("[BUFFER OPTIMIZATION] engasgo após início — recover sem trocar player");
+        void video.play().catch(() => undefined);
+        return;
+      }
       tryNextVod();
     };
     const onVideoReady = () => clearWatchdog();
     const onPlaying = () => {
       clearWatchdog();
       setCanManualPlay(false);
+      if (!hasStartedPlaying) {
+        hasStartedPlaying = true;
+        const h = hostOf(workingSrc);
+        if (h) {
+          // Mapeia lastPlayerStrategy → PlaybackStrategy normalizada.
+          let strat: PlaybackStrategy = "html5";
+          if (lastPlayerStrategy.startsWith("HLS")) strat = "hls";
+          else if (lastPlayerStrategy.startsWith("mpegts")) strat = "mpegts";
+          else if (lastPlayerStrategy.startsWith("HTML5")) strat = "html5";
+          if (hostStrategy.get(h) !== strat) {
+            hostStrategy.set(h, strat);
+            console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
+          }
+        }
+        try {
+          const ahead = bufferedAhead();
+          console.log("[BUFFER OPTIMIZATION] playing", {
+            host: hostOf(workingSrc),
+            estrategia: lastPlayerStrategy,
+            bufferAhead: Number(ahead.toFixed(2)),
+          });
+        } catch { /* noop */ }
+      }
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
+
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
