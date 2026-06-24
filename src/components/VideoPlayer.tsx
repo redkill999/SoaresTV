@@ -9,13 +9,55 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type List
 let mpegtsModule: typeof import("mpegts.js").default | null = null;
 let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 
-// ===== [503 BYPASS] memória de sessão =====================================
-// Hosts (ex.: "esma26.top") cujo proxy /api/stream respondeu 503 ao menos uma
-// vez nesta sessão. Para esses hosts, priorizamos candidatos diretos (sem
-// proxy) já na próxima reprodução, evitando perder tempo no proxy. NÃO é
-// persistido — reinicia a cada recarregamento. Não altera nada para hosts
-// que continuam funcionando via proxy.
-const bypass503Hosts = new Set<string>();
+// ===== [503 BYPASS] memória persistida ====================================
+// Hosts (ex.: "esma26.top") cujo proxy /api/stream respondeu 503 ao menos
+// uma vez. Persistido em localStorage para sobreviver a logout/reload.
+// Para esses hosts priorizamos candidatos diretos (sem proxy) já na próxima
+// reprodução. Não altera nada para hosts que continuam funcionando via proxy.
+const PERSIST_KEY_BYPASS = "iptv.bypass503Hosts.v1";
+// ===== [HTTPS SKIP] whitelist de hosts IPTV sem HTTPS =====================
+// Hosts cuja variante https falhou. Para eles, jamais promovemos http→https
+// (nem como candidato alternativo). Persistido.
+const PERSIST_KEY_NOHTTPS = "iptv.noHttpsHosts.v1";
+
+function loadPersistedHosts(key: string): string[] {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr.filter((x): x is string => typeof x === "string");
+  } catch { /* noop */ }
+  return [];
+}
+function persistHosts(key: string, set: Set<string>) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch { /* noop */ }
+}
+
+const bypass503Hosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_BYPASS));
+const noHttpsHosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_NOHTTPS));
+if (bypass503Hosts.size) console.log("[PERSIST BYPASS] hosts carregados", { hosts: Array.from(bypass503Hosts) });
+if (noHttpsHosts.size) console.log("[HTTPS SKIP] hosts carregados (sem HTTPS)", { hosts: Array.from(noHttpsHosts) });
+
+function rememberBypass503(host: string) {
+  if (!host || bypass503Hosts.has(host)) return;
+  bypass503Hosts.add(host);
+  persistHosts(PERSIST_KEY_BYPASS, bypass503Hosts);
+  console.log("[PERSIST BYPASS] host salvo", { host });
+  // Co-causa típica: o upstream também não aceita https. Marcamos para
+  // nunca mais tentarmos promover http→https desse host.
+  rememberNoHttps(host);
+}
+function rememberNoHttps(host: string) {
+  if (!host || noHttpsHosts.has(host)) return;
+  noHttpsHosts.add(host);
+  persistHosts(PERSIST_KEY_NOHTTPS, noHttpsHosts);
+  console.log("[HTTPS SKIP] host adicionado à whitelist sem-HTTPS", { host });
+}
+
 // ===== [BUFFER OPTIMIZATION] memória de estratégia por host ===============
 // Estratégia que efetivamente começou a reproduzir num host. Usada para já
 // abrir os próximos canais do mesmo painel pelo caminho que funcionou (evita
@@ -25,6 +67,7 @@ const hostStrategy = new Map<string, PlaybackStrategy>();
 function hostOf(u: string): string | null {
   try { return new URL(u).host.toLowerCase(); } catch { return null; }
 }
+
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
   if (!mpegtsLoading) {
@@ -108,6 +151,12 @@ function httpsVariant(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
+    const host = parsed.host.toLowerCase();
+    // [HTTPS SKIP] host marcado como IPTV sem HTTPS — manter http original.
+    if (noHttpsHosts.has(host)) {
+      console.log("[HTTPS SKIP] upgrade ignorado", { host, protocoloOriginal: "http", protocoloUtilizado: "http" });
+      return null;
+    }
     parsed.protocol = "https:";
     if (parsed.port === "80") parsed.port = "";
     return parsed.toString();
@@ -115,6 +164,7 @@ function httpsVariant(url: string): string | null {
     return null;
   }
 }
+
 
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
@@ -492,13 +542,26 @@ export function VideoPlayer({
     const maybeInject503Bypass = async () => {
       try {
         const failedUrl = playbackCandidates[vodIdx];
+        // [HTTPS SKIP] Se o candidato que falhou era https de um host cuja
+        // origem é http, marcamos o host para nunca mais promover.
+        if (failedUrl) {
+          const decoded = (() => { try { return decodeURIComponent(failedUrl.replace(/^.*?[?&]u=/, "")); } catch { return failedUrl; } })();
+          const target = failedUrl.startsWith("/api/stream") ? decoded : failedUrl;
+          try {
+            const t = new URL(target);
+            const original = new URL(workingSrc);
+            if (t.protocol === "https:" && original.protocol === "http:" && t.host.toLowerCase() === original.host.toLowerCase()) {
+              rememberNoHttps(t.host.toLowerCase());
+            }
+          } catch { /* noop */ }
+        }
         if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
         const res = await fetch(failedUrl, { method: "HEAD" });
         const upstream = res.headers.get("X-Upstream-Status") ?? "";
         const is503 = res.status === 503 || upstream === "503";
         if (!is503) return false;
         const host = hostOf(workingSrc);
-        if (host) bypass503Hosts.add(host);
+        if (host) rememberBypass503(host);
         // Constrói diretos não presentes ainda na fila
         const directs: string[] = [];
         for (const u of directCandidates) {
@@ -506,6 +569,7 @@ export function VideoPlayer({
           const secure = httpsVariant(u);
           if (secure && !playbackCandidates.includes(secure)) directs.push(secure);
         }
+
         if (!directs.length) {
           console.log("[503 BYPASS] proxy falhou (503) — sem diretos novos para injetar", { host, failedUrl });
           return false;
