@@ -257,6 +257,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
+    setDebugInfo(null);
     setCanManualPlay(false);
 
     // ---- Compatibilidade por lista ----------------------------------------
