@@ -26,8 +26,36 @@ export type HostProfile = {
   forceHttp?: boolean;
   /** Estratégia que efetivamente iniciou a reprodução pela última vez. */
   preferPlayer?: PlaybackStrategy;
+  /**
+   * APENAS LIVE: pular proxy /api/stream para canais ao vivo e ir direto à origem.
+   * VOD continua usando proxy. Útil para painéis cujos canais quebram quando
+   * passam pelo proxy (rate-limit, range requests, headers reescritos).
+   */
+  bypassProxyForLive?: boolean;
+  /**
+   * APENAS LIVE: NÃO converter `.ts` para `.m3u8` automaticamente. Tentar o
+   * `.ts` original primeiro. Painéis que não expõem variante HLS retornam 404
+   * em todos os UAs e o hls.js gasta segundos antes de desistir.
+   */
+  disableHlsConversion?: boolean;
+  /** APENAS LIVE: priorizar candidato `.ts` sobre `.m3u8`. */
+  preferTs?: boolean;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
+};
+
+/**
+ * Presets built-in: hosts conhecidamente problemáticos onde já sabemos a
+ * configuração ótima sem precisar aprender em runtime. Aplicado no boot,
+ * mas qualquer mudança feita via `updateHostProfile` em runtime tem prioridade
+ * (merge: preset → storage → patches em runtime).
+ */
+const HOST_PRESETS: Record<string, HostProfile> = {
+  "esma26.top": {
+    bypassProxyForLive: true,
+    disableHlsConversion: true,
+    preferTs: true,
+  },
 };
 
 const STORAGE_KEY = "iptv.hostProfiles.v1";
