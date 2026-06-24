@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useCallback } from "react";
 import { store, type FavItem, type HistItem } from "@/lib/storage";
 
 const EMPTY_FAVS: FavItem[] = [];
@@ -12,10 +12,21 @@ export function useFavorites(): FavItem[] {
   );
 }
 
+/**
+ * FIX (audit Android TV): retorna boolean derivado direto do snapshot do
+ * storage. useSyncExternalStore compara o snapshot com Object.is — assim,
+ * mesmo que o array de favoritos mude, este hook só dispara re-render
+ * quando a pertinência DESTE item específico muda. Antes, cada tile
+ * subscrevia o array inteiro e re-renderizava em qualquer toggle.
+ */
 export function useIsFavorite(type: FavItem["type"], id: string | number): boolean {
   const idStr = String(id);
-  const favs = useFavorites();
-  return favs.some((f) => f.type === type && f.id === idStr);
+  const getSnapshot = useCallback(
+    () => store.getFavs().some((f) => f.type === type && f.id === idStr),
+    [type, idStr],
+  );
+  const subscribe = useCallback((cb: () => void) => store.subscribeFavs(cb), []);
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }
 
 export function useHistory(): HistItem[] {
