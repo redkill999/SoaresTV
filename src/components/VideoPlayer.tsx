@@ -541,8 +541,11 @@ export function VideoPlayer({
         // autoPlay do browser engatar, reduz delay até primeiro frame.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
+          clearHlsStartup();
+          if (import.meta.env.DEV) console.debug("[player] HLS manifest parseado", { url });
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
+
 
         let netRetries = 0;
         const MAX_NET_RETRIES = 5;
