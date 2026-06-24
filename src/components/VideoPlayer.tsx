@@ -9,64 +9,21 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type List
 let mpegtsModule: typeof import("mpegts.js").default | null = null;
 let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 
-// ===== [503 BYPASS] memória persistida ====================================
-// Hosts (ex.: "esma26.top") cujo proxy /api/stream respondeu 503 ao menos
-// uma vez. Persistido em localStorage para sobreviver a logout/reload.
-// Para esses hosts priorizamos candidatos diretos (sem proxy) já na próxima
-// reprodução. Não altera nada para hosts que continuam funcionando via proxy.
-const PERSIST_KEY_BYPASS = "iptv.bypass503Hosts.v1";
-// ===== [HTTPS SKIP] whitelist de hosts IPTV sem HTTPS =====================
-// Hosts cuja variante https falhou. Para eles, jamais promovemos http→https
-// (nem como candidato alternativo). Persistido.
-const PERSIST_KEY_NOHTTPS = "iptv.noHttpsHosts.v1";
+// Gerenciador central de perfil por host (persistido). Substitui a coleção
+// de Sets módulo-locais por uma única fonte da verdade — ver host-profile.ts.
+import {
+  getHostProfile,
+  updateHostProfile,
+  rememberProxyDead,
+  rememberHttpsFailure,
+  rememberPreferredPlayer,
+  isProxyDeadStatus,
+  hostOf,
+  type PlaybackStrategy,
+} from "@/lib/host-profile";
+export type { PlaybackStrategy } from "@/lib/host-profile";
 
-function loadPersistedHosts(key: string): string[] {
-  try {
-    if (typeof localStorage === "undefined") return [];
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr.filter((x): x is string => typeof x === "string");
-  } catch { /* noop */ }
-  return [];
-}
-function persistHosts(key: string, set: Set<string>) {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, JSON.stringify(Array.from(set)));
-  } catch { /* noop */ }
-}
 
-const bypass503Hosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_BYPASS));
-const noHttpsHosts = new Set<string>(loadPersistedHosts(PERSIST_KEY_NOHTTPS));
-if (bypass503Hosts.size) console.log("[PERSIST BYPASS] hosts carregados", { hosts: Array.from(bypass503Hosts) });
-if (noHttpsHosts.size) console.log("[HTTPS SKIP] hosts carregados (sem HTTPS)", { hosts: Array.from(noHttpsHosts) });
-
-function rememberBypass503(host: string) {
-  if (!host || bypass503Hosts.has(host)) return;
-  bypass503Hosts.add(host);
-  persistHosts(PERSIST_KEY_BYPASS, bypass503Hosts);
-  console.log("[PERSIST BYPASS] host salvo", { host });
-  // Co-causa típica: o upstream também não aceita https. Marcamos para
-  // nunca mais tentarmos promover http→https desse host.
-  rememberNoHttps(host);
-}
-function rememberNoHttps(host: string) {
-  if (!host || noHttpsHosts.has(host)) return;
-  noHttpsHosts.add(host);
-  persistHosts(PERSIST_KEY_NOHTTPS, noHttpsHosts);
-  console.log("[HTTPS SKIP] host adicionado à whitelist sem-HTTPS", { host });
-}
-
-// ===== [BUFFER OPTIMIZATION] memória de estratégia por host ===============
-// Estratégia que efetivamente começou a reproduzir num host. Usada para já
-// abrir os próximos canais do mesmo painel pelo caminho que funcionou (evita
-// retentativas e reduz tempo até primeiro frame). Sessão apenas.
-export type PlaybackStrategy = "exo-native" | "html5" | "mpegts" | "hls";
-const hostStrategy = new Map<string, PlaybackStrategy>();
-function hostOf(u: string): string | null {
-  try { return new URL(u).host.toLowerCase(); } catch { return null; }
-}
 
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
