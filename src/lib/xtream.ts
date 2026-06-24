@@ -255,18 +255,31 @@ export async function login(c: XtreamCreds) {
   }
 
   // 2) Se nativo não trouxe nada (web OU APK com painel bloqueando UA/IP),
-  //    usa o proxy do server-fn — que rotaciona UAs estilo Xciptv/Smarters.
-  const r =
-    nativeRes?.data ??
-    (await api<{ user_info?: { auth?: number | string; status?: string }; server_info?: unknown }>(
-      c,
-    ));
+  //    vai DIRETO pro proxy do server-fn — sem chamar api() de novo, porque
+  //    api() repetiria o waterfall nativo que já falhou acima (custo dobrado
+  //    no APK cold-start).
+  let r: { user_info?: { auth?: number | string; status?: string }; server_info?: unknown } | undefined =
+    nativeRes?.data;
+  if (!r) {
+    const preferredUA = getUAHint(c.server);
+    const proxied = await xtreamApi({ data: { ...c, preferredUA } });
+    if (!proxied.ok) {
+      const msg =
+        "error" in proxied && typeof proxied.error === "string"
+          ? proxied.error
+          : "Resposta inválida do servidor";
+      throw new Error(msg);
+    }
+    if ("ua" in proxied && typeof proxied.ua === "string") setUAHint(c.server, proxied.ua);
+    r = proxied.data as typeof r;
+  }
   const auth = r?.user_info?.auth;
   const ok = auth === 1 || auth === "1" || String(auth ?? "") === "1";
   if (!r?.user_info || !ok) throw new Error("Credenciais inválidas");
   if (nativeRes?.creds.server) c.server = nativeRes.creds.server;
   return r;
 }
+
 
 export async function discoverPanelServer(c: XtreamCreds) {
   return discoverPanelXtreamServer({ data: c });
