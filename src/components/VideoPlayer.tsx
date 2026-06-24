@@ -683,9 +683,9 @@ export function VideoPlayer({
       });
     };
 
-    const tryNextVod = () => {
+    const tryNextVod = (reason?: string) => {
       clearWatchdog();
-      recordFailedAttempt();
+      recordFailedAttempt(reason);
       if (hls) {
         hls.destroy();
         hls = null;
