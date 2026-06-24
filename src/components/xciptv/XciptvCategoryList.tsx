@@ -30,11 +30,12 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
     return categories.filter((c) => c.name.toLowerCase().includes(s));
   }, [q, categories]);
 
-  const specials = [
+  const specials = useMemo(() => [
     { id: "favorites", label: "FAVORITOS", count: favCount, icon: <Star className="size-3.5" /> },
     { id: "recent", label: "RECENTES", count: recentCount, icon: <Clock className="size-3.5" /> },
     { id: "all", label: "TODAS", count: totalCount, icon: <ListFilter className="size-3.5" /> },
-  ];
+  ], [favCount, recentCount, totalCount]);
+
 
   return (
     <aside className="w-full sm:h-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
