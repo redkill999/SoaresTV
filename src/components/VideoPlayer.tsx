@@ -494,6 +494,7 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
+        lastPlayerStrategy = "mpegts.js";
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: true, url },
           {
