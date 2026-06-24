@@ -635,6 +635,8 @@ export function VideoPlayer({
 
         detachStallListeners = () => {
           clearStall();
+          clearHlsStartup();
+
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
