@@ -870,6 +870,14 @@ export function VideoPlayer({
             rememberPreferredPlayer(h, strat);
             console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
           }
+          // [LIVE DIAG] marca sucesso (LIVE só).
+          if (isLive && diagSessionIdRef.current) {
+            let kind: LivePlayerKind = "html5";
+            if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
+            else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
+            const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+            liveDiagMarkPlaying(diagSessionIdRef.current, kind, url);
+          }
         }
 
         try {
