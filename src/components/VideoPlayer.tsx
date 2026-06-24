@@ -666,6 +666,9 @@ export function VideoPlayer({
         vodIdx += 1;
         if (vodIdx < playbackCandidates.length) {
           const next = playbackCandidates[vodIdx];
+          auditEvent(diagSessionIdRef.current, "fallback-next-candidate", {
+            idx: vodIdx, total: playbackCandidates.length, url: next,
+          });
           if (next && !next.startsWith("/api/stream")) {
             console.log("[503 BYPASS] próxima tentativa via URL direta", { url: next });
           }
@@ -685,6 +688,11 @@ export function VideoPlayer({
             host: hostOf(workingSrc),
             tentativas: playbackCandidates.length,
             ultimaEstrategia: lastPlayerStrategy,
+          });
+          auditEvent(diagSessionIdRef.current, "final-fail", {
+            host: hostOf(workingSrc),
+            attempts: playbackCandidates.length,
+            lastStrategy: lastPlayerStrategy,
           });
           void reportPlaybackFailure("Todos os candidatos falharam");
           if (isLive && diagSessionIdRef.current) {
