@@ -386,6 +386,19 @@ export function VideoPlayer({
         preferTs: livePreferTs,
       });
 
+      // [LIVE DIAG] cria sessão no buffer (consultável em Settings → Diagnóstico).
+      diagSessionIdRef.current = liveDiagStart({
+        originalUrl: src,
+        workingSrc,
+        host: liveHost,
+        forcedUA,
+        liveBypassProxy,
+        liveDisableHls,
+        livePreferTs,
+        finalCandidates: playbackCandidates.slice(),
+      });
+      setDiagOpen(false);
+
       // ===== [LIVE DEBUG] probe assíncrono via /api/stream (HEAD + UA cycle) =
       // Não bloqueia o playback. Só descobre status/content-type/UA do canal.
       // Se nenhum UA aceitar (todos 401/403/404), grava no host-profile o UA
