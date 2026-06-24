@@ -23,6 +23,12 @@ import {
 } from "@/lib/host-profile";
 import { decideEngineOrder, plog } from "@/lib/playback-engine";
 import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
+import {
+  liveDiagStart, liveDiagAttachProbe, liveDiagRecordAttempt,
+  liveDiagMarkPlaying, liveDiagMarkFailed, liveDiagLatestFailedFor,
+  type LivePlayerKind,
+} from "@/lib/live-diag-store";
+import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
