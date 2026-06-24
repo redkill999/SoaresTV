@@ -134,4 +134,5 @@ export const MediaCard = memo(function MediaCard({
       </div>
     </div>
   );
-}
+});
+
