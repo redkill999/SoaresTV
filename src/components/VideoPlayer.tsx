@@ -619,8 +619,19 @@ export function VideoPlayer({
           } catch { /* noop */ }
         }
         if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
-        const res = await fetch(failedUrl, { method: "HEAD" });
+        // FIX D10 (audit IPTV): HEAD probe não tinha timeout — se host estiver
+        // offline, o probe podia segurar ~30s (timeout default do browser)
+        // dobrando o tempo de recuperação por candidato. Agora 4s máx.
+        const ac = new AbortController();
+        const probeTimer = setTimeout(() => ac.abort(), 4_000);
+        let res: Response;
+        try {
+          res = await fetch(failedUrl, { method: "HEAD", signal: ac.signal });
+        } finally {
+          clearTimeout(probeTimer);
+        }
         const upstream = res.headers.get("X-Upstream-Status") ?? "";
+
         // 502/503/504 → proxy não conseguiu falar com upstream. Marca o host
         // como "proxy morto" e injeta candidatos diretos no fluxo.
         const proxyDead = isProxyDeadStatus(res.status) || isProxyDeadStatus(upstream);
