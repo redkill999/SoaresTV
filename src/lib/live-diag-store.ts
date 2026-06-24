@@ -19,6 +19,28 @@ export type LivePlayerAttempt = {
   at: number;
 };
 
+export type LiveMediaInfo = {
+  videoCodec?: string;
+  audioCodec?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  bitrate?: number;
+};
+
+export type LiveFreezeEvent = {
+  at: number;
+  trigger: "waiting" | "stalled" | "suspend" | "watchdog";
+  currentTime: number;
+  bufferedAhead: number;
+  bufferedRanges: string;
+  readyState: number;
+  networkState: number;
+  decodedFrames?: number;
+  droppedFrames?: number;
+  speedKbps?: number;
+};
+
 export type LiveDiagSession = {
   id: string;
   startedAt: number;
@@ -35,6 +57,8 @@ export type LiveDiagSession = {
   attempts: LivePlayerAttempt[];
   result: "in-progress" | "playing" | "failed";
   failureReason?: string;
+  mediaInfo?: LiveMediaInfo;
+  freezes?: LiveFreezeEvent[];
 };
 
 const MAX_SESSIONS = 50;
