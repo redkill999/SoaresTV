@@ -57,6 +57,7 @@ const TILES: Tile[] = [
   { key: "remoto",          label: "Controle remoto",      icon: Tv2 },
   { key: "language",        label: "Language",             icon: Globe },
   { key: "socorro",         label: "Socorro",              icon: LifeBuoy },
+  { key: "diag",            label: "Diagnóstico\nIPTV",    icon: Stethoscope },
   { key: "outras",          label: "OUTRAS\nCONFIGURAÇÕES",icon: Settings2 },
   { key: "clearCache",      label: "Clear Cache",          icon: Eraser },
   { key: "sair",            label: "Sair",                 icon: LogOut },
