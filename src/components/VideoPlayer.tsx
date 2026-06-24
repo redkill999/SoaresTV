@@ -760,11 +760,12 @@ export function VideoPlayer({
           if (lastPlayerStrategy.startsWith("HLS")) strat = "hls";
           else if (lastPlayerStrategy.startsWith("mpegts")) strat = "mpegts";
           else if (lastPlayerStrategy.startsWith("HTML5")) strat = "html5";
-          if (hostStrategy.get(h) !== strat) {
-            hostStrategy.set(h, strat);
+          if (getHostProfile(h).preferPlayer !== strat) {
+            rememberPreferredPlayer(h, strat);
             console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
           }
         }
+
         try {
           const ahead = bufferedAhead();
           console.log("[BUFFER OPTIMIZATION] playing", {
