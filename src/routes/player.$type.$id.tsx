@@ -274,10 +274,9 @@ function PlayerPage() {
               onProgress={handleProgress}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
-              {type === "series" ? "Carregando episódio…" : "Carregando…"}
-            </div>
+            <PlayerLoadingOrError type={type} onBack={closePlayer} />
           )}
+
         </div>
         {/* Seta de voltar — visível apenas ao mover o mouse */}
         <div
