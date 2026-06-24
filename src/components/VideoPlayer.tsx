@@ -357,7 +357,7 @@ export function VideoPlayer({
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
     // Se já vimos esse host responder 503 antes, prioriza diretos.
     const srcHost = hostOf(workingSrc);
-    if (srcHost && bypass503Hosts.has(srcHost) && !forceProxy) {
+    if (srcHost && getHostProfile(srcHost).disableProxy && !forceProxy) {
       const directs: string[] = [];
       for (const url of directCandidates) {
         directs.push(url);
