@@ -167,7 +167,12 @@ function emit(k: string) {
 function subscribe(k: string, fn: Listener) {
   (subs[k] ??= new Set()).add(fn);
   return () => {
-    subs[k]?.delete(fn);
+    const set = subs[k];
+    if (!set) return;
+    set.delete(fn);
+    // Libera o Set quando esvazia — evita acumular chaves com Sets vazios
+    // após muitos mount/unmount em rotas que assinam favoritos/history.
+    if (set.size === 0) delete subs[k];
   };
 }
 
