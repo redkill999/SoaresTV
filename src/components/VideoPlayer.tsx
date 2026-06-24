@@ -791,7 +791,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
+                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 794, funcao: "attachHls()/hls.on(ERROR) MEDIA_ERROR", motivo: "hls.js retornou MEDIA_ERROR fatal após esgotar mediaRetries (recoverMediaError não recuperou)." }); void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
                   return;
                 }
                 hls?.recoverMediaError();
