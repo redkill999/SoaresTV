@@ -707,19 +707,34 @@ export function VideoPlayer({
 
 
     const armVodWatchdog = () => {
-      if (!isVod) return;
       clearWatchdog();
+      if (isVod) {
+        watchdog = setTimeout(() => {
+          if (cancelled) return;
+          // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
+          // que o servidor respondeu — esperar mais 6s evita falso negativo em
+          // VOD de painel lento que demorou pra começar a entregar bytes.
+          if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
+          else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
+          }
+        }, 18_000);
+        return;
+      }
+      // FIX D1 (audit IPTV): LIVE .ts direto não tinha NENHUM watchdog —
+      // host que aceita TCP sem enviar dados pendurava o player indefinidamente.
+      // Agora: 22s sem first-frame (currentTime ainda 0 e sem dados) → próximo
+      // candidato. Cancelado naturalmente por clearWatchdog() em onPlaying/
+      // onCanPlay/onLoadedData ou em tryNextVod.
       watchdog = setTimeout(() => {
         if (cancelled) return;
-        // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
-        // que o servidor respondeu — esperar mais 6s evita falso negativo em
-        // VOD de painel lento que demorou pra começar a entregar bytes.
-        if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
-        else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
+        if (video.currentTime <= 0 && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          console.warn("[LIVE DEBUG] startup watchdog LIVE 22s — sem first-frame, próximo candidato");
+          tryNextVod();
         }
-      }, 18_000);
+      }, 22_000);
     };
+
 
     const bufferedAhead = () => {
       try {
