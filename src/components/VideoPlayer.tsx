@@ -805,7 +805,7 @@ export function VideoPlayer({
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
-              else { void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
+              else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 808, funcao: "attachHls()/hls.on(ERROR) default", motivo: "hls.js retornou erro fatal de tipo não tratado (não NETWORK/MEDIA) e já tentamos playDirect()." }); void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
           }
         });
 
