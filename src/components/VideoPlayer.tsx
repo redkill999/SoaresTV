@@ -933,6 +933,11 @@ export function VideoPlayer({
       setCanManualPlay(false);
       if (!hasStartedPlaying) {
         hasStartedPlaying = true;
+        auditEvent(diagSessionIdRef.current, "engine-ok", {
+          strategy: lastPlayerStrategy,
+          attemptsBeforeOk: vodIdx + 1,
+          elapsedMs: Math.round(performance.now() - effectStartT),
+        });
         const h = hostOf(workingSrc);
         if (h) {
           // Mapeia lastPlayerStrategy → PlaybackStrategy normalizada.
