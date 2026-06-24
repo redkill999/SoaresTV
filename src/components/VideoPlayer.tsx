@@ -151,6 +151,12 @@ function httpsVariant(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
+    const host = parsed.host.toLowerCase();
+    // [HTTPS SKIP] host marcado como IPTV sem HTTPS — manter http original.
+    if (noHttpsHosts.has(host)) {
+      console.log("[HTTPS SKIP] upgrade ignorado", { host, protocoloOriginal: "http", protocoloUtilizado: "http" });
+      return null;
+    }
     parsed.protocol = "https:";
     if (parsed.port === "80") parsed.port = "";
     return parsed.toString();
@@ -158,6 +164,7 @@ function httpsVariant(url: string): string | null {
     return null;
   }
 }
+
 
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
