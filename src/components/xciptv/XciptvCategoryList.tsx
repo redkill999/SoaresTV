@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Search, Star, Clock, ListFilter } from "lucide-react";
 
 export type XciptvCat = { id: string; name: string; count?: number };
 
-export function XciptvCategoryList({
+// FIX (audit TV): memo evita re-render desta lista quando o pai re-renderiza
+// por outro motivo (toggle de favorito, etc.). 'specials' agora memoizado.
+export const XciptvCategoryList = memo(function XciptvCategoryList({
+
   categories,
   value,
   onChange,
