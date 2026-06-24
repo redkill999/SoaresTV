@@ -478,6 +478,46 @@ export function VideoPlayer({
     };
 
 
+    // ===== [503 BYPASS] — detecta 503 do proxy e injeta candidatos diretos ==
+    // Probe HEAD no candidato que acabou de falhar. Se for /api/stream e o
+    // proxy/upstream retornou 503, marcamos o host na memória de sessão e
+    // injetamos as variantes diretas (sem proxy) logo após a posição atual,
+    // mantendo os demais como último recurso. Não toca em listas que funcionam.
+    const maybeInject503Bypass = async () => {
+      try {
+        const failedUrl = playbackCandidates[vodIdx];
+        if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
+        const res = await fetch(failedUrl, { method: "HEAD" });
+        const upstream = res.headers.get("X-Upstream-Status") ?? "";
+        const is503 = res.status === 503 || upstream === "503";
+        if (!is503) return false;
+        const host = hostOf(workingSrc);
+        if (host) bypass503Hosts.add(host);
+        // Constrói diretos não presentes ainda na fila
+        const directs: string[] = [];
+        for (const u of directCandidates) {
+          if (!playbackCandidates.includes(u)) directs.push(u);
+          const secure = httpsVariant(u);
+          if (secure && !playbackCandidates.includes(secure)) directs.push(secure);
+        }
+        if (!directs.length) {
+          console.log("[503 BYPASS] proxy falhou (503) — sem diretos novos para injetar", { host, failedUrl });
+          return false;
+        }
+        playbackCandidates.splice(vodIdx + 1, 0, ...directs);
+        console.log("[503 BYPASS] proxy falhou (503) — tentando conexão direta", {
+          host,
+          urlProxyFalhou: failedUrl,
+          diretosInjetados: directs,
+          ordemAtualizada: playbackCandidates,
+        });
+        return true;
+      } catch (e) {
+        console.log("[503 BYPASS] probe HEAD falhou", { erro: (e as Error).message });
+        return false;
+      }
+    };
+
     const tryNextVod = () => {
       clearWatchdog();
       if (hls) {
@@ -485,23 +525,33 @@ export function VideoPlayer({
         hls = null;
       }
       destroyTsPlayer();
-      vodIdx += 1;
-      if (vodIdx < playbackCandidates.length) playDirect();
-      else {
-        const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
-        console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
-          arquivo: "src/components/VideoPlayer.tsx",
-          linha: 429,
-          funcao: "tryNextVod()",
-          motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
-          mensagem: msg,
-          vodIdx,
-          totalCandidatos: playbackCandidates.length,
-        });
-        void reportPlaybackFailure("Todos os candidatos falharam");
-        setError(msg);
-      }
+      // Tenta bypass 503 antes de avançar. Se injetar diretos, eles entram
+      // logo após vodIdx; ao incrementar, cairemos no primeiro direto.
+      void maybeInject503Bypass().finally(() => {
+        vodIdx += 1;
+        if (vodIdx < playbackCandidates.length) {
+          const next = playbackCandidates[vodIdx];
+          if (next && !next.startsWith("/api/stream")) {
+            console.log("[503 BYPASS] próxima tentativa via URL direta", { url: next });
+          }
+          playDirect();
+        } else {
+          const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+          console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
+            arquivo: "src/components/VideoPlayer.tsx",
+            linha: 429,
+            funcao: "tryNextVod()",
+            motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
+            mensagem: msg,
+            vodIdx,
+            totalCandidatos: playbackCandidates.length,
+          });
+          void reportPlaybackFailure("Todos os candidatos falharam");
+          setError(msg);
+        }
+      });
     };
+
 
     const armVodWatchdog = () => {
       if (!isVod) return;
