@@ -64,13 +64,9 @@ export function XciptvHeader({
           <span className="text-[11px] font-bold uppercase tracking-wide">Voltar</span>
         </Link>
         <div className="min-w-0 flex flex-col">
-          <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
-            {time}
-          </div>
-          <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
-            {date}
-          </div>
+          <HeaderClock />
         </div>
+
       </div>
 
       {/* Center: título opcional (logo removido a pedido) */}
