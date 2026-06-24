@@ -835,7 +835,7 @@ export function VideoPlayer({
         //  - enableStashBuffer ON + autoCleanup agressivo desligado:
         //    mantém pelo menos ~20s à frente; SourceBuffer só limpa o passado.
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive: true, url },
+          { type: "mpegts", isLive: true, url: absoluteUrl },
           {
             isLive: true,
             enableWorker: true,
