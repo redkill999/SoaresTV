@@ -1,7 +1,32 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDownAZ, ArrowUpZA, ArrowLeft, Search, X } from "lucide-react";
 import type { SortKey } from "@/components/SectionTabs";
+
+// FIX (audit TV): relógio isolado em subcomponente memoizado. Antes o
+// setInterval(1s) re-renderizava o XciptvHeader inteiro a cada segundo
+// (incluindo busca, ordenação, label de categoria). Agora só este pequeno
+// nó atualiza.
+const HeaderClock = memo(function HeaderClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const i = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(i);
+  }, []);
+  const time = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  const date = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+  return (
+    <div className="min-w-0 flex flex-col">
+      <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
+        {time}
+      </div>
+      <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
+        {date}
+      </div>
+    </div>
+  );
+});
+
 
 export function XciptvHeader({
   sort,
@@ -18,14 +43,8 @@ export function XciptvHeader({
   categoryLabel?: string;
   title?: string;
 }) {
-  const [now, setNow] = useState(() => new Date());
   const [searchOpen, setSearchOpen] = useState(false);
-  useEffect(() => {
-    const i = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(i);
-  }, []);
-  const time = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  const date = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+
 
   const cycleSort = () => {
     if (!onSort) return;
@@ -45,13 +64,9 @@ export function XciptvHeader({
           <span className="text-[11px] font-bold uppercase tracking-wide">Voltar</span>
         </Link>
         <div className="min-w-0 flex flex-col">
-          <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
-            {time}
-          </div>
-          <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
-            {date}
-          </div>
+          <HeaderClock />
         </div>
+
       </div>
 
       {/* Center: título opcional (logo removido a pedido) */}

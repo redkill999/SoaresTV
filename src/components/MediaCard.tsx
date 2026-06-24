@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Heart, Play } from "lucide-react";
 import { store, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
-import { useState } from "react";
+import { memo, useState } from "react";
 import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
 type Aspect = "poster" | "wide" | "square";
@@ -13,7 +13,11 @@ const aspectClass: Record<Aspect, string> = {
   square: "aspect-square",
 };
 
-export function MediaCard({
+// FIX (audit TV): memo evita re-render em cascata quando o pai re-renderiza
+// por outro motivo. Junto com useIsFavorite granular, um toggle de favorito
+// só re-renderiza o card afetado em vez de N cards visíveis.
+export const MediaCard = memo(function MediaCard({
+
   type,
   id,
   name,
@@ -130,4 +134,5 @@ export function MediaCard({
       </div>
     </div>
   );
-}
+});
+

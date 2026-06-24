@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Search, Star, Clock, ListFilter } from "lucide-react";
 
 export type XciptvCat = { id: string; name: string; count?: number };
 
-export function XciptvCategoryList({
+// FIX (audit TV): memo evita re-render desta lista quando o pai re-renderiza
+// por outro motivo (toggle de favorito, etc.). 'specials' agora memoizado.
+export const XciptvCategoryList = memo(function XciptvCategoryList({
+
   categories,
   value,
   onChange,
@@ -27,11 +30,12 @@ export function XciptvCategoryList({
     return categories.filter((c) => c.name.toLowerCase().includes(s));
   }, [q, categories]);
 
-  const specials = [
+  const specials = useMemo(() => [
     { id: "favorites", label: "FAVORITOS", count: favCount, icon: <Star className="size-3.5" /> },
     { id: "recent", label: "RECENTES", count: recentCount, icon: <Clock className="size-3.5" /> },
     { id: "all", label: "TODAS", count: totalCount, icon: <ListFilter className="size-3.5" /> },
-  ];
+  ], [favCount, recentCount, totalCount]);
+
 
   return (
     <aside className="w-full sm:h-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
@@ -61,7 +65,9 @@ export function XciptvCategoryList({
       </ul>
     </aside>
   );
-}
+});
+
+
 
 function Row({ active, onClick, label, count, icon }: { active?: boolean; onClick: () => void; label: string; count?: number; icon?: React.ReactNode }) {
   return (
