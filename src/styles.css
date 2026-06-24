@@ -293,7 +293,7 @@ html[data-tv-mode] body .home-canvas .home-bg {
 
 /* Responsividade — diálogos shadcn não podem estourar a altura em landscape
    de celular pequeno (≈360px). Aplica em todo DialogContent sem precisar
-   tocar em cada caller. Não afeta TV mode (canvas 1280x720 — sobra altura). */
+   tocar em cada caller. */
 [role="dialog"][data-state="open"] {
   max-height: calc(100dvh - 2rem) !important;
   overflow-y: auto !important;
@@ -306,6 +306,17 @@ html[data-tv-mode] body .home-canvas .home-bg {
     padding-bottom: 0.75rem !important;
   }
 }
+/* TV mode (APK / Smart TV): o body é um canvas 1280×720 escalado por
+   transform. 100dvh mede a tela física do Android, não o canvas — isso
+   clampava o dialog em coordenadas erradas e o conteúdo sumia da área
+   visível. Aqui forçamos max-height em px do canvas, com folga p/ caber
+   centralizado em top:50%. */
+html[data-tv-mode] [role="dialog"][data-state="open"] {
+  max-height: 640px !important;
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
 
 
 

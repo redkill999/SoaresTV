@@ -365,14 +365,14 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#0b1220] p-0 text-white">
+      <DialogContent className="max-w-md overflow-hidden border-2 border-white/25 bg-[#1a2540] p-0 text-white shadow-[0_20px_60px_-10px_rgba(0,0,0,0.9)]">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle className="text-base font-semibold tracking-[0.2em] text-white">CONTA</DialogTitle>
-          <DialogDescription className="text-white/60">Informações da sua assinatura.</DialogDescription>
+          <DialogDescription className="text-white/70">Informações da sua assinatura.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 px-6 pb-6 pt-2 text-sm">
-          {!hasCreds && <p className="text-white/70">Nenhuma lista Xtream encontrada. Faça login com DNS/usuário/senha para ver os detalhes da conta.</p>}
-          {hasCreds && loading && <p className="text-white/70">Carregando…</p>}
+          {!hasCreds && <p className="text-white/80">Nenhuma lista Xtream encontrada. Faça login com DNS/usuário/senha para ver os detalhes da conta.</p>}
+          {hasCreds && loading && <p className="text-white/80">Carregando…</p>}
           {hasCreds && !loading && info && (
             <>
               <Row label="Usuário" value={info.username ?? "—"} />
@@ -380,17 +380,18 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
               <Row label="Trial" value={isTrial ?? "—"} />
               <Row label="Conexões" value={`${info.active_cons ?? "0"} / ${info.max_connections ?? "?"}`} />
               <Row label="Expira" value={formatExp(info.exp_date)} />
-              {info.message && <p className="text-xs text-white/60">{info.message}</p>}
+              {info.message && <p className="text-xs text-white/70">{info.message}</p>}
             </>
           )}
           {hasCreds && !loading && !info && (
-            <p className="text-white/70">{error ?? "Não foi possível obter informações."}</p>
+            <p className="text-white/80">{error ?? "Não foi possível obter informações."}</p>
           )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
