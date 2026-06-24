@@ -815,6 +815,24 @@ export function VideoPlayer({
           console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
           if (!cancelled) tryNextVod();
         });
+        // FIX D5 (audit IPTV): provedor que fecha a conexão TS graciosamente
+        // (sem RST) dispara LOADING_COMPLETE — antes não havia handler e o
+        // vídeo congelava sem trocar de candidato. Agora escala para o próximo
+        // candidato se o canal ainda não estabilizou (sem frames decodificados
+        // recentes) ou se o stream encerrou antes do primeiro frame.
+        tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+          if (cancelled) return;
+          const decoded = mpegtsStats.decodedFrames || 0;
+          console.warn("[LIVE DEBUG] mpegts.js LOADING_COMPLETE", {
+            url, decodedFrames: decoded, currentTime: video.currentTime,
+          });
+          // Se nunca avançou para o primeiro frame ou parou logo após início,
+          // tratamos como canal terminado/offline e tentamos o próximo.
+          if (decoded < 30 || video.currentTime < 1) {
+            tryNextVod();
+          }
+        });
+
         // Captura codec/resolução real do stream.
         tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
           const m = info as {
