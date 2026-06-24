@@ -47,10 +47,14 @@ function LivePage() {
   useEffect(() => {
     const saved = store.getCreds();
     if (saved) { setCreds(saved); return; }
+    // Sem creds salvas: só recuperamos localmente da primeira lista (sem
+    // persistir com setCreds), para nunca trocar a lista do usuário de
+    // forma silenciosa quando a atual expirar.
     const firstList = store.getM3U()[0];
     const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
-    if (recovered) { store.setCreds(recovered); setCreds(recovered); }
+    if (recovered) setCreds(recovered);
   }, []);
+
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `live-cats:${acct}`;
