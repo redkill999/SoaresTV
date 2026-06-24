@@ -425,11 +425,31 @@ export function VideoPlayer({
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
+          playerEstrategia: lastPlayerStrategy,
+        });
+        // Alimenta o painel DEBUG VISUAL na tela (APK sem acesso ao logcat).
+        const streamId = (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? "(n/d)";
+        const canalRotulo = (src.match(/\/live\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
+          ?? (src.match(/\/movie\/[^/]+\/[^/]+\/(\d+)/i)?.[1])
+          ?? streamId;
+        setDebugInfo({
+          canal: canalRotulo,
+          streamId,
+          urlOriginal: src,
+          urlFinal: upstreamFinal || currentUrl,
+          formato: detectFormat(workingSrc),
+          httpStatus: `proxy=${probeStatus} • upstream=${upstreamStatus || "n/d"}`,
+          contentType: upstreamCt || "(n/d)",
+          redirect: upstreamRedirected === "1" ? `sim → ${upstreamFinal}` : "não",
+          player: lastPlayerStrategy,
+          userAgent: upstreamUA || forcedUA || "(auto)",
+          motivo: reason,
         });
       } catch {
         /* noop */
       }
     };
+
 
     const tryNextVod = () => {
       clearWatchdog();
