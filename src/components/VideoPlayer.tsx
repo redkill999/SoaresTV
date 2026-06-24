@@ -31,6 +31,7 @@ import {
 } from "@/lib/live-diag-store";
 import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 import { DEBUG } from "@/lib/debug";
+import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
@@ -487,7 +488,15 @@ export function VideoPlayer({
       });
     } catch { /* noop */ }
 
+    auditEvent(diagSessionIdRef.current, "channel-open", {
+      src, kind, host: hostOf(workingSrc), isLive, isVod, candidates: playbackCandidates.length,
+    });
+    auditEvent(diagSessionIdRef.current, "engine-pick", {
+      ordem: decideEngineOrder(hostOf(workingSrc), kind, shouldUseNativePlayer ? "native-apk" : "web"),
+    });
 
+
+    const effectStartT = performance.now();
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
     let cancelled = false;
@@ -658,6 +667,9 @@ export function VideoPlayer({
         vodIdx += 1;
         if (vodIdx < playbackCandidates.length) {
           const next = playbackCandidates[vodIdx];
+          auditEvent(diagSessionIdRef.current, "fallback-next-candidate", {
+            idx: vodIdx, total: playbackCandidates.length, url: next,
+          });
           if (next && !next.startsWith("/api/stream")) {
             console.log("[503 BYPASS] próxima tentativa via URL direta", { url: next });
           }
@@ -677,6 +689,11 @@ export function VideoPlayer({
             host: hostOf(workingSrc),
             tentativas: playbackCandidates.length,
             ultimaEstrategia: lastPlayerStrategy,
+          });
+          auditEvent(diagSessionIdRef.current, "final-fail", {
+            host: hostOf(workingSrc),
+            attempts: playbackCandidates.length,
+            lastStrategy: lastPlayerStrategy,
           });
           void reportPlaybackFailure("Todos os candidatos falharam");
           if (isLive && diagSessionIdRef.current) {
@@ -917,6 +934,11 @@ export function VideoPlayer({
       setCanManualPlay(false);
       if (!hasStartedPlaying) {
         hasStartedPlaying = true;
+        auditEvent(diagSessionIdRef.current, "engine-ok", {
+          strategy: lastPlayerStrategy,
+          attemptsBeforeOk: vodIdx + 1,
+          elapsedMs: Math.round(performance.now() - effectStartT),
+        });
         const h = hostOf(workingSrc);
         if (h) {
           // Mapeia lastPlayerStrategy → PlaybackStrategy normalizada.
