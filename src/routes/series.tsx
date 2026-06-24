@@ -45,10 +45,13 @@ function SeriesPage() {
   useEffect(() => {
     const saved = store.getCreds();
     if (saved) { setCreds(saved); return; }
+    // Sem creds salvas: recuperar só localmente (não persistir setCreds),
+    // para nunca trocar a lista do usuário silenciosamente quando expirar.
     const firstList = store.getM3U()[0];
     const recovered = firstList ? xtreamCredsFromUrl(firstList.url, firstList.username, firstList.password) : null;
-    if (recovered) { store.setCreds(recovered); setCreds(recovered); }
+    if (recovered) setCreds(recovered);
   }, []);
+
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `series-cats:${acct}`;

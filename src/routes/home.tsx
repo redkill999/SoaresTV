@@ -339,9 +339,10 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
     setInfo(null);
     setError(null);
     if (!creds) { setLoading(false); return; }
-    // Persist for next time so other screens also have it.
-    try { store.setCreds(creds); } catch { /* ignore */ }
+    // NÃO persistir setCreds aqui — se a lista atual expirou, o usuário
+    // deve continuar vendo as info dela até fazer logout/troca manual.
     setLoading(true);
+
     (async () => {
       try {
         const r = await api<{ user_info?: XtUserInfo }>(creds);
