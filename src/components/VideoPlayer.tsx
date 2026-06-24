@@ -204,6 +204,11 @@ export function VideoPlayer({
   //  - bypassa o proxy /api/stream (vai direto pro painel via http)
   // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
   // web (hls.js/mpegts) que continua existindo.
+  // FIX D2 (audit IPTV): rastreia quando o player nativo abriu para distinguir
+  // back-button legítimo (usuário assistiu N segundos) de falha precoce
+  // (plugin abriu mas ExoPlayer fechou em <8s sem progresso) — neste último
+  // caso, cai para o pipeline web (hls.js/mpegts) automaticamente.
+  const nativeStartedAtRef = useRef(0);
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
     if (!native) return false;
@@ -212,11 +217,22 @@ export function VideoPlayer({
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
         : "XCIPTV/7.0 (Linux; Android 13)";
-    return playNative({
+    const ok = await playNative({
       url: src,
       userAgent: ua,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
       onExit: (pos) => {
+        const elapsed = Date.now() - (nativeStartedAtRef.current || Date.now());
+        // FIX D2: ExoPlayer fechou em <8s sem ter avançado: provavelmente
+        // erro de abertura/codec/DNS mid-handshake. Força fallback web.
+        if (elapsed < 8_000 && pos <= 0) {
+          console.warn("[NATIVE FALLBACK] ExoPlayer encerrou em <8s sem progresso — caindo para pipeline web", {
+            kind, elapsedMs: elapsed,
+          });
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          return;
+        }
         if (kind !== "live" && pos > 0) {
           // Duração real não vem do plugin; salvamos posição com duração
           // best-effort para o store de "Continuar assistindo".
@@ -224,7 +240,10 @@ export function VideoPlayer({
         }
       },
     });
+    if (ok) nativeStartedAtRef.current = Date.now();
+    return ok;
   }, [src, kind]);
+
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo";
 
