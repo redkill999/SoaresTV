@@ -688,16 +688,18 @@ export function VideoPlayer({
         // engasgar mais nesses painéis; o HTML5 com .ts direto, quando o
         // dispositivo aceita, roda mais fluido.
         const h = hostOf(workingSrc) ?? "";
+        const profile = getHostProfile(h);
         const preferHtml5 =
-          hostStrategy.get(h) === "html5" ||
-          (bypass503Hosts.has(h) && hostStrategy.get(h) !== "mpegts");
+          profile.preferPlayer === "html5" ||
+          (profile.disableProxy && profile.preferPlayer !== "mpegts");
         const tStart = performance.now();
         if (preferHtml5) {
           console.log("[BUFFER OPTIMIZATION] estratégia HTML5 prioritária (.ts)", {
             host: h,
             url,
-            memorizada: hostStrategy.get(h) ?? "(nenhuma)",
+            memorizada: profile.preferPlayer ?? "(nenhuma)",
           });
+
           lastPlayerStrategy = "HTML5 <video> (.ts direto)";
           video.pause();
           video.currentTime = 0;
