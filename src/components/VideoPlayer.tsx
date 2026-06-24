@@ -740,22 +740,20 @@ export function VideoPlayer({
         return;
       }
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
-        // [BUFFER OPTIMIZATION] Para hosts marcados (503 bypass) ou cuja
-        // estratégia preferida memorizada é HTML5, tenta <video> primeiro —
-        // mpegts.js fica como fallback. mpegts.js demulta em JS e tende a
-        // engasgar mais nesses painéis; o HTML5 com .ts direto, quando o
-        // dispositivo aceita, roda mais fluido.
+        // [LIVE DEBUG] Ordem para LIVE .ts: Native HTML5 → mpegts.js → (HLS).
+        // Empiricamente, <video> nativo com .ts entrega frame mais rápido em
+        // dispositivos que aceitam o container; mpegts.js (demux JS) fica
+        // como fallback. Para VOD/outros casos, mantém heurística por host.
         const h = hostOf(workingSrc) ?? "";
         const profile = getHostProfile(h);
         const preferHtml5 =
+          isLive ||
           profile.preferPlayer === "html5" ||
           (profile.disableProxy && profile.preferPlayer !== "mpegts");
         const tStart = performance.now();
         if (preferHtml5) {
-          console.log("[BUFFER OPTIMIZATION] estratégia HTML5 prioritária (.ts)", {
-            host: h,
-            url,
-            memorizada: profile.preferPlayer ?? "(nenhuma)",
+          console.log("[LIVE DEBUG] tentativa 1/2: HTML5 nativo (.ts direto)", {
+            host: h, url, memorizada: profile.preferPlayer ?? "(nenhuma)",
           });
 
           lastPlayerStrategy = "HTML5 <video> (.ts direto)";
@@ -764,9 +762,33 @@ export function VideoPlayer({
           video.src = url;
           video.load();
           armVodWatchdog();
+          // Se HTML5 falhar em LIVE, tenta mpegts.js antes de iterar candidatos.
+          let html5FellBack = false;
+          const onceErr = () => {
+            if (cancelled || html5FellBack) return;
+            html5FellBack = true;
+            video.removeEventListener("error", onceErr);
+            const err = video.error;
+            console.warn("[LIVE DEBUG] HTML5 falhou", {
+              host: h,
+              videoErrorCode: err?.code ?? null,
+              videoErrorMessage: err?.message ?? null,
+              ms: Math.round(performance.now() - tStart),
+            });
+            if (isLive) {
+              console.log("[LIVE DEBUG] tentativa 2/2: mpegts.js");
+              void playMpegTs(url).then((handled) => {
+                if (!handled && !cancelled) {
+                  console.warn("[LIVE DEBUG] mpegts.js também falhou — próximo candidato");
+                  tryNextVod();
+                }
+              });
+            }
+          };
+          video.addEventListener("error", onceErr, { once: true });
           video.play().then(() => {
             setCanManualPlay(false);
-            console.log("[BUFFER OPTIMIZATION] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
+            console.log("[LIVE DEBUG] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
           }).catch(() => setCanManualPlay(true));
         } else {
           void playMpegTs(url).then((handled) => {
