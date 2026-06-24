@@ -162,6 +162,18 @@ export function liveDiagMarkFailed(id: string, reason: string): void {
   });
 }
 
+export function liveDiagSetMediaInfo(id: string, info: LiveMediaInfo): void {
+  update(id, (s) => { s.mediaInfo = { ...(s.mediaInfo ?? {}), ...info }; });
+}
+
+export function liveDiagRecordFreeze(id: string, ev: LiveFreezeEvent): void {
+  update(id, (s) => {
+    const next = [...(s.freezes ?? []), ev];
+    // Mantém só os 20 últimos por sessão para não inflar localStorage.
+    s.freezes = next.slice(-20);
+  });
+}
+
 export function liveDiagLatestFailedFor(originalUrl: string): LiveDiagSession | null {
   loadOnce();
   for (const s of sessions) {
