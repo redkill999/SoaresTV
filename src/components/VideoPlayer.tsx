@@ -22,7 +22,7 @@ import {
   type PlaybackStrategy,
 } from "@/lib/host-profile";
 import { decideEngineOrder, plog } from "@/lib/playback-engine";
-import { probeLiveStream, logLiveProbeReport, liveContentKind, LIVE_UAS } from "@/lib/live-debug";
+import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
 export type { PlaybackStrategy } from "@/lib/host-profile";
 
 
