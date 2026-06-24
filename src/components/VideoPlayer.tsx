@@ -314,6 +314,31 @@ export function VideoPlayer({
         })
       : directCandidates.map((url) => proxiedX(url, kind));
 
+    // ===== [STREAM DEBUG] inicialização =====================================
+    // Bloco puramente informativo. Não altera nenhuma lógica de reprodução —
+    // só lista o que o player vai tentar e como (para diagnóstico de canais
+    // que disparam "Não foi possível reproduzir este canal.").
+    try {
+      console.group("[STREAM DEBUG]");
+      console.log("ETAPA 1 — Canal selecionado:", {
+        src,
+        streamIdInferido: (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? null,
+        kind: kind ?? "(indef)",
+      });
+      console.log("ETAPA 2 — URL original (src recebido):", src);
+      console.log("ETAPA 3 — URLs finais montadas (ordem de tentativa):", playbackCandidates);
+      console.log("ETAPA 4 — Formato detectado:", detectFormat(workingSrc), {
+        hlsCandidate,
+        workingSrc,
+        httpsForçado: !!httpsSrc,
+      });
+      console.log("ETAPA 8 — Estratégia inicial de player:", hlsCandidate ? "HLS (hls.js)" : "Direto (mpegts.js/HTML5/ExoPlayer)");
+      console.log("ETAPA 9 — User-Agent forçado (compat):", forcedUA ?? "(auto: proxy cicla XCIPTV/TiviMate/IPTV Smarters/VLC/okhttp/…)");
+      console.log("Compat resolvida para esta lista:", compat);
+      console.log("Etapas 5/6/7 (HTTP Status, Content-Type, Redirects) serão impressas no relatório final via headers X-Upstream-*.");
+      console.groupEnd();
+    } catch { /* console pode não suportar group em algum runtime */ }
+
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
@@ -400,6 +425,15 @@ export function VideoPlayer({
       if (vodIdx < playbackCandidates.length) playDirect();
       else {
         const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+        console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
+          arquivo: "src/components/VideoPlayer.tsx",
+          linha: 429,
+          funcao: "tryNextVod()",
+          motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
+          mensagem: msg,
+          vodIdx,
+          totalCandidatos: playbackCandidates.length,
+        });
         void reportPlaybackFailure("Todos os candidatos falharam");
         setError(msg);
       }
@@ -737,7 +771,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
+                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 774, funcao: "attachHls()/hls.on(ERROR) NETWORK_ERROR", motivo: "hls.js retornou NETWORK_ERROR fatal após esgotar netRetries e sem candidato direto restante." }); void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
                   return;
                 }
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
@@ -757,7 +791,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
+                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 794, funcao: "attachHls()/hls.on(ERROR) MEDIA_ERROR", motivo: "hls.js retornou MEDIA_ERROR fatal após esgotar mediaRetries (recoverMediaError não recuperou)." }); void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
                   return;
                 }
                 hls?.recoverMediaError();
@@ -771,7 +805,7 @@ export function VideoPlayer({
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
-              else { void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
+              else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 808, funcao: "attachHls()/hls.on(ERROR) default", motivo: "hls.js retornou erro fatal de tipo não tratado (não NETWORK/MEDIA) e já tentamos playDirect()." }); void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
           }
         });
 
