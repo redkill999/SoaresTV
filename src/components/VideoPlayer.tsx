@@ -204,6 +204,11 @@ export function VideoPlayer({
   //  - bypassa o proxy /api/stream (vai direto pro painel via http)
   // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
   // web (hls.js/mpegts) que continua existindo.
+  // FIX D2 (audit IPTV): rastreia quando o player nativo abriu para distinguir
+  // back-button legítimo (usuário assistiu N segundos) de falha precoce
+  // (plugin abriu mas ExoPlayer fechou em <8s sem progresso) — neste último
+  // caso, cai para o pipeline web (hls.js/mpegts) automaticamente.
+  const nativeStartedAtRef = useRef(0);
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
     if (!native) return false;
@@ -212,11 +217,22 @@ export function VideoPlayer({
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
         : "XCIPTV/7.0 (Linux; Android 13)";
-    return playNative({
+    const ok = await playNative({
       url: src,
       userAgent: ua,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
       onExit: (pos) => {
+        const elapsed = Date.now() - (nativeStartedAtRef.current || Date.now());
+        // FIX D2: ExoPlayer fechou em <8s sem ter avançado: provavelmente
+        // erro de abertura/codec/DNS mid-handshake. Força fallback web.
+        if (elapsed < 8_000 && pos <= 0) {
+          console.warn("[NATIVE FALLBACK] ExoPlayer encerrou em <8s sem progresso — caindo para pipeline web", {
+            kind, elapsedMs: elapsed,
+          });
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          return;
+        }
         if (kind !== "live" && pos > 0) {
           // Duração real não vem do plugin; salvamos posição com duração
           // best-effort para o store de "Continuar assistindo".
@@ -224,7 +240,10 @@ export function VideoPlayer({
         }
       },
     });
+    if (ok) nativeStartedAtRef.current = Date.now();
+    return ok;
   }, [src, kind]);
+
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo";
 
@@ -675,13 +694,29 @@ export function VideoPlayer({
           }
           playDirect();
         } else {
-          const msg = isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.";
+          // FIX D11 (audit IPTV): mensagem específica baseada no último motivo
+          // de falha detectado, em vez de uma única genérica para todos os modos.
+          const ve = videoRef.current?.error ?? null;
+          const code = ve?.code ?? null;
+          let msg: string;
+          if (isLive) {
+            if (code === 4) msg = "Formato deste canal não é compatível com o navegador. Tente no app Android.";
+            else if (code === 3) msg = "Erro de decodificação. Pode ser codec não suportado (ex.: HEVC/EAC3).";
+            else if (code === 2) msg = "Falha de rede ao conectar ao canal. Verifique sua conexão.";
+            else msg = `Não foi possível reproduzir este canal após ${playbackCandidates.length} tentativas.`;
+          } else {
+            if (code === 4) msg = "Formato deste vídeo não é compatível com seu navegador.";
+            else if (code === 3) msg = "Erro de decodificação do vídeo.";
+            else if (code === 2) msg = "Falha de rede ao carregar este vídeo.";
+            else msg = "Não foi possível reproduzir esta mídia.";
+          }
           console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
             arquivo: "src/components/VideoPlayer.tsx",
             linha: 429,
             funcao: "tryNextVod()",
             motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
             mensagem: msg,
+            videoErrorCode: code,
             vodIdx,
             totalCandidatos: playbackCandidates.length,
           });
@@ -689,19 +724,22 @@ export function VideoPlayer({
             host: hostOf(workingSrc),
             tentativas: playbackCandidates.length,
             ultimaEstrategia: lastPlayerStrategy,
+            videoErrorCode: code,
           });
           auditEvent(diagSessionIdRef.current, "final-fail", {
             host: hostOf(workingSrc),
             attempts: playbackCandidates.length,
             lastStrategy: lastPlayerStrategy,
+            videoErrorCode: code,
           });
-          void reportPlaybackFailure("Todos os candidatos falharam");
+          void reportPlaybackFailure(msg);
           if (isLive && diagSessionIdRef.current) {
-            liveDiagMarkFailed(diagSessionIdRef.current, "Todos os candidatos falharam");
+            liveDiagMarkFailed(diagSessionIdRef.current, msg);
             setDiagOpen(true);
           }
           setError(msg);
         }
+
       });
     };
 
@@ -796,6 +834,24 @@ export function VideoPlayer({
           console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, args });
           if (!cancelled) tryNextVod();
         });
+        // FIX D5 (audit IPTV): provedor que fecha a conexão TS graciosamente
+        // (sem RST) dispara LOADING_COMPLETE — antes não havia handler e o
+        // vídeo congelava sem trocar de candidato. Agora escala para o próximo
+        // candidato se o canal ainda não estabilizou (sem frames decodificados
+        // recentes) ou se o stream encerrou antes do primeiro frame.
+        tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+          if (cancelled) return;
+          const decoded = mpegtsStats.decodedFrames || 0;
+          console.warn("[LIVE DEBUG] mpegts.js LOADING_COMPLETE", {
+            url, decodedFrames: decoded, currentTime: video.currentTime,
+          });
+          // Se nunca avançou para o primeiro frame ou parou logo após início,
+          // tratamos como canal terminado/offline e tentamos o próximo.
+          if (decoded < 30 || video.currentTime < 1) {
+            tryNextVod();
+          }
+        });
+
         // Captura codec/resolução real do stream.
         tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
           const m = info as {
@@ -942,12 +998,24 @@ export function VideoPlayer({
     const onVideoError = () => {
       if (cancelled || hls) return;
       if (hasStartedPlaying) {
+        // FIX D12 (audit IPTV): MediaError code=3 (MEDIA_ERR_DECODE) e code=4
+        // (SRC_NOT_SUPPORTED) pós-início são fatais — apenas chamar play() não
+        // recupera. Escalamos para o próximo candidato. code=1/2 (transitório)
+        // continua tratado pelo recovery silencioso anterior.
+        const errCode = video.error?.code;
+        if (errCode === 3 || errCode === 4) {
+          console.warn("[VIDEO ERROR] erro fatal pós-início (code=" + errCode + ") — próximo candidato");
+          hasStartedPlaying = false;
+          tryNextVod();
+          return;
+        }
         console.log("[BUFFER OPTIMIZATION] engasgo após início — recover sem trocar player");
         void video.play().catch(() => undefined);
         return;
       }
       tryNextVod();
     };
+
     const onVideoReady = () => clearWatchdog();
     const onPlaying = () => {
       clearWatchdog();
@@ -1052,11 +1120,30 @@ export function VideoPlayer({
           return false;
         }
       };
+      // FIX D8 (audit IPTV): escalada de stalls recorrentes. Antes, o sistema
+      // ficava em loop eterno de recovery sem nunca trocar de candidato. Agora:
+      // 4 stalls em 60s do MESMO candidato → tryNextVod(). VOD usa watchdog
+      // próprio, então isso só vale para LIVE.
+      const webStallTimestamps: number[] = [];
       const recoverLiveWebStall = (reason: "waiting" | "stalled" | "suspend" | "watchdog") => {
         if (cancelled || liveRecoveryBusy) return;
         const now = Date.now();
         if (now - lastLiveRecoveryAt < 7_000) return;
         lastLiveRecoveryAt = now;
+        webStallTimestamps.push(now);
+        while (webStallTimestamps.length && now - webStallTimestamps[0] > 60_000) {
+          webStallTimestamps.shift();
+        }
+        if (webStallTimestamps.length >= 4) {
+          console.warn("[STALL ESCALATION] 4 stalls em 60s no mesmo candidato — escalando para próximo", {
+            strategy: lastPlayerStrategy,
+            vodIdx,
+            total: playbackCandidates.length,
+          });
+          webStallTimestamps.length = 0;
+          tryNextVod();
+          return;
+        }
         const url = currentPlaybackUrl ?? playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
         const decoded = safeDecodeUrl(url);
         const ahead = bufferedAhead();
@@ -1069,6 +1156,7 @@ export function VideoPlayer({
         });
         liveRecoveryBusy = true;
         const finish = () => { liveRecoveryBusy = false; };
+
 
         // HTML5 direto com .ts consegue abrir em vários Androids, mas às vezes
         // congela sem disparar erro. Reconecta ao edge LIVE sem recarregar a tela;
