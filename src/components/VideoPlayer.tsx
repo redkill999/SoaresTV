@@ -171,8 +171,9 @@ export function VideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-  // Painel visual de debug removido — diagnóstico vive nos console.logs
-  // (`[STREAM DEBUG]`, `[HOST PROFILE]`, `[BUFFER OPTIMIZATION]`, etc.).
+  // [LIVE DIAG] painel visível dentro do APK quando LIVE falha.
+  const [diagOpen, setDiagOpen] = useState(false);
+  const diagSessionIdRef = useRef<string | null>(null);
 
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
