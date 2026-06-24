@@ -614,6 +614,7 @@ export function VideoPlayer({
       }
       if (Hls.isSupported()) {
 
+        lastPlayerStrategy = "HLS (hls.js)";
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
