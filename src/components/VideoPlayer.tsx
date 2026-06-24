@@ -16,6 +16,12 @@ let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
 // persistido — reinicia a cada recarregamento. Não altera nada para hosts
 // que continuam funcionando via proxy.
 const bypass503Hosts = new Set<string>();
+// ===== [BUFFER OPTIMIZATION] memória de estratégia por host ===============
+// Estratégia que efetivamente começou a reproduzir num host. Usada para já
+// abrir os próximos canais do mesmo painel pelo caminho que funcionou (evita
+// retentativas e reduz tempo até primeiro frame). Sessão apenas.
+export type PlaybackStrategy = "exo-native" | "html5" | "mpegts" | "hls";
+const hostStrategy = new Map<string, PlaybackStrategy>();
 function hostOf(u: string): string | null {
   try { return new URL(u).host.toLowerCase(); } catch { return null; }
 }
