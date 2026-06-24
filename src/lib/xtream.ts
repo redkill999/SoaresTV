@@ -103,8 +103,9 @@ export async function isNativeApp(): Promise<boolean> {
 
 async function nativeHttpGet(
   url: string,
-  timeoutMs = 30_000,
+  timeoutMs = 8_000,
 ): Promise<NativeHttpResponse | null> {
+
   if (typeof window === "undefined") return null;
   try {
     const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
