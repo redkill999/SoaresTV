@@ -509,17 +509,20 @@ export function VideoPlayer({
             const t = new URL(target);
             const original = new URL(workingSrc);
             if (t.protocol === "https:" && original.protocol === "http:" && t.host.toLowerCase() === original.host.toLowerCase()) {
-              rememberNoHttps(t.host.toLowerCase());
+              rememberHttpsFailure(t.host.toLowerCase());
             }
           } catch { /* noop */ }
         }
         if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
         const res = await fetch(failedUrl, { method: "HEAD" });
         const upstream = res.headers.get("X-Upstream-Status") ?? "";
-        const is503 = res.status === 503 || upstream === "503";
-        if (!is503) return false;
+        // 502/503/504 → proxy não conseguiu falar com upstream. Marca o host
+        // como "proxy morto" e injeta candidatos diretos no fluxo.
+        const proxyDead = isProxyDeadStatus(res.status) || isProxyDeadStatus(upstream);
+        if (!proxyDead) return false;
         const host = hostOf(workingSrc);
-        if (host) rememberBypass503(host);
+        if (host) rememberProxyDead(host, upstream || String(res.status));
+
         // Constrói diretos não presentes ainda na fila
         const directs: string[] = [];
         for (const u of directCandidates) {
