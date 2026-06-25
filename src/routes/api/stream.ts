@@ -1,233 +1,295 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// Proxy IPTV minimalista (reescrito na Fase 2 da reversão).
-//
-// Responsabilidades:
-//   1. Encaminhar a requisição ao upstream preservando Range/UA/Referer.
-//   2. Para playlists HLS (.m3u8): reescrever segmentos para também fluírem
-//      pelo proxy (resolve CORS / mixed-content no preview HTTPS).
-//   3. Tratar redirects sem segui-los no servidor: devolvemos o Location para
-//      o navegador/app seguir pelo IP do usuário, como no fluxo que funcionava.
-//   4. Em caso de falha, retornar SEMPRE JSON estruturado (nunca HTML).
-//
-// Não-objetivos (removidos da versão anterior):
-//   - probes (?probe=1), peeks (?redirect=peek)
-//   - matriz UA × Origin × Referer × Cookie × Range
-//   - normalização 5xx → 424
-//   - headers X-Upstream-* / X-Debug-*
-//   - slicing manual de Range para forçar 206
+// Proxy upstream IPTV streams so the browser doesn't hit CORS / mixed-content
+// issues. For HLS playlists (.m3u8 / mpegurl) we rewrite the segment URLs so
+// they also flow through this proxy.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
 };
 
-// Lista curta de UAs IPTV-friendly. A maioria dos painéis aceita ao menos um destes.
-const DEFAULT_UA_CYCLE = [
-  "VLC/3.0.20 LibVLC/3.0.20",
-  "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36",
-  "IPTV Smarters Pro/4.0",
-  "okhttp/4.12.0",
-];
+const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
-// Para VOD via navegador desktop, começamos com UA de browser real porque
-// muitos CDNs Xtream liberam VOD para Chrome/Firefox e bloqueiam UAs IPTV
-// vindos de IP de datacenter.
-const VOD_UA_CYCLE = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-  "VLC/3.0.20 LibVLC/3.0.20",
-  "IPTV Smarters Pro/4.0",
-  "okhttp/4.12.0",
-];
+function proxyUrl(absolute: string, ua?: string | null) {
+  const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
+}
+
+function contentTypeForPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".mp4") || lower.endsWith(".m4v")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".mkv")) return "video/x-matroska";
+  if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".avi")) return "video/x-msvideo";
+  if (lower.endsWith(".ts")) return "video/mp2t";
+  if (lower.endsWith(".m3u8") || lower.endsWith(".m3u")) return "application/vnd.apple.mpegurl";
+  return "video/mp4";
+}
+
+function isVodPath(path: string): boolean {
+  return /\/movie\/[^/]+\/[^/]+\//i.test(path) || /\/series\/[^/]+\/[^/]+\//i.test(path);
+}
 
 function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function isRedirectStatus(status: number): boolean {
-  return status >= 300 && status < 400;
+function parseByteRange(range: string | null): { start: number; end?: number } | null {
+  const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : undefined;
+  if (!Number.isFinite(start) || start < 0) return null;
+  if (end !== undefined && (!Number.isFinite(end) || end < start)) return null;
+  return { start, end };
 }
 
-function resolveLocation(location: string | null, baseUrl: URL): string | null {
-  if (!location) return null;
-  try {
-    return new URL(location, baseUrl).toString();
-  } catch {
-    return null;
-  }
+function parseContentRangeTotal(value: string | null): number | undefined {
+  const total = /bytes\s+\d+-\d+\/(\d+|\*)/i.exec(value ?? "")?.[1];
+  if (!total || total === "*") return undefined;
+  const n = Number(total);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod"): string {
-  const kindPart = kind === "vod" ? "&kind=vod" : "";
-  const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
+function parseContentRange(value: string | null): { start: number; end: number; total?: number } | null {
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(value?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = match[3] === "*" ? undefined : Number(match[3]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  if (total !== undefined && (!Number.isFinite(total) || total <= 0)) return null;
+  return { start, end, total };
 }
 
-function rewritePlaylist(text: string, baseUrl: string, ua: string | null, kind: "live" | "vod"): string {
+function vodRangeForUpstream(requestedRange: string | null, head = false): string {
+  if (head) return "bytes=0-0";
+  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
+  const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
+  return `bytes=${parsed.start}-${cappedEnd}`;
+}
+
+function numericHeader(headers: Headers, name: string): number | undefined {
+  const value = Number(headers.get(name));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: string) {
+  const parsed = parseByteRange(effectiveRange);
+  if (!parsed) return;
+
+  const upstreamRange = parseContentRange(headers.get("content-range"));
+  const total = upstreamRange?.total ?? parseContentRangeTotal(headers.get("content-range"));
+  const contentLength = numericHeader(headers, "content-length");
+  const start = upstreamRange?.start ?? parsed.start;
+  const end = upstreamRange?.end ?? parsed.end ?? (contentLength !== undefined ? start + contentLength - 1 : total !== undefined ? total - 1 : undefined);
+  if (end === undefined || end < start) return;
+
+  const bodyLength = end - start + 1;
+  headers.set("Content-Length", String(bodyLength));
+  headers.set("Content-Range", `bytes ${start}-${end}/${total ?? "*"}`);
+  headers.set("Accept-Ranges", "bytes");
+}
+
+function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
   const base = new URL(baseUrl);
   return text
     .split(/\r?\n/)
     .map((line) => {
       const t = line.trim();
       if (!t) return line;
-      const withUri = line.replace(/URI="([^"]+)"/g, (_, uri: string) => {
-        try { return `URI="${proxyUrl(new URL(uri, base).toString(), ua, kind)}"`; }
-        catch { return `URI="${uri}"`; }
+      // URI="..." attributes (EXT-X-KEY, EXT-X-MAP, etc.)
+      const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
+        try {
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua)}"`;
+        } catch {
+          return `URI="${uri}"`;
+        }
       });
       if (withUri.startsWith("#")) return withUri;
-      try { return proxyUrl(new URL(withUri, base).toString(), ua, kind); }
-      catch { return withUri; }
+      // bare URL line (segment / sub-playlist)
+      try {
+        return proxyUrl(new URL(withUri, base).toString(), ua);
+      } catch {
+        return withUri;
+      }
     })
     .join("\n");
 }
 
-function jsonError(status: number, error: string, extra: Record<string, unknown> = {}): Response {
-  const headers = new Headers(CORS);
-  headers.set("Content-Type", "application/json; charset=utf-8");
-  return new Response(JSON.stringify({ error, status, ...extra }), { status, headers });
-}
-
-function buildHeaders(target: URL, ua: string, range: string | null): Headers {
-  const h = new Headers();
-  h.set("User-Agent", ua);
-  h.set("Accept", isPlaylistPath(target.pathname)
-    ? "application/vnd.apple.mpegurl,application/x-mpegURL,*/*;q=0.8"
-    : "*/*");
-  h.set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7");
-  h.set("Accept-Encoding", "identity");
-  h.set("Icy-MetaData", "0");
-  // Alguns painéis Xtream validam Referer da origem.
-  h.set("Referer", `${target.origin}/`);
-  if (range) h.set("Range", range);
-  return h;
-}
-
-async function tryFetch(target: URL, ua: string, range: string | null, method: "GET" | "HEAD"): Promise<Response> {
-  const headers = buildHeaders(target, ua, range);
-  // IMPORTANTE: o AbortSignal passado a fetch() aborta TAMBÉM o corpo da
-  // resposta após o timeout. Para um stream LIVE/.ts ou um download de filme,
-  // isso matava a reprodução em ~25s. Usamos um controller manual e cancelamos
-  // o timeout assim que recebemos os headers — a partir daí o body flui livre.
-  const controller = new AbortController();
-  const handshakeTimer = setTimeout(() => controller.abort(), 25_000);
-  try {
-    return await fetch(target.toString(), {
-      method,
-      headers,
-      // Não seguir o redirect no proxy. Muitos painéis Xtream redirecionam
-      // /live, /movie e /series para CDN que bloqueia IP de datacenter, mas
-      // libera o IP residencial do usuário/APK. Seguir aqui transforma um
-      // stream válido em 404/502. Devolvemos o Location ao client.
-      redirect: "manual",
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(handshakeTimer);
-  }
-}
-
-async function handle(request: Request): Promise<Response> {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS });
-  }
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return jsonError(405, "method not allowed");
-  }
-
+async function handle(request: Request) {
   const url = new URL(request.url);
-  const targetRaw = url.searchParams.get("u");
-  if (!targetRaw) return jsonError(400, "missing ?u");
+  const target = url.searchParams.get("u");
+  if (!target) {
+    return new Response("missing ?u", { status: 400, headers: CORS });
+  }
 
-  let target: URL;
-  try { target = new URL(targetRaw); }
-  catch { return jsonError(400, "invalid target url"); }
-  if (!/^https?:$/.test(target.protocol)) return jsonError(400, "bad protocol");
+  let upstreamUrl: URL;
+  try {
+    upstreamUrl = new URL(target);
+  } catch {
+    return new Response("invalid url", { status: 400, headers: CORS });
+  }
+  if (!/^https?:$/.test(upstreamUrl.protocol)) {
+    return new Response("bad protocol", { status: 400, headers: CORS });
+  }
 
-  const kind: "live" | "vod" = url.searchParams.get("kind") === "vod" ? "vod" : "live";
-  const forcedUA = url.searchParams.get("ua");
   const range = request.headers.get("range");
+  const playlistPath = isPlaylistPath(upstreamUrl.pathname);
+  const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
-  const uaCycle = forcedUA
-    ? Array.from(new Set([forcedUA, ...(kind === "vod" ? VOD_UA_CYCLE : DEFAULT_UA_CYCLE)]))
-    : (kind === "vod" ? VOD_UA_CYCLE : DEFAULT_UA_CYCLE);
+  // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
+  // ou exigem cabeçalhos parecidos com IPTV Smarters. Tentamos uma lista de
+  // UAs até obter algo que não seja 403/401. Se o cliente passar &ua=,
+  // priorizamos esse UA (permite override por lista).
+  const DEFAULT_UAS = [
+    "XCIPTV/7.0 (Linux; Android 13)",
+    "TiviMate/5.1.0",
+    "IPTV Smarters Pro/4.0",
+    "VLC/3.5.4",
+    "okhttp/4.12.0",
+    "Mozilla/5.0 (Linux; Android 14)",
+    // Fallback adicional (UAs antigos que ainda funcionam em painéis legados)
+    "XCIPTV/6.0 (Linux; Android 11) okhttp/4.9.3",
+    "Xciptv/6.0",
+    "IPTVSmartersPro/3.1.5",
+    "TiviMate/4.7.0",
+    "okhttp/4.9.3",
+    "Lavf/58.76.100",
+    "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "VLC/3.0.20 LibVLC/3.0.20",
+  ];
+  const forcedUA = url.searchParams.get("ua");
+  const UA_CANDIDATES = forcedUA
+    ? Array.from(new Set([forcedUA, ...DEFAULT_UAS]))
+    : DEFAULT_UAS;
 
-  let lastResponse: Response | null = null;
+
+  const buildHeaders = (ua: string, rangeValue: string | null, includeOriginHeaders: boolean) => {
+    const h = new Headers();
+    h.set("User-Agent", ua);
+    h.set("Accept", "*/*");
+    h.set("Accept-Encoding", "identity");
+    h.set("Icy-MetaData", "0");
+    if (includeOriginHeaders) {
+      h.set("Referer", `${upstreamUrl.origin}/`);
+      h.set("Origin", upstreamUrl.origin);
+    }
+    if (rangeValue) h.set("Range", rangeValue);
+    return h;
+  };
+
+  let upstream: Response | null = null;
   let lastError: unknown = null;
-
-  for (const ua of uaCycle) {
-    try {
-      const res = await tryFetch(target, ua, range, request.method as "GET" | "HEAD");
-      // 401/403 → tenta próximo UA; resto entrega ao cliente.
-      if (res.status === 401 || res.status === 403) {
-        lastResponse = res;
-        continue;
-      }
-
-      const upstreamContentType = res.headers.get("content-type") ?? "";
-      const isHls = isPlaylistPath(target.pathname) || /mpegurl/i.test(upstreamContentType);
-
-      // Redirect do painel para CDN final: quem deve seguir é o navegador/app,
-      // não o proxy. Isso restaura o comportamento antigo do preview web e
-      // evita que o CDN julgue a requisição pelo IP do servidor do preview.
-      if (isRedirectStatus(res.status)) {
-        const location = resolveLocation(res.headers.get("location"), target);
-        if (location) {
-          const headers = new Headers(CORS);
-          headers.set("Location", location);
-          headers.set("Cache-Control", "no-store");
-          return new Response(null, { status: res.status, statusText: res.statusText, headers });
+  let lastStatus = 0;
+  const rangeCandidates = isVod
+    ? Array.from(new Set([effectiveVodRange, range, null]))
+    : playlistPath
+      ? [range]
+      : Array.from(new Set([range, "bytes=0-", null]));
+  attempt: for (const ua of UA_CANDIDATES) {
+    for (const rangeValue of rangeCandidates) {
+      for (const includeOriginHeaders of [false, true]) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 20_000);
+          const res = await fetch(upstreamUrl.toString(), {
+            method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+            headers: buildHeaders(ua, rangeValue, includeOriginHeaders),
+            redirect: "follow",
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          lastStatus = res.status;
+          const retryBlocked = res.status === 401 || res.status === 403;
+          const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
+          if (!retryBlocked && !retryBadRange) {
+            upstream = res;
+            break attempt;
+          }
+          try { await res.body?.cancel(); } catch { /* noop */ }
+        } catch (e) {
+          lastError = e;
         }
       }
-
-      // HLS playlist → reescreve.
-      if (isHls && res.ok && request.method === "GET") {
-        const text = await res.text();
-        const finalUrl = res.url || target.toString();
-        const rewritten = rewritePlaylist(text, finalUrl, forcedUA, kind);
-        const headers = new Headers(CORS);
-        headers.set("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
-        headers.set("Cache-Control", "no-store");
-        return new Response(rewritten, { status: 200, headers });
-      }
-
-      // Stream passthrough.
-      const outHeaders = new Headers();
-      for (const name of ["content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
-        const v = res.headers.get(name);
-        if (v) outHeaders.set(name, v);
-      }
-      for (const [k, v] of Object.entries(CORS)) outHeaders.set(k, v);
-      if (!outHeaders.has("accept-ranges")) outHeaders.set("Accept-Ranges", "bytes");
-
-      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: outHeaders });
-    } catch (err) {
-      lastError = err;
-      // Continua tentando próximo UA em erro de rede/timeout.
-      continue;
     }
   }
-
-  if (lastResponse) {
-    // Todos os UAs caíram em 401/403 — devolve o último com headers de CORS.
-    const out = new Headers(lastResponse.headers);
-    for (const [k, v] of Object.entries(CORS)) out.set(k, v);
-    return new Response(lastResponse.body, { status: lastResponse.status, statusText: lastResponse.statusText, headers: out });
+  if (!upstream) {
+    return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
+      status: lastStatus === 401 || lastStatus === 403 ? lastStatus : 502,
+      headers: CORS,
+    });
   }
 
-  return jsonError(502, "upstream unreachable", {
-    target: target.toString(),
-    reason: lastError instanceof Error ? lastError.message : String(lastError ?? "unknown"),
-  });
+  const ct = upstream.headers.get("content-type") || "";
+  const isPlaylist =
+    /mpegurl/i.test(ct) ||
+    /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
+    /\.m3u(\?|$)/i.test(upstreamUrl.pathname);
+
+  const respHeaders = new Headers(CORS);
+  if (!upstream.ok) {
+    if (isVod) {
+      return Response.json(
+        { error: `UPSTREAM_${upstream.status}`, fallback: true },
+        { status: 200, headers: respHeaders },
+      );
+    }
+    respHeaders.set("Content-Type", contentTypeForPath(upstreamUrl.pathname));
+    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+  }
+  // forward useful headers
+  for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
+    const v = upstream.headers.get(h);
+    if (v) respHeaders.set(h, v);
+  }
+
+  if (isPlaylist && upstream.ok) {
+    const text = await upstream.text();
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
+    respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
+    respHeaders.delete("content-length");
+    return new Response(rewritten, { status: upstream.status, headers: respHeaders });
+  }
+
+  // VOD / segmentos: deduzir Content-Type pelo path quando o upstream manda
+  // algo inútil tipo application/octet-stream (faz o browser baixar em vez de tocar).
+  const path = upstreamUrl.pathname.toLowerCase();
+  let finalCt = ct;
+  const badCt = !ct || /octet-stream|binary|text\/plain/i.test(ct);
+  if (badCt) {
+    finalCt = contentTypeForPath(path);
+  }
+  respHeaders.set("Content-Type", finalCt);
+  if (!respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
+  let status = upstream.status;
+  const requestedRange = request.headers.get("range");
+  const contentLength = respHeaders.get("content-length");
+  if (isVod && status === 206 && effectiveVodRange) {
+    normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
+    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  }
+  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
+    const total = Number(contentLength);
+    if (Number.isFinite(total) && total > 0) {
+      status = 206;
+      respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
+    }
+  }
+  return new Response(upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
-      GET: ({ request }) => handle(request),
-      HEAD: ({ request }) => handle(request),
-      OPTIONS: ({ request }) => handle(request),
+      OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
+      GET: async ({ request }) => handle(request),
+      HEAD: async ({ request }) => handle(request),
     },
   },
 });
