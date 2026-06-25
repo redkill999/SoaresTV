@@ -524,14 +524,13 @@ async function handle(request: Request) {
                 usedRedirectLocation = loc;
                 const direct = browserDirectVodCandidate(loc);
                 const finalUrlCandidates = Array.from(new Set([loc, direct].filter(Boolean) as string[]));
-                const finalOriginModes = Array.from(new Set([originHeaderMode, "none", "referer", "origin"] as OriginHeaderMode[]));
                 let lastFinal: Response | null = null;
                 for (const finalUrl of finalUrlCandidates) {
                   const finalUrlObj = new URL(finalUrl);
-                  for (const finalOriginMode of finalOriginModes) {
+                  for (const plan of finalRedirectHeaderPlans(originHeaderMode, finalUrlObj)) {
                     const finalRes = await fetch(finalUrl, {
                       method: "GET",
-                      headers: buildHeaders(ua, rangeValue, finalOriginMode, finalUrlObj),
+                      headers: buildHeaders(ua, rangeValue, plan.originHeaderMode, plan.headerUrl),
                       redirect: "follow",
                       signal: controller.signal,
                     });
@@ -540,7 +539,7 @@ async function handle(request: Request) {
                       try { await lastFinal.body?.cancel(); } catch { /* noop */ }
                     }
                     lastFinal = finalRes;
-                    usedOriginHeaders = finalOriginMode !== "none";
+                    usedOriginHeaders = plan.originHeaderMode !== "none";
                     usedFinalUrl = finalRes.url || finalUrl;
                     usedRedirected = true;
                     usedDirectCandidate = browserDirectVodCandidate(usedFinalUrl) || direct || "";
