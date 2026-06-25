@@ -19,6 +19,7 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  redirectMode?: string;
   probeError?: string;
   error?: string;
 };
@@ -189,6 +190,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
+  if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
   if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
 
@@ -243,6 +245,12 @@ export function vodDiagFormat(s: VodDiagSession): string {
   if (status === 416) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
   if (status >= 500) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
   if (/text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
+  if (/mpegurl|m3u8/.test(ct) && (last?.contentLength === "0" || s.finalProbe?.contentLength === "0")) {
+    diag.push("  → HLS VOD vazio: o painel/CDN retornou manifesto sem segmentos; o player deve pular este candidato.");
+  }
+  if ((last?.redirected || s.finalProbe?.redirected) && status === 404) {
+    diag.push("  → Redirecionamento VOD quebrou: URL final do CDN retornou 404; manter fallback para outras extensões/URL original.");
+  }
   if (last?.videoErrorCode === 4) diag.push("  → Browser recebeu algo que não conseguiu tratar como mídia compatível.");
   if (last?.videoErrorCode === 3) diag.push("  → Erro de decodificação: codec/container pode não ser suportado no navegador.");
   if (!diag.length) diag.push("  → Sem conclusão automática; copie este log para análise.");
@@ -261,9 +269,10 @@ export function vodDiagFormatAll(): string {
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
   if (!url.startsWith("/api/stream")) return { probeError: "URL direta: probe HTTP omitido para evitar CORS" };
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 6_000);
+  const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const res = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
+    const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
     return {
       clientStatus: res.status,
       upstreamStatus: res.headers.get("X-Upstream-Status") ?? "",
@@ -275,6 +284,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
+      redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
     };
   } catch (e) {
     return { probeError: e instanceof Error ? e.message : "probe falhou" };
