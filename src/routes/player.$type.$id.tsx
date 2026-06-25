@@ -13,6 +13,7 @@ const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
 const isPlayerType = (t: string): t is PlayerType =>
   (VALID_TYPES as readonly string[]).includes(t);
+const EMPTY_FALLBACK_SRCS: string[] = [];
 
 export const Route = createFileRoute("/player/$type/$id")({
   validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
@@ -143,7 +144,7 @@ function PlayerPage() {
     return Array.from(new Set([primary === direct ? canonical : direct].filter(Boolean) as string[]));
   }, [creds, type, id, movieQ.data]);
 
-  const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : [];
+  const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : EMPTY_FALLBACK_SRCS;
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).
