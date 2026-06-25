@@ -317,7 +317,13 @@ export function VideoPlayer({
   }, [src, kind]);
 
 
-  const shouldUseNativePlayer = settings.defaultPlayer === "exo";
+  // No APK Android sempre preferimos o ExoPlayer nativo:
+  //  - WebView envia UA de Chrome → portal Xtream responde 404 para VOD (.mp4)
+  //  - ExoPlayer envia UA XCIPTV (linha ~291) → portal entrega o arquivo
+  //  - Codecs HEVC/AC3 por hardware (sem travar canais H265)
+  // Se o ExoPlayer falhar em <8s sem progresso, o onExit cai para pipeline web.
+  // Na Web, continua respeitando a setting do usuário (não há ExoPlayer lá).
+  const shouldUseNativePlayer = PLATFORM_ANDROID || settings.defaultPlayer === "exo";
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
