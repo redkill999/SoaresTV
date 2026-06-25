@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Failure-Class, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -336,6 +336,7 @@ async function handle(request: Request) {
   let usedRedirectLocation = "";
   let usedDirectCandidate = "";
   let usedRedirected = false;
+  let usedFailureClass = "";
   let redirectedVod404Count = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
@@ -438,6 +439,15 @@ async function handle(request: Request) {
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
           const upstreamCt = res.headers.get("content-type") || "";
+          if (vodContext && res.status === 404 && usedRedirected && isLikelyVodBlockContentType(upstreamCt)) {
+            usedFailureClass = "redirected-cdn-404-html";
+          } else if (vodContext && res.ok && isLikelyVodBlockContentType(upstreamCt)) {
+            usedFailureClass = "vod-non-video-response";
+          } else if (vodContext && (res.status === 401 || res.status === 403)) {
+            usedFailureClass = "vod-auth-block";
+          } else if (vodContext && res.status >= 500) {
+            usedFailureClass = "vod-upstream-server-error";
+          }
           // Probe diagnóstico: não varre dezenas de combinações. A primeira
           // resposta real já é a informação que precisamos exibir no painel
           // (status, URL final, UA e headers), e evita "signal aborted" vazio.
@@ -477,6 +487,7 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
     failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+    failHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: clientStatus,
@@ -500,6 +511,7 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-User-Agent", usedUA);
   respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+  respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (!upstream.ok) {
     if (isVod) {
       if (isDiagProbe) {
