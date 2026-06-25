@@ -320,6 +320,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
+      failureClass: res.headers.get("X-Upstream-Failure-Class") ?? "",
       redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
     };
   } catch (e) {
