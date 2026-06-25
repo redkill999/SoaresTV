@@ -243,6 +243,12 @@ export function vodDiagFormat(s: VodDiagSession): string {
   if (status === 416) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
   if (status >= 500) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
   if (/text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
+  if (/mpegurl|m3u8/.test(ct) && (last?.contentLength === "0" || s.finalProbe?.contentLength === "0")) {
+    diag.push("  → HLS VOD vazio: o painel/CDN retornou manifesto sem segmentos; o player deve pular este candidato.");
+  }
+  if ((last?.redirected || s.finalProbe?.redirected) && status === 404) {
+    diag.push("  → Redirecionamento VOD quebrou: URL final do CDN retornou 404; manter fallback para outras extensões/URL original.");
+  }
   if (last?.videoErrorCode === 4) diag.push("  → Browser recebeu algo que não conseguiu tratar como mídia compatível.");
   if (last?.videoErrorCode === 3) diag.push("  → Erro de decodificação: codec/container pode não ser suportado no navegador.");
   if (!diag.length) diag.push("  → Sem conclusão automática; copie este log para análise.");
