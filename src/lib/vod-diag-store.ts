@@ -241,21 +241,35 @@ export function vodDiagFormat(s: VodDiagSession): string {
   lines.push("");
   lines.push("DIAGNÓSTICO AUTOMÁTICO:");
   const last = s.attempts[s.attempts.length - 1];
+  const probes = [s.finalProbe, ...s.attempts].filter(Boolean) as VodHttpProbe[];
+  const statusOf = (p?: VodHttpProbe) => Number(p?.upstreamStatus || p?.clientStatus || 0);
   const status = Number(last?.upstreamStatus || s.finalProbe?.upstreamStatus || last?.clientStatus || s.finalProbe?.clientStatus || 0);
   const ct = (last?.contentType || s.finalProbe?.contentType || "").toLowerCase();
+  const anyStatus = (code: number) => probes.some((p) => statusOf(p) === code);
+  const anyServerStatus = probes.some((p) => statusOf(p) >= 500);
+  const anyBadContent = probes.some((p) => /text\/html|application\/json|xml/i.test(p.contentType ?? ""));
+  const anyDirectCandidate = probes.some((p) => !!p.directCandidate);
+  const redirected404s = probes.filter((p) => statusOf(p) === 404 && p.redirected && (!!p.directCandidate || !!p.finalUrl));
+  const redirected404Html = redirected404s.some((p) => /text\/html/i.test(p.contentType ?? ""));
   const diag: string[] = [];
-  if (status === 401 || status === 403) diag.push("  → BLOQUEIO/AUTORIZAÇÃO: host recusou credencial, IP, Referer ou User-Agent.");
-  if (status === 404) diag.push("  → 404: caminho/extensão do VOD pode estar diferente ou CDN retornando falso 404.");
-  if (status === 416) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
-  if (status >= 500) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
-  if (/text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
+  if (anyStatus(401) || anyStatus(403)) diag.push("  → BLOQUEIO/AUTORIZAÇÃO: host recusou credencial, IP, Referer ou User-Agent.");
+  if (anyStatus(404)) diag.push("  → 404: caminho/extensão do VOD pode estar diferente ou CDN retornando falso 404.");
+  if (anyStatus(416)) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
+  if (anyServerStatus) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
+  if (anyBadContent || /text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
   if (/mpegurl|m3u8/.test(ct) && (last?.contentLength === "0" || s.finalProbe?.contentLength === "0")) {
     diag.push("  → HLS VOD vazio: o painel/CDN retornou manifesto sem segmentos; o player deve pular este candidato.");
   }
-  if ((last?.redirected || s.finalProbe?.redirected) && status === 404) {
-    diag.push("  → Redirecionamento VOD quebrou: URL final do CDN retornou 404; manter fallback para outras extensões/URL original.");
+  if (redirected404s.length) {
+    diag.push("  → Redirecionamento VOD quebrou: a URL Xtream redirecionou para um CDN final que respondeu 404.");
   }
-  if (last?.directCandidate || s.finalProbe?.directCandidate) {
+  if (redirected404Html) {
+    diag.push("  → CDN final indisponível/bloqueado: o servidor entregou página HTML de erro no lugar do arquivo de vídeo. Não é codec do player.");
+  }
+  if (redirected404s.length >= 2) {
+    diag.push("  → As extensões alternativas também apontaram para o mesmo padrão de CDN com 404; provável VOD offline/removido na origem.");
+  }
+  if (anyDirectCandidate) {
     diag.push("  → Proxy detectou CDN final; o player também tentou/irá tentar a URL final direta em HTTPS.");
   }
   if (last?.videoErrorCode === 4) diag.push("  → Browser recebeu algo que não conseguiu tratar como mídia compatível.");
