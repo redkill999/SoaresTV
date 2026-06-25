@@ -327,7 +327,9 @@ async function handle(request: Request) {
   attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), isVod ? 8_000 : 20_000);
+          // VOD pode demorar para o CDN entregar o primeiro byte no preview;
+          // 8s fazia o proxy abortar filmes/séries que antes abriam.
+          const timeout = setTimeout(() => controller.abort(), 20_000);
           let res: Response;
           try {
             res = await fetch(upstreamUrl.toString(), {
