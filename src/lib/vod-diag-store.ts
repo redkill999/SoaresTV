@@ -296,11 +296,16 @@ export function vodDiagFormatAll(): string {
 }
 
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
-  if (!url.startsWith("/api/stream")) return { probeError: "URL direta: probe HTTP omitido para evitar CORS" };
+  const probeBase = url.startsWith("/api/stream")
+    ? url
+    : /^https?:\/\//i.test(url)
+      ? `/api/stream?u=${encodeURIComponent(url)}&kind=vod&v=6`
+      : null;
+  if (!probeBase) return { probeError: "URL não suportada para probe VOD" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
+    const probeUrl = `${probeBase}${probeBase.includes("?") ? "&" : "?"}probe=1`;
     // Evita "Failed to fetch" vazio em previews onde HEAD em server route é
     // instável; /api/stream?probe=1 responde sem corpo mesmo via GET.
     const res = await fetch(probeUrl, {
