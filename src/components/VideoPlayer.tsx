@@ -871,6 +871,7 @@ export function VideoPlayer({
 
         if (playbackCandidates.includes(direct)) return false;
         playbackCandidates.splice(vodIdx + 1, 0, direct);
+        syncVodDiagCandidates();
         console.log("[VOD DEBUG] redirect do proxy detectado — tentando CDN final direto", {
           originalTarget,
           redirectLocation,
