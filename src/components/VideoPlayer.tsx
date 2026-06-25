@@ -184,12 +184,38 @@ const EMPTY_VOD_FALLBACKS: string[] = [];
 // o navegador nunca tem chance de tentar pelo IP do usuário. Guardamos, só na
 // sessão, a variante HTTPS do CDN final descoberta pelo /api/stream.
 const vodRedirectDirectCache = new Map<string, string>();
+const deadVodRedirectBases = new Set<string>();
 
 function apiStreamTarget(url: string): string | null {
   if (!url.startsWith("/api/stream")) return null;
   try {
     const base = typeof window !== "undefined" ? window.location.origin : "http://local";
     return new URL(url, base).searchParams.get("u");
+  } catch {
+    return null;
+  }
+}
+
+function playableTargetForCandidate(url: string): string | null {
+  return apiStreamTarget(url) ?? (/^https?:\/\//i.test(url) ? url : null);
+}
+
+function mediaBaseKey(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\.[a-z0-9]{2,5}$/i, "");
+    return `${parsed.host.toLowerCase()}${path}`;
+  } catch {
+    return null;
+  }
+}
+
+function mediaExt(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() ?? null;
   } catch {
     return null;
   }
