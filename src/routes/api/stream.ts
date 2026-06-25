@@ -95,6 +95,16 @@ function vodRangeForUpstream(requestedRange: string | null, head = false): strin
   return parsed ? requestedRange!.trim() : "bytes=0-";
 }
 
+function finiteVodRangeForUpstream(rangeValue: string | null): string | null {
+  const parsed = parseByteRange(rangeValue);
+  if (!parsed || parsed.end !== undefined) return null;
+  // Fallback de compatibilidade: alguns CDNs de VOD não gostam de Range aberta
+  // (`bytes=0-`) mas aceitam um primeiro bloco finito, como um servidor de
+  // arquivo comum. Mantemos só como tentativa extra; a Range real vem primeiro.
+  const end = parsed.start + (4 * 1024 * 1024) - 1;
+  return `bytes=${parsed.start}-${end}`;
+}
+
 function numericHeader(headers: Headers, name: string): number | undefined {
   const value = Number(headers.get(name));
   return Number.isFinite(value) && value >= 0 ? value : undefined;
@@ -244,10 +254,12 @@ async function handle(request: Request) {
     "VLC/3.0.20 LibVLC/3.0.20",
   ];
   const VOD_UAS = [
+    // Para VOD Xtream, players IPTV costumam ser aceitos com mais frequência
+    // que UA desktop; desktop fica como fallback, não como primeira tentativa.
+    ...DEFAULT_UAS,
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-    ...DEFAULT_UAS,
   ];
   const forcedUA = url.searchParams.get("ua");
   const UA_CANDIDATES = forcedUA
@@ -281,7 +293,7 @@ async function handle(request: Request) {
   let usedFinalUrl = upstreamUrl.toString();
   let usedRedirected = false;
   const rangeCandidates = isVod
-    ? Array.from(new Set([effectiveVodRange, range, "bytes=0-", null]))
+    ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
     : playlistPath
       ? [range]
       : Array.from(new Set([range, "bytes=0-", null]));
@@ -289,17 +301,18 @@ async function handle(request: Request) {
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
   const attemptPlans: UpstreamAttempt[] = isVod
-    ? uniqueAttempts([
-        // VOD web: primeiro testa TODOS os UAs com a combinação mais comum.
-        // Antes, 404 falso em UA desktop consumia o limite e nunca chegava em
-        // XCIPTV/TiviMate/Smarters, quebrando filmes/séries no preview.
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const })),
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: null, originHeaderMode: "none" as const })),
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "referer" as const })),
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: null, originHeaderMode: "referer" as const })),
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const })),
-        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: range, originHeaderMode: "none" as const })),
-      ])
+    ? uniqueAttempts(UA_CANDIDATES.flatMap((ua) => [
+        // Waterfall por UA: se XCIPTV funcionar sem Range/Referer, não espera
+        // todos os outros UAs falharem primeiro. Isso reduz timeout no preview.
+        { ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const },
+        { ua, rangeValue: finiteVodRangeForUpstream(effectiveVodRange), originHeaderMode: "none" as const },
+        { ua, rangeValue: null, originHeaderMode: "none" as const },
+        { ua, rangeValue: effectiveVodRange, originHeaderMode: "referer" as const },
+        { ua, rangeValue: finiteVodRangeForUpstream(effectiveVodRange), originHeaderMode: "referer" as const },
+        { ua, rangeValue: null, originHeaderMode: "referer" as const },
+        { ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const },
+        { ua, rangeValue: range, originHeaderMode: "none" as const },
+      ]))
     : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
         rangeCandidates.flatMap((rangeValue) =>
           originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
