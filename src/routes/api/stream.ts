@@ -353,6 +353,16 @@ async function handle(request: Request) {
     return retryBlocked || retryBadRange || retryVodCompat404 || retryVodBadContent || retryVodServerError;
   };
 
+  const shouldTryNextRedirectHeader = (res: Response, rangeValue: string | null, contentType: string, finalUrl: string): boolean => {
+    if (!vodContext) return false;
+    if (res.status === 404 && !isPlaylistPath(finalUrl)) return true;
+    if (res.status === 401 || res.status === 403) return true;
+    if (isVod && !!rangeValue && (res.status === 400 || res.status === 416)) return true;
+    if (res.status === 408 || res.status === 429 || res.status >= 500) return true;
+    if (res.ok && isLikelyVodBlockContentType(contentType)) return true;
+    return false;
+  };
+
   const finalRedirectHeaderPlans = (initialMode: OriginHeaderMode, finalUrl: URL) => {
     const plans = [
       { originHeaderMode: initialMode, headerUrl: upstreamUrl },
@@ -464,7 +474,7 @@ async function handle(request: Request) {
                   const deadBase = mediaIdentityKey(finalRes.url || finalUrl);
                   if (deadBase) peekDeadBases.add(deadBase);
                 }
-                const retryFinal = shouldRetryVodResponse(finalRes, rangeValue, true, finalCt, finalRes.url || finalUrl);
+                const retryFinal = shouldTryNextRedirectHeader(finalRes, rangeValue, finalCt, finalRes.url || finalUrl);
                 try { await finalRes.body?.cancel(); } catch { /* noop */ }
                 if (!retryFinal) break;
               }
@@ -550,9 +560,9 @@ async function handle(request: Request) {
                       const deadBase = mediaIdentityKey(usedFinalUrl);
                       if (deadBase) redirectedVodDeadBases.add(deadBase);
                     }
-                    if (!shouldRetryVodResponse(finalRes, rangeValue, true, finalCt, usedFinalUrl)) break;
+                    if (!shouldTryNextRedirectHeader(finalRes, rangeValue, finalCt, usedFinalUrl)) break;
                   }
-                  if (lastFinal && !shouldRetryVodResponse(lastFinal, rangeValue, true, lastFinal.headers.get("content-type") || "", usedFinalUrl)) break;
+                  if (lastFinal && !shouldTryNextRedirectHeader(lastFinal, rangeValue, lastFinal.headers.get("content-type") || "", usedFinalUrl)) break;
                 }
                 res = lastFinal ?? first;
               } else {
