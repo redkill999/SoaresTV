@@ -388,10 +388,11 @@ async function handle(request: Request) {
     let peekDirect = "";
     let peekFailureClass = "";
     const peekDeadBases = new Set<string>();
-    for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 12)) {
+    for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 18)) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 7_000);
       try {
+        let attemptFailureClass = "";
         const res = await fetch(upstreamUrl.toString(), {
           method: "GET",
           headers: buildHeaders(ua, rangeValue, originHeaderMode),
@@ -415,15 +416,27 @@ async function handle(request: Request) {
             });
             const finalCt = finalRes.headers.get("content-type") || "";
             if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
-              peekFailureClass = "redirected-cdn-404-html";
+              attemptFailureClass = "redirected-cdn-404-html";
               const deadBase = mediaIdentityKey(finalRes.url || loc);
               if (deadBase) peekDeadBases.add(deadBase);
+            } else if (finalRes.ok && isLikelyVodBlockContentType(finalCt)) {
+              attemptFailureClass = "vod-non-video-response";
+            } else if (finalRes.status === 401 || finalRes.status === 403) {
+              attemptFailureClass = "vod-auth-block";
+            } else if (finalRes.status >= 500) {
+              attemptFailureClass = "vod-upstream-server-error";
             }
             try { await finalRes.body?.cancel(); } catch { /* noop */ }
           } catch { /* só diagnóstico/otimização; não bloqueia o candidato direto */ }
         }
         try { await res.body?.cancel(); } catch { /* noop */ }
-        if (peekDirect) break;
+        if (peekDirect) {
+          peekFailureClass = attemptFailureClass;
+          // Se o redirect atual caiu em CDN morto/HTML, não pare no primeiro:
+          // tente outros UAs/headers, pois alguns painéis entregam CDN diferente
+          // conforme User-Agent/Referer. Só encerra quando o destino parece mídia.
+          if (!attemptFailureClass) break;
+        }
       } catch (e) {
         lastError = e;
       } finally {
@@ -503,7 +516,7 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || (redirectedVod404Count < 3 && redirectedVod404HtmlCount < 2));
+          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || (redirectedVod404Count < 8 && redirectedVod404HtmlCount < 6));
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
