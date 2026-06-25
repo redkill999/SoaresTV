@@ -353,6 +353,13 @@ async function handle(request: Request) {
           usedFinalUrl = res.url || upstreamUrl.toString();
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           const upstreamCt = res.headers.get("content-type") || "";
+          // Probe diagnóstico: não varre dezenas de combinações. A primeira
+          // resposta real já é a informação que precisamos exibir no painel
+          // (status, URL final, UA e headers), e evita "signal aborted" vazio.
+          if (isDiagProbe) {
+            upstream = res;
+            break attempt;
+          }
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
