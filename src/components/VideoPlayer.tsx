@@ -34,7 +34,7 @@ import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 import {
   vodDiagStart, vodDiagRecordAttempt, vodDiagPatchAttempt,
   vodDiagMarkPlaying, vodDiagMarkFailed, vodDiagLatestFailedFor,
-  vodDiagAttachFinalProbe, probeVodCandidateForDiag,
+  vodDiagAttachFinalProbe, vodDiagUpdateCandidates, probeVodCandidateForDiag,
   type VodPlayerKind,
 } from "@/lib/vod-diag-store";
 import { VodDiagPanel } from "@/components/VodDiagPanel";
