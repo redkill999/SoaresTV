@@ -279,7 +279,14 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
     const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
-    const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    // Evita "Failed to fetch" vazio em previews onde HEAD em server route é
+    // instável; /api/stream?probe=1 responde sem corpo mesmo via GET.
+    const res = await fetch(probeUrl, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
     return {
       clientStatus: res.status,
       upstreamStatus: res.headers.get("X-Upstream-Status") ?? "",
