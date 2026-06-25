@@ -21,6 +21,8 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  failureClass?: string;
+  deadMediaBases?: string;
   redirectMode?: string;
   probeError?: string;
   error?: string;
@@ -152,6 +154,10 @@ export function vodDiagAttachFinalProbe(id: string, probe: VodHttpProbe): void {
   update(id, (s) => { s.finalProbe = probe; });
 }
 
+export function vodDiagUpdateCandidates(id: string, finalCandidates: string[]): void {
+  update(id, (s) => { s.finalCandidates = finalCandidates.slice(); });
+}
+
 export function vodDiagMarkPlaying(id: string, player: VodPlayerKind, url: string): void {
   update(id, (s) => {
     s.attempts = [...s.attempts, { id: `${Date.now().toString(36)}-ok`, player, url, result: "ok", at: Date.now() }];
@@ -194,6 +200,8 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
+  if (probe.failureClass) lines.push(`classe falha:       ${probe.failureClass}`);
+  if (probe.deadMediaBases) lines.push(`bases CDN mortas:   ${probe.deadMediaBases}`);
   if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
   if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
@@ -241,21 +249,35 @@ export function vodDiagFormat(s: VodDiagSession): string {
   lines.push("");
   lines.push("DIAGNÓSTICO AUTOMÁTICO:");
   const last = s.attempts[s.attempts.length - 1];
+  const probes = [s.finalProbe, ...s.attempts].filter(Boolean) as VodHttpProbe[];
+  const statusOf = (p?: VodHttpProbe) => Number(p?.upstreamStatus || p?.clientStatus || 0);
   const status = Number(last?.upstreamStatus || s.finalProbe?.upstreamStatus || last?.clientStatus || s.finalProbe?.clientStatus || 0);
   const ct = (last?.contentType || s.finalProbe?.contentType || "").toLowerCase();
+  const anyStatus = (code: number) => probes.some((p) => statusOf(p) === code);
+  const anyServerStatus = probes.some((p) => statusOf(p) >= 500);
+  const anyBadContent = probes.some((p) => /text\/html|application\/json|xml/i.test(p.contentType ?? ""));
+  const anyDirectCandidate = probes.some((p) => !!p.directCandidate);
+  const redirected404s = probes.filter((p) => statusOf(p) === 404 && p.redirected && (!!p.directCandidate || !!p.finalUrl));
+  const redirected404Html = redirected404s.some((p) => /text\/html/i.test(p.contentType ?? ""));
   const diag: string[] = [];
-  if (status === 401 || status === 403) diag.push("  → BLOQUEIO/AUTORIZAÇÃO: host recusou credencial, IP, Referer ou User-Agent.");
-  if (status === 404) diag.push("  → 404: caminho/extensão do VOD pode estar diferente ou CDN retornando falso 404.");
-  if (status === 416) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
-  if (status >= 500) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
-  if (/text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
+  if (anyStatus(401) || anyStatus(403)) diag.push("  → BLOQUEIO/AUTORIZAÇÃO: host recusou credencial, IP, Referer ou User-Agent.");
+  if (anyStatus(404)) diag.push("  → 404: caminho/extensão do VOD pode estar diferente ou CDN retornando falso 404.");
+  if (anyStatus(416)) diag.push("  → RANGE rejeitado: servidor não aceitou bytes pedidos pelo navegador.");
+  if (anyServerStatus) diag.push("  → ERRO NO SERVIDOR/PROXY: upstream instável ou bloqueando o proxy.");
+  if (anyBadContent || /text\/html|application\/json|xml/.test(ct)) diag.push("  → Conteúdo não é vídeo: servidor retornou página/JSON de bloqueio.");
   if (/mpegurl|m3u8/.test(ct) && (last?.contentLength === "0" || s.finalProbe?.contentLength === "0")) {
     diag.push("  → HLS VOD vazio: o painel/CDN retornou manifesto sem segmentos; o player deve pular este candidato.");
   }
-  if ((last?.redirected || s.finalProbe?.redirected) && status === 404) {
-    diag.push("  → Redirecionamento VOD quebrou: URL final do CDN retornou 404; manter fallback para outras extensões/URL original.");
+  if (redirected404s.length) {
+    diag.push("  → Redirecionamento VOD quebrou: a URL Xtream redirecionou para um CDN final que respondeu 404.");
   }
-  if (last?.directCandidate || s.finalProbe?.directCandidate) {
+  if (redirected404Html) {
+    diag.push("  → CDN final indisponível/bloqueado: o servidor entregou página HTML de erro no lugar do arquivo de vídeo. Não é codec do player.");
+  }
+  if (redirected404s.length >= 2) {
+    diag.push("  → As extensões alternativas também apontaram para o mesmo padrão de CDN com 404; provável VOD offline/removido na origem.");
+  }
+  if (anyDirectCandidate) {
     diag.push("  → Proxy detectou CDN final; o player também tentou/irá tentar a URL final direta em HTTPS.");
   }
   if (last?.videoErrorCode === 4) diag.push("  → Browser recebeu algo que não conseguiu tratar como mídia compatível.");
@@ -274,11 +296,16 @@ export function vodDiagFormatAll(): string {
 }
 
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
-  if (!url.startsWith("/api/stream")) return { probeError: "URL direta: probe HTTP omitido para evitar CORS" };
+  const probeBase = url.startsWith("/api/stream")
+    ? url
+    : /^https?:\/\//i.test(url)
+      ? `/api/stream?u=${encodeURIComponent(url)}&kind=vod&v=6`
+      : null;
+  if (!probeBase) return { probeError: "URL não suportada para probe VOD" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
+    const probeUrl = `${probeBase}${probeBase.includes("?") ? "&" : "?"}probe=1`;
     // Evita "Failed to fetch" vazio em previews onde HEAD em server route é
     // instável; /api/stream?probe=1 responde sem corpo mesmo via GET.
     const res = await fetch(probeUrl, {
@@ -300,6 +327,8 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
+      failureClass: res.headers.get("X-Upstream-Failure-Class") ?? "",
+      deadMediaBases: res.headers.get("X-Upstream-Dead-Media-Bases") ?? "",
       redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
     };
   } catch (e) {

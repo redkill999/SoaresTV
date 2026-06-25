@@ -34,7 +34,7 @@ import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 import {
   vodDiagStart, vodDiagRecordAttempt, vodDiagPatchAttempt,
   vodDiagMarkPlaying, vodDiagMarkFailed, vodDiagLatestFailedFor,
-  vodDiagAttachFinalProbe, probeVodCandidateForDiag,
+  vodDiagAttachFinalProbe, vodDiagUpdateCandidates, probeVodCandidateForDiag,
   type VodPlayerKind,
 } from "@/lib/vod-diag-store";
 import { VodDiagPanel } from "@/components/VodDiagPanel";
@@ -184,12 +184,29 @@ const EMPTY_VOD_FALLBACKS: string[] = [];
 // o navegador nunca tem chance de tentar pelo IP do usuário. Guardamos, só na
 // sessão, a variante HTTPS do CDN final descoberta pelo /api/stream.
 const vodRedirectDirectCache = new Map<string, string>();
+const deadVodRedirectBases = new Set<string>();
+const vodRedirectSourceBaseByDirectBase = new Map<string, string>();
 
 function apiStreamTarget(url: string): string | null {
   if (!url.startsWith("/api/stream")) return null;
   try {
     const base = typeof window !== "undefined" ? window.location.origin : "http://local";
     return new URL(url, base).searchParams.get("u");
+  } catch {
+    return null;
+  }
+}
+
+function playableTargetForCandidate(url: string): string | null {
+  return apiStreamTarget(url) ?? (/^https?:\/\//i.test(url) ? url : null);
+}
+
+function mediaBaseKey(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\.[a-z0-9]{2,5}$/i, "");
+    return `${parsed.host.toLowerCase()}${path}`;
   } catch {
     return null;
   }
@@ -628,6 +645,9 @@ export function VideoPlayer({
       try {
         const currentUrl = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
         const isProxy = currentUrl.startsWith("/api/stream");
+        const directVodProbeBase = !isProxy && isVod && /^https?:\/\//i.test(currentUrl)
+          ? proxiedX(currentUrl, "vod")
+          : "";
         let probeStatus: number | string = "n/a";
         let upstreamStatus = "";
         let upstreamCt = "";
@@ -638,14 +658,17 @@ export function VideoPlayer({
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
         let upstreamRedirectMode = "";
+        let upstreamFailureClass = "";
+        let upstreamDeadMediaBases = "";
         let contentLength = "";
         let contentRange = "";
         let acceptRanges = "";
-        if (isProxy) {
+        if (isProxy || directVodProbeBase) {
           const ac = new AbortController();
           const probeTimer = setTimeout(() => ac.abort(), 10_000);
           try {
-            const probeUrl = `${currentUrl}${currentUrl.includes("?") ? "&" : "?"}probe=1`;
+            const probeBase = isProxy ? currentUrl : directVodProbeBase;
+            const probeUrl = `${probeBase}${probeBase.includes("?") ? "&" : "?"}probe=1`;
             // No preview/TanStack, HEAD em rota server às vezes vira network
             // error no browser mesmo quando o GET funcionaria. Para diagnóstico
             // VOD usamos GET sem corpo útil; o proxy responde sem payload quando
@@ -667,6 +690,8 @@ export function VideoPlayer({
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
             upstreamRedirectMode = res.headers.get("X-Stream-Redirect-Mode") ?? "";
+            upstreamFailureClass = res.headers.get("X-Upstream-Failure-Class") ?? "";
+            upstreamDeadMediaBases = res.headers.get("X-Upstream-Dead-Media-Bases") ?? "";
             contentLength = res.headers.get("content-length") ?? "";
             contentRange = res.headers.get("content-range") ?? "";
             acceptRanges = res.headers.get("accept-ranges") ?? "";
@@ -701,6 +726,8 @@ export function VideoPlayer({
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
           modoRedirect: upstreamRedirectMode,
+          classeFalha: upstreamFailureClass,
+          basesCdnMortas: upstreamDeadMediaBases,
           playerEstrategia: lastPlayerStrategy,
         });
         if (isVod && vodDiagSessionIdRef.current) {
@@ -717,6 +744,8 @@ export function VideoPlayer({
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
             redirected: upstreamRedirected === "1",
+            failureClass: upstreamFailureClass,
+            deadMediaBases: upstreamDeadMediaBases,
             redirectMode: upstreamRedirectMode,
           });
         }
@@ -825,14 +854,29 @@ export function VideoPlayer({
         }
         const direct = res.headers.get("X-Upstream-Direct-Candidate") || "";
         const redirectLocation = res.headers.get("X-Upstream-Redirect-Location") || "";
+        const failureClass = res.headers.get("X-Upstream-Failure-Class") || "";
+        const deadBases = (res.headers.get("X-Upstream-Dead-Media-Bases") || "").split(",").map((s) => s.trim()).filter(Boolean);
         if (!direct || !/^https?:\/\//i.test(direct)) return false;
 
         vodRedirectDirectCache.set(originalTarget, direct);
         const secureOriginal = httpsVariantIgnoringHostProfile(originalTarget);
         if (secureOriginal) vodRedirectDirectCache.set(secureOriginal, direct);
+        const sourceBase = mediaBaseKey(originalTarget);
+        const directBase = mediaBaseKey(direct) ?? mediaBaseKey(redirectLocation);
+        if (sourceBase && directBase) vodRedirectSourceBaseByDirectBase.set(directBase, sourceBase);
+
+        if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
+          console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo tentativa direta uma vez e removendo variações equivalentes", {
+            originalTarget,
+            direct,
+            failureClass,
+            deadBases,
+          });
+        }
 
         if (playbackCandidates.includes(direct)) return false;
         playbackCandidates.splice(vodIdx + 1, 0, direct);
+        syncVodDiagCandidates();
         console.log("[VOD DEBUG] redirect do proxy detectado — tentando CDN final direto", {
           originalTarget,
           redirectLocation,
@@ -844,6 +888,50 @@ export function VideoPlayer({
         console.log("[VOD DEBUG] redirect peek falhou", { erro: (e as Error).message });
         return false;
       }
+    };
+
+    const syncVodDiagCandidates = () => {
+      if (isVod && vodDiagSessionIdRef.current) {
+        vodDiagUpdateCandidates(vodDiagSessionIdRef.current, playbackCandidates.slice());
+      }
+    };
+
+    const pruneDeadVodRedirectFamily = (deadBase: string | null, reason: string) => {
+      if (!isVod || !deadBase) return 0;
+      deadVodRedirectBases.add(deadBase);
+      const sourceBase = vodRedirectSourceBaseByDirectBase.get(deadBase) ?? null;
+      if (sourceBase) deadVodRedirectBases.add(sourceBase);
+
+      const shouldDrop = (candidate: string): boolean => {
+        const target = playableTargetForCandidate(candidate);
+        const base = mediaBaseKey(target);
+        const secureTarget = target ? httpsVariantIgnoringHostProfile(target) : null;
+        const cachedDirect = target ? (vodRedirectDirectCache.get(target) ?? (secureTarget ? vodRedirectDirectCache.get(secureTarget) : undefined) ?? null) : null;
+        const cachedBase = mediaBaseKey(cachedDirect);
+        const mappedSource = base ? vodRedirectSourceBaseByDirectBase.get(base) : null;
+        return !!(
+          (base && (base === deadBase || base === sourceBase || deadVodRedirectBases.has(base))) ||
+          (cachedBase && (cachedBase === deadBase || deadVodRedirectBases.has(cachedBase))) ||
+          (mappedSource && (mappedSource === sourceBase || mappedSource === deadBase || deadVodRedirectBases.has(mappedSource)))
+        );
+      };
+
+      const before = playbackCandidates.length;
+      for (let i = playbackCandidates.length - 1; i > vodIdx; i -= 1) {
+        if (shouldDrop(playbackCandidates[i])) playbackCandidates.splice(i, 1);
+      }
+      const removed = before - playbackCandidates.length;
+      if (removed > 0) {
+        console.warn("[VOD DEBUG] CDN final marcado como indisponível — pulando variações equivalentes", {
+          deadBase,
+          sourceBase,
+          removidos: removed,
+          reason,
+          ordemAtualizada: playbackCandidates,
+        });
+        syncVodDiagCandidates();
+      }
+      return removed;
     };
 
     const recordFailedAttempt = (errMsg?: string) => {
@@ -880,6 +968,20 @@ export function VideoPlayer({
         });
         void probeVodCandidateForDiag(url).then((probe) => {
           vodDiagPatchAttempt(sessionId, attemptId, probe);
+          const wasProxyAttempt = url.startsWith("/api/stream");
+          const status = Number(probe.upstreamStatus || probe.clientStatus || 0);
+          const directBase = mediaBaseKey(probe.directCandidate) ?? mediaBaseKey(probe.finalUrl);
+          const currentBase = mediaBaseKey(playableTargetForCandidate(url));
+          const deadBases = (probe.deadMediaBases ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+          const isRedirectedCdn404 = status === 404 && probe.redirected && (
+            probe.failureClass === "redirected-cdn-404-html" || /text\/html/i.test(probe.contentType ?? "")
+          );
+          if (isRedirectedCdn404 && !wasProxyAttempt) {
+            pruneDeadVodRedirectFamily(directBase ?? currentBase, `probe VOD: CDN final 404 (${probe.failureClass || probe.contentType || "sem classe"})`);
+          }
+          if (!wasProxyAttempt) {
+            for (const dead of deadBases) pruneDeadVodRedirectFamily(dead, "probe VOD: X-Upstream-Dead-Media-Bases");
+          }
         });
         console.warn("[VOD DEBUG] tentativa falhou", {
           player: kind,

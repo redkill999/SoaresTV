@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -72,6 +72,17 @@ function browserDirectVodCandidate(url: string | null): string | null {
       if (u.port === "80") u.port = "";
     }
     return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function mediaIdentityKey(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\.[a-z0-9]{2,5}$/i, "");
+    return `${u.host.toLowerCase()}${path}`;
   } catch {
     return null;
   }
@@ -336,7 +347,10 @@ async function handle(request: Request) {
   let usedRedirectLocation = "";
   let usedDirectCandidate = "";
   let usedRedirected = false;
+  let usedFailureClass = "";
   let redirectedVod404Count = 0;
+  let redirectedVod404HtmlCount = 0;
+  const redirectedVodDeadBases = new Set<string>();
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
     : playlistPath
@@ -372,6 +386,8 @@ async function handle(request: Request) {
     let peekOriginHeaders = false;
     let peekLocation = "";
     let peekDirect = "";
+    let peekFailureClass = "";
+    const peekDeadBases = new Set<string>();
     for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 12)) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 7_000);
@@ -390,6 +406,21 @@ async function handle(request: Request) {
         if (isRedirectStatus(res.status) && loc) {
           peekLocation = loc;
           peekDirect = browserDirectVodCandidate(loc) || "";
+          try {
+            const finalRes = await fetch(loc, {
+              method: "GET",
+              headers: buildHeaders(ua, rangeValue || "bytes=0-0", originHeaderMode),
+              redirect: "follow",
+              signal: controller.signal,
+            });
+            const finalCt = finalRes.headers.get("content-type") || "";
+            if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
+              peekFailureClass = "redirected-cdn-404-html";
+              const deadBase = mediaIdentityKey(finalRes.url || loc);
+              if (deadBase) peekDeadBases.add(deadBase);
+            }
+            try { await finalRes.body?.cancel(); } catch { /* noop */ }
+          } catch { /* só diagnóstico/otimização; não bloqueia o candidato direto */ }
         }
         try { await res.body?.cancel(); } catch { /* noop */ }
         if (peekDirect) break;
@@ -407,6 +438,8 @@ async function handle(request: Request) {
     peekHeaders.set("X-Upstream-User-Agent", peekUA || (forcedUA ?? ""));
     peekHeaders.set("X-Upstream-Origin-Headers", peekOriginHeaders ? "1" : "0");
     peekHeaders.set("X-Upstream-Redirected", peekLocation ? "1" : "0");
+    peekHeaders.set("X-Upstream-Failure-Class", peekFailureClass);
+    if (peekDeadBases.size) peekHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(peekDeadBases).join(","));
     peekHeaders.set("X-Stream-Redirect-Mode", "peek");
     return new Response(null, { status: 204, headers: peekHeaders });
   }
@@ -438,6 +471,23 @@ async function handle(request: Request) {
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
           const upstreamCt = res.headers.get("content-type") || "";
+          if (vodContext && res.status === 404 && usedRedirected && isLikelyVodBlockContentType(upstreamCt)) {
+            usedFailureClass = "redirected-cdn-404-html";
+          } else if (vodContext && res.ok && isLikelyVodBlockContentType(upstreamCt)) {
+            usedFailureClass = "vod-non-video-response";
+          } else if (vodContext && (res.status === 401 || res.status === 403)) {
+            usedFailureClass = "vod-auth-block";
+          } else if (vodContext && res.status >= 500) {
+            usedFailureClass = "vod-upstream-server-error";
+          }
+          if (vodContext && res.status === 404 && usedRedirected) {
+            redirectedVod404Count += 1;
+            if (isLikelyVodBlockContentType(upstreamCt)) {
+              redirectedVod404HtmlCount += 1;
+              const deadBase = mediaIdentityKey(usedFinalUrl);
+              if (deadBase) redirectedVodDeadBases.add(deadBase);
+            }
+          }
           // Probe diagnóstico: não varre dezenas de combinações. A primeira
           // resposta real já é a informação que precisamos exibir no painel
           // (status, URL final, UA e headers), e evita "signal aborted" vazio.
@@ -445,7 +495,6 @@ async function handle(request: Request) {
             upstream = res;
             break attempt;
           }
-          if (vodContext && res.status === 404 && usedRedirected) redirectedVod404Count += 1;
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
@@ -454,7 +503,7 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || redirectedVod404Count < 8);
+          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || (redirectedVod404Count < 3 && redirectedVod404HtmlCount < 2));
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
@@ -477,6 +526,8 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
     failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+    failHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
+    if (redirectedVodDeadBases.size) failHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: clientStatus,
@@ -500,6 +551,8 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-User-Agent", usedUA);
   respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+  respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
+  if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
   if (!upstream.ok) {
     if (isVod) {
       if (isDiagProbe) {
