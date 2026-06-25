@@ -6,7 +6,6 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
-import { isNativeAppSync } from "@/lib/platform";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
