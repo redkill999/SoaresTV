@@ -846,8 +846,6 @@ export function VideoPlayer({
             enableWorker: platformCfg.mpegts.enableWorker,
             enableStashBuffer: true,
             stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
-            enableStashBuffer: true,
-            stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
             liveBufferLatencyChasing: false,
             liveBufferLatencyMaxLatency: 45,
             liveBufferLatencyMinRemain: 20,
