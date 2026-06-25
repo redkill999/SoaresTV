@@ -8,19 +8,26 @@ import type { SortKey } from "@/components/SectionTabs";
 // (incluindo busca, ordenação, label de categoria). Agora só este pequeno
 // nó atualiza.
 const HeaderClock = memo(function HeaderClock() {
-  const [now, setNow] = useState(() => new Date());
+  // Inicia null no SSR; só popula após hidratação para evitar mismatch
+  // SSR/cliente (servidor renderiza um horário, o cliente outro 1s depois).
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const i = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(i);
   }, []);
-  const time = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  const date = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+  const time = now
+    ? now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    : "--:--:--";
+  const date = now
+    ? now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short", year: "numeric" })
+    : "";
   return (
     <div className="min-w-0 flex flex-col">
-      <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider">
+      <div className="font-mono text-base sm:text-lg font-bold text-white leading-tight tracking-wider" suppressHydrationWarning>
         {time}
       </div>
-      <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate">
+      <div className="text-[10px] sm:text-xs uppercase tracking-wide text-white/70 truncate" suppressHydrationWarning>
         {date}
       </div>
     </div>
