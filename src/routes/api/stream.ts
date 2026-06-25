@@ -443,26 +443,33 @@ async function handle(request: Request) {
           peekLocation = loc;
           peekDirect = browserDirectVodCandidate(loc) || "";
           try {
-            const finalUrlForHeaders = new URL(loc);
-            const finalRes = await fetch(loc, {
-              method: "GET",
-              headers: buildHeaders(ua, rangeValue || "bytes=0-0", originHeaderMode, finalUrlForHeaders),
-              redirect: "follow",
-              signal: controller.signal,
-            });
-            const finalCt = finalRes.headers.get("content-type") || "";
-            if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
-              attemptFailureClass = "redirected-cdn-404-html";
-              const deadBase = mediaIdentityKey(finalRes.url || loc);
-              if (deadBase) peekDeadBases.add(deadBase);
-            } else if (finalRes.ok && isLikelyVodBlockContentType(finalCt)) {
-              attemptFailureClass = "vod-non-video-response";
-            } else if (finalRes.status === 401 || finalRes.status === 403) {
-              attemptFailureClass = "vod-auth-block";
-            } else if (finalRes.status >= 500) {
-              attemptFailureClass = "vod-upstream-server-error";
+            const direct = browserDirectVodCandidate(loc);
+            const finalUrlCandidates = Array.from(new Set([loc, direct].filter(Boolean) as string[]));
+            for (const finalUrl of finalUrlCandidates) {
+              const finalUrlForHeaders = new URL(finalUrl);
+              for (const plan of finalRedirectHeaderPlans(originHeaderMode, finalUrlForHeaders)) {
+                const finalRes = await fetch(finalUrl, {
+                  method: "GET",
+                  headers: buildHeaders(ua, rangeValue || "bytes=0-0", plan.originHeaderMode, plan.headerUrl),
+                  redirect: "follow",
+                  signal: controller.signal,
+                });
+                const finalCt = finalRes.headers.get("content-type") || "";
+                peekStatus = finalRes.status;
+                peekCt = finalCt;
+                peekOriginHeaders = plan.originHeaderMode !== "none";
+                peekDirect = browserDirectVodCandidate(finalRes.url || finalUrl) || direct || peekDirect;
+                attemptFailureClass = classifyVodFailure(finalRes.status, true, finalCt);
+                if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
+                  const deadBase = mediaIdentityKey(finalRes.url || finalUrl);
+                  if (deadBase) peekDeadBases.add(deadBase);
+                }
+                const retryFinal = shouldRetryVodResponse(finalRes, rangeValue, true, finalCt, finalRes.url || finalUrl);
+                try { await finalRes.body?.cancel(); } catch { /* noop */ }
+                if (!retryFinal) break;
+              }
+              if (!attemptFailureClass) break;
             }
-            try { await finalRes.body?.cancel(); } catch { /* noop */ }
           } catch { /* só diagnóstico/otimização; não bloqueia o candidato direto */ }
         }
         try { await res.body?.cancel(); } catch { /* noop */ }
