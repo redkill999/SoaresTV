@@ -617,6 +617,7 @@ export function VideoPlayer({
         let upstreamUA = "";
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
+        let upstreamRedirectMode = "";
         let contentLength = "";
         let contentRange = "";
         let acceptRanges = "";
@@ -633,6 +634,7 @@ export function VideoPlayer({
             upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
+            upstreamRedirectMode = res.headers.get("X-Stream-Redirect-Mode") ?? "";
             contentLength = res.headers.get("content-length") ?? "";
             contentRange = res.headers.get("content-range") ?? "";
             acceptRanges = res.headers.get("accept-ranges") ?? "";
@@ -664,6 +666,7 @@ export function VideoPlayer({
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
+          modoRedirect: upstreamRedirectMode,
           playerEstrategia: lastPlayerStrategy,
         });
         if (isVod && vodDiagSessionIdRef.current) {
@@ -678,6 +681,7 @@ export function VideoPlayer({
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
             redirected: upstreamRedirected === "1",
+            redirectMode: upstreamRedirectMode,
           });
         }
         // Painel visual removido — diagnóstico fica nos logs acima.
