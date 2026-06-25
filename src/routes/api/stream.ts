@@ -414,6 +414,9 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
   if (!upstream.ok) {
     if (isVod) {
+      if (isDiagProbe) {
+        try { await upstream.body?.cancel(); } catch { /* noop */ }
+      }
       // FIX D7 (audit IPTV): antes retornávamos 200+JSON em erro VOD, o que
       // fazia o player decodificar JSON como vídeo → MediaError code=4 sem
       // mensagem útil. Agora propagamos o status HTTP real (404/403/503/…)
@@ -471,6 +474,9 @@ async function handle(request: Request) {
   const contentLength = respHeaders.get("content-length");
   if (isVod && status === 206 && effectiveVodRange) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
+    if (isDiagProbe) {
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+    }
     return new Response(request.method === "HEAD" || isDiagProbe ? null : upstream.body, { status, headers: respHeaders });
   }
   if (isVod && status === 200 && requestedRange) {
@@ -483,6 +489,9 @@ async function handle(request: Request) {
       respHeaders.set("Content-Length", String(len));
       respHeaders.set("Content-Range", `bytes ${start}-${end}/${total}`);
       respHeaders.set("Accept-Ranges", "bytes");
+      if (isDiagProbe) {
+        try { await upstream.body?.cancel(); } catch { /* noop */ }
+      }
       const body = request.method === "HEAD" || isDiagProbe
         ? null
         : start === 0 && len === total
@@ -507,6 +516,9 @@ async function handle(request: Request) {
       status = 206;
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
+  }
+  if (isDiagProbe) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
   }
   return new Response(request.method === "HEAD" || isDiagProbe ? null : upstream.body, { status, headers: respHeaders });
 }
