@@ -59,7 +59,7 @@ export function MiniLivePlayer({
         {/* Video */}
         <div ref={videoWrapRef} className="relative aspect-video bg-black">
           {creds && streamId ? (
-            <VideoPlayer key={String(streamId)} src={src} poster={logo} kind="live" controls={false} />
+            <VideoPlayer key={String(streamId)} src={src} poster={logo} kind="live" />
           ) : (
             <div className="absolute inset-0 grid place-items-center text-muted-foreground">
               <div className="text-center">
