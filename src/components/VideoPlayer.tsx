@@ -185,6 +185,7 @@ const EMPTY_VOD_FALLBACKS: string[] = [];
 // sessão, a variante HTTPS do CDN final descoberta pelo /api/stream.
 const vodRedirectDirectCache = new Map<string, string>();
 const deadVodRedirectBases = new Set<string>();
+const vodRedirectSourceBaseByDirectBase = new Map<string, string>();
 
 function apiStreamTarget(url: string): string | null {
   if (!url.startsWith("/api/stream")) return null;
