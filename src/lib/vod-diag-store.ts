@@ -21,6 +21,7 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  failureClass?: string;
   redirectMode?: string;
   probeError?: string;
   error?: string;
@@ -152,6 +153,10 @@ export function vodDiagAttachFinalProbe(id: string, probe: VodHttpProbe): void {
   update(id, (s) => { s.finalProbe = probe; });
 }
 
+export function vodDiagUpdateCandidates(id: string, finalCandidates: string[]): void {
+  update(id, (s) => { s.finalCandidates = finalCandidates.slice(); });
+}
+
 export function vodDiagMarkPlaying(id: string, player: VodPlayerKind, url: string): void {
   update(id, (s) => {
     s.attempts = [...s.attempts, { id: `${Date.now().toString(36)}-ok`, player, url, result: "ok", at: Date.now() }];
@@ -194,6 +199,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
+  if (probe.failureClass) lines.push(`classe falha:       ${probe.failureClass}`);
   if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
   if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
