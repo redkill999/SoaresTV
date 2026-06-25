@@ -568,19 +568,32 @@ async function handle(request: Request) {
     return new Response(null, { status: 204, headers: peekHeaders });
   }
 
-  attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
+  attempt: for (const { ua, rangeValue, originHeaderMode, redirectStrategy } of attemptPlans) {
         try {
           const controller = new AbortController();
           // VOD pode demorar para o CDN entregar o primeiro byte no preview;
           // porém probes/manifestos de VOD precisam falhar rápido para não
           // deixar o <video>/hls.js preso em CDNs que retornam HEAD 200 vazio
           // e GET 404 (caso suportejetflix.site → flixbr.lat).
-          const timeout = setTimeout(() => controller.abort(), isDiagProbe || playlistPath ? 7_000 : 20_000);
+          // Fast-path web (redirectStrategy="follow") usa timeout menor para
+          // não segurar 20s antes de cair no waterfall pesado.
+          const timeoutMs = isDiagProbe || playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
+          const timeout = setTimeout(() => controller.abort(), timeoutMs);
           let res: Response;
           let resolvedRedirectManually = false;
           try {
             const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
-            if (vodContext && upstreamMethod === "GET") {
+            // FAST PATH WEB VOD: simples `redirect: follow`, sem cookie/header dance.
+            // Restaura o comportamento histórico onde o proxy era um pipe fino.
+            // Só falha se o upstream der erro real — aí cai no waterfall manual.
+            if (vodContext && upstreamMethod === "GET" && redirectStrategy === "follow") {
+              res = await fetch(upstreamUrl.toString(), {
+                method: "GET",
+                headers: buildHeaders(ua, rangeValue, originHeaderMode),
+                redirect: "follow",
+                signal: controller.signal,
+              });
+            } else if (vodContext && upstreamMethod === "GET") {
               const first = await fetch(upstreamUrl.toString(), {
                 method: "GET",
                 headers: buildHeaders(ua, rangeValue, originHeaderMode),
