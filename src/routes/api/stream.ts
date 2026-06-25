@@ -10,10 +10,33 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode, X-Debug-Phase, X-Debug-Reason, X-Debug-Line",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
+
+type Debug502Payload = {
+  debug_phase: string;
+  debug_reason: string;
+  debug_line: number;
+  exception_message?: string | null;
+  exception_stack?: string | null;
+  upstream_url?: string | null;
+  candidate?: string | null;
+  [key: string]: unknown;
+};
+
+function debugJsonResponse(status: number, payload: Debug502Payload, headersInit: HeadersInit = CORS) {
+  const headers = new Headers(headersInit);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  if (status === 502) {
+    headers.set("X-Debug-Phase", payload.debug_phase);
+    headers.set("X-Debug-Reason", payload.debug_reason);
+    headers.set("X-Debug-Line", String(payload.debug_line));
+    console.error("[API_STREAM_502]", payload);
+  }
+  return new Response(JSON.stringify(payload, null, 2), { status, headers });
+}
 
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
   const kindPart = kind === "vod" ? "&kind=vod" : "";
