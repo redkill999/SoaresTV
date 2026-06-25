@@ -389,6 +389,8 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
     failHeaders.set("X-Upstream-Final-Url", usedFinalUrl || upstreamUrl.toString());
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
+    failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
+    failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: clientStatus,
