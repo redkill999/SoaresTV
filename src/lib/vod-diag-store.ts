@@ -22,6 +22,7 @@ export type VodHttpProbe = {
   originHeaders?: boolean;
   redirected?: boolean;
   failureClass?: string;
+  deadMediaBases?: string;
   redirectMode?: string;
   probeError?: string;
   error?: string;
@@ -200,6 +201,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
   if (probe.failureClass) lines.push(`classe falha:       ${probe.failureClass}`);
+  if (probe.deadMediaBases) lines.push(`bases CDN mortas:   ${probe.deadMediaBases}`);
   if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
   if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
@@ -321,6 +323,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
       failureClass: res.headers.get("X-Upstream-Failure-Class") ?? "",
+      deadMediaBases: res.headers.get("X-Upstream-Dead-Media-Bases") ?? "",
       redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
     };
   } catch (e) {
