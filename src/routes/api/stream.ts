@@ -883,6 +883,27 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
   if (!upstream.ok) {
+    if (upstream.status === 502) {
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+      return debugJsonResponse(502, {
+        error: "UPSTREAM_502",
+        debug_phase: "upstream-non-ok",
+        debug_reason: "upstream-returned-502",
+        debug_line: 886,
+        phase: "upstream-502",
+        failure_class: usedFailureClass || "upstream-502",
+        exception_message: null,
+        exception_stack: null,
+        upstream_status: upstream.status,
+        upstream_url: upstreamUrl.toString(),
+        final_url: usedFinalUrl,
+        redirects: usedRedirected ? 1 : 0,
+        redirect_count: usedRedirected ? 1 : 0,
+        content_type: ct || null,
+        candidate: usedDirectCandidate || usedFinalUrl || upstreamUrl.toString(),
+        ua_last: usedUA || null,
+      }, respHeaders);
+    }
     if (isVod) {
       if (isDiagProbe) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
