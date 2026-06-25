@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
-import { getPlatformConfig } from "@/lib/platform";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
@@ -9,41 +8,6 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type List
 // seguintes reusam a mesma referência (sem reparse de bundle nem nova Promise).
 let mpegtsModule: typeof import("mpegts.js").default | null = null;
 let mpegtsLoading: Promise<typeof import("mpegts.js").default> | null = null;
-
-// Gerenciador central de perfil por host (persistido). Substitui a coleção
-// de Sets módulo-locais por uma única fonte da verdade — ver host-profile.ts.
-import {
-  getHostProfile,
-  updateHostProfile,
-  rememberProxyDead,
-  rememberHttpsFailure,
-  rememberPreferredPlayer,
-  isProxyDeadStatus,
-  hostOf,
-  type PlaybackStrategy,
-} from "@/lib/host-profile";
-import { decideEngineOrder, plog } from "@/lib/playback-engine";
-import { PLATFORM_WEB_DESKTOP, PLATFORM_ANDROID, PLATFORM_ANDROID_TV, platformLabel } from "@/lib/platform-flags";
-import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
-import { vlog, vwarn, vgroup, vgroupEnd, assertPlatform } from "@/lib/vod-platform-log";
-import {
-  liveDiagStart, liveDiagAttachProbe, liveDiagRecordAttempt,
-  liveDiagMarkPlaying, liveDiagMarkFailed, liveDiagLatestFailedFor,
-  liveDiagSetMediaInfo, liveDiagRecordFreeze,
-  type LivePlayerKind,
-} from "@/lib/live-diag-store";
-import {
-  vodDiagStart, vodDiagRecordAttempt, vodDiagPatchAttempt,
-  vodDiagMarkPlaying, vodDiagMarkFailed, vodDiagLatestFailedFor,
-  vodDiagAttachFinalProbe, vodDiagUpdateCandidates, probeVodCandidateForDiag,
-  type VodPlayerKind,
-} from "@/lib/vod-diag-store";
-import { DEBUG } from "@/lib/debug";
-import { auditEvent } from "@/lib/audit-trace";
-export type { PlaybackStrategy } from "@/lib/host-profile";
-
-
-
 async function loadMpegts() {
   if (mpegtsModule) return mpegtsModule;
   if (!mpegtsLoading) {
@@ -94,13 +58,7 @@ async function unlockOrientation() {
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
-// flows through our stream proxy to dodge CORS / mixed-content.
-const STREAM_PROXY_PATH = "/api/stream";
-
-function isStreamProxyUrl(url: string | null | undefined): boolean {
-  return !!url && (url.startsWith(STREAM_PROXY_PATH) || url.startsWith("/api/stream"));
-}
-
+// flows through our /api/stream proxy to dodge CORS / mixed-content.
 function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
   if (kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src)) return null;
   if (/\.m3u8(\?|$)/i.test(src)) return src;
@@ -113,7 +71,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `${STREAM_PROXY_PATH}?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=7`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
 }
 
 function liveDirectCandidates(src: string): string[] {
@@ -133,13 +91,6 @@ function httpsVariant(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
-    const host = parsed.host.toLowerCase();
-    // [HTTPS SKIP] host marcado como IPTV sem HTTPS — manter http original.
-    if (getHostProfile(host).forceHttp) {
-      console.log("[HTTPS SKIP] upgrade ignorado", { host, protocoloOriginal: "http", protocoloUtilizado: "http" });
-      return null;
-    }
-
     parsed.protocol = "https:";
     if (parsed.port === "80") parsed.port = "";
     return parsed.toString();
@@ -147,19 +98,6 @@ function httpsVariant(url: string): string | null {
     return null;
   }
 }
-
-function httpsVariantIgnoringHostProfile(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
-    parsed.protocol = "https:";
-    if (parsed.port === "80") parsed.port = "";
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
-
 
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
@@ -183,70 +121,21 @@ export function detectFormat(url: string): DetectedFormat {
   }
 }
 
-const EMPTY_VOD_FALLBACKS: string[] = [];
-
-// VOD web preview: alguns painéis Xtream respondem /movie/... com 302 para um
-// CDN final. Se o proxy seguir esse 302 a partir do datacenter e receber 404,
-// o navegador nunca tem chance de tentar pelo IP do usuário. Guardamos, só na
-// sessão, a variante HTTPS do CDN final descoberta pelo /api/stream.
-const vodRedirectDirectCache = new Map<string, string>();
-const deadVodRedirectBases = new Set<string>();
-const vodRedirectSourceBaseByDirectBase = new Map<string, string>();
-
-function apiStreamTarget(url: string): string | null {
-  if (!isStreamProxyUrl(url)) return null;
-  try {
-    const base = typeof window !== "undefined" ? window.location.origin : "http://local";
-    return new URL(url, base).searchParams.get("u");
-  } catch {
-    return null;
-  }
-}
-
-function playableTargetForCandidate(url: string): string | null {
-  return apiStreamTarget(url) ?? (/^https?:\/\//i.test(url) ? url : null);
-}
-
-function mediaBaseKey(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\.[a-z0-9]{2,5}$/i, "");
-    return `${parsed.host.toLowerCase()}${path}`;
-  } catch {
-    return null;
-  }
-}
-
 export function VideoPlayer({
   src,
   poster,
   kind,
-  fallbackSrcs = EMPTY_VOD_FALLBACKS,
   initialPosition,
   onProgress,
-  controls = true,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
-  fallbackSrcs?: string[];
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
-  controls?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-  // [LIVE DIAG] painel visível dentro do APK quando LIVE falha.
-  const [diagOpen, setDiagOpen] = useState(false);
-  const diagSessionIdRef = useRef<string | null>(null);
-  // [VOD DIAG] painel temporário para filmes/séries no preview web/APK.
-  const [vodDiagOpen, setVodDiagOpen] = useState(false);
-  const [vodDebugDismissed, setVodDebugDismissed] = useState(false);
-  useEffect(() => { if (!error) setVodDebugDismissed(false); }, [error, src]);
-  const vodDiagSessionIdRef = useRef<string | null>(null);
-  const vodDiagFinalizingRef = useRef(false);
-
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
@@ -273,11 +162,6 @@ export function VideoPlayer({
   //  - bypassa o proxy /api/stream (vai direto pro painel via http)
   // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
   // web (hls.js/mpegts) que continua existindo.
-  // FIX D2 (audit IPTV): rastreia quando o player nativo abriu para distinguir
-  // back-button legítimo (usuário assistiu N segundos) de falha precoce
-  // (plugin abriu mas ExoPlayer fechou em <8s sem progresso) — neste último
-  // caso, cai para o pipeline web (hls.js/mpegts) automaticamente.
-  const nativeStartedAtRef = useRef(0);
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
     if (!native) return false;
@@ -286,22 +170,11 @@ export function VideoPlayer({
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
         : "XCIPTV/7.0 (Linux; Android 13)";
-    const ok = await playNative({
+    return playNative({
       url: src,
       userAgent: ua,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
       onExit: (pos) => {
-        const elapsed = Date.now() - (nativeStartedAtRef.current || Date.now());
-        // FIX D2: ExoPlayer fechou em <8s sem ter avançado: provavelmente
-        // erro de abertura/codec/DNS mid-handshake. Força fallback web.
-        if (elapsed < 8_000 && pos <= 0) {
-          console.warn("[NATIVE FALLBACK] ExoPlayer encerrou em <8s sem progresso — caindo para pipeline web", {
-            kind, elapsedMs: elapsed,
-          });
-          nativeOpenedRef.current = false;
-          setPlayerMode("web");
-          return;
-        }
         if (kind !== "live" && pos > 0) {
           // Duração real não vem do plugin; salvamos posição com duração
           // best-effort para o store de "Continuar assistindo".
@@ -309,18 +182,9 @@ export function VideoPlayer({
         }
       },
     });
-    if (ok) nativeStartedAtRef.current = Date.now();
-    return ok;
   }, [src, kind]);
 
-
-  // No APK Android sempre preferimos o ExoPlayer nativo:
-  //  - WebView envia UA de Chrome → portal Xtream responde 404 para VOD (.mp4)
-  //  - ExoPlayer envia UA XCIPTV (linha ~291) → portal entrega o arquivo
-  //  - Codecs HEVC/AC3 por hardware (sem travar canais H265)
-  // Se o ExoPlayer falhar em <8s sem progresso, o onExit cai para pipeline web.
-  // Na Web, continua respeitando a setting do usuário (não há ExoPlayer lá).
-  const shouldUseNativePlayer = PLATFORM_ANDROID || settings.defaultPlayer === "exo";
+  const shouldUseNativePlayer = settings.defaultPlayer === "exo";
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
@@ -377,8 +241,6 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
-    vodDiagFinalizingRef.current = false;
-    
     setCanManualPlay(false);
 
     // ---- Compatibilidade por lista ----------------------------------------
@@ -397,23 +259,13 @@ export function VideoPlayer({
     // Detecção automática pelo sufixo da URL. Override do usuário (compat)
     // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
     const auto = detectFormat(workingSrc);
-    // No web desktop, manter HLS-first/proxy-first para `.ts` ao vivo:
-    // o navegador não decodifica MPEG-TS cru de forma confiável, e o preview
-    // precisa do proxy para evitar CORS/mixed-content. O preset `.ts` direto
-    // continua sendo padrão apenas no APK, onde ExoPlayer/WebView lida melhor.
-    const liveHost = hostOf(workingSrc);
-    const liveProfile = liveHost ? getHostProfile(liveHost) : {};
-    const isLiveUrl = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const platformCfg = getPlatformConfig();
-    const isWebPlayback = platformCfg.platform === "web";
-    const liveDisableHls = isLiveUrl && !isWebPlayback && liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false;
-    const liveBypassProxy = isLiveUrl && !isWebPlayback && liveProfile.bypassProxyForLive !== false;
-    const livePreferTs = isLiveUrl && !isWebPlayback && liveProfile.preferTs !== false;
-
+    // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
+    // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
+    // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
+    // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      liveDisableHls ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -422,233 +274,45 @@ export function VideoPlayer({
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const isLive = isLiveUrl;
-    // [RESTORE VOD] Não explodir mais o filme em 4 extensões × N variantes.
-    // O fluxo que reproduzia VOD no preview/APK usava a URL canônica do
-    // painel Xtream (já com a extensão correta vinda de get_vod_info) e,
-    // quando o painel fornecia, o `direct_source`. Esses são exatamente os
-    // valores em `workingSrc` + `fallbackSrcs`. Multiplicar extensões gerava
-    // 15-20 candidatos que entupiam o proxy e empurravam o timeout.
+    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const vodCandidates: string[] = [];
-    const vodSourceInputs = Array.from(new Set([
-      workingSrc,
-      ...(isVod ? fallbackSrcs : []),
-    ].filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))));
-    for (const vodSource of vodSourceInputs) {
-      if (!vodCandidates.includes(vodSource)) vodCandidates.push(vodSource);
+    const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
+    if (vodMatch && (!hlsCandidate || isVod)) {
+      const [, base, ext, qs = ""] = vodMatch;
+      const currentExt = ext.toLowerCase();
+      // Quando o usuário força "mp4", prioriza containers progressivos.
+      const preferred = compat.streamFormat === "mp4"
+        ? ["mp4", "m4v", "mkv", currentExt]
+        : isVod
+          ? currentExt === "m3u8"
+            ? ["m3u8", "mp4", "m4v", "mkv"]
+            : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
+          : [currentExt, "mp4", "m4v", "mkv"];
+      for (const alt of preferred) {
+        const candidate = `${base}.${alt}${qs}`;
+        if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
+      }
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
-    // [VOD NATIVE BYPASS] No APK (Capacitor) o proxy /api/stream sai do
-    // datacenter Lovable, que muitos CDNs (ex: flixbr.lat) bloqueiam por ASN.
-    // O IP residencial do APK passa direto — então, no nativo, priorizamos
-    // a URL original do painel Xtream e usamos o proxy só como fallback.
-    // Web permanece igual (proxy-first por causa de CORS/mixed-content).
-    const vodNativeBypass = isVod && !isWebPlayback;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
-          const secure = isWebPlayback ? httpsVariantIgnoringHostProfile(url) : httpsVariant(url);
-          const cachedDirect = vodRedirectDirectCache.get(url) ?? (secure ? vodRedirectDirectCache.get(secure) : undefined) ?? null;
+          const secure = httpsVariant(url);
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
           // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
           let candidates: (string | null)[];
           if (forceDirect) {
-            candidates = [cachedDirect, secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
+            candidates = [secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else if (forceProxy) {
-            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, cachedDirect];
-          } else if (vodNativeBypass) {
-            // APK: original → https direto → cache → proxy como último recurso.
-            candidates = [
-              url,
-              secure,
-              cachedDirect,
-              proxiedX(url, "vod"),
-              secure ? proxiedX(secure, "vod") : null,
-            ];
+            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else {
-            candidates = [
-              proxiedX(url, "vod"),
-              secure ? proxiedX(secure, "vod") : null,
-              cachedDirect,
-              secure,
-              // Se o proxy do preview falhar para VOD, ainda deixa o browser
-              // tentar a URL original HTTPS diretamente. Isso não mexe em LIVE
-              // nem no APK, e evita prender filmes/séries em um único caminho.
-              /^https:\/\//i.test(url) ? url : null,
-            ];
+            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, secure];
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : liveBypassProxy
-        // LIVE com bypass de proxy: ORIGINAL direto → https direto → proxy (fallback).
-        ? Array.from(new Set(directCandidates.flatMap((url) => {
-            const secure = httpsVariant(url);
-            return [url, secure, proxiedX(url, kind)].filter(Boolean) as string[];
-          })))
-        : directCandidates.map((url) => proxiedX(url, kind));
-
-    if (isLive) {
-      console.log("[LIVE ORIGINAL URL]", src);
-      console.log("[LIVE FINAL URL] ordem de tentativa:", playbackCandidates);
-      console.log("[LIVE PROXY STATUS]", {
-        host: liveHost,
-        bypassProxyForLive: liveBypassProxy,
-        disableHlsConversion: liveDisableHls,
-        preferTs: livePreferTs,
-      });
-
-      // [LIVE DIAG] cria sessão no buffer (consultável em Settings → Diagnóstico).
-      diagSessionIdRef.current = liveDiagStart({
-        originalUrl: src,
-        workingSrc,
-        host: liveHost,
-        forcedUA,
-        liveBypassProxy,
-        liveDisableHls,
-        livePreferTs,
-        finalCandidates: playbackCandidates.slice(),
-      });
-      setDiagOpen(false);
-
-      // ===== [LIVE DEBUG] probe assíncrono via /api/stream (HEAD + UA cycle) =
-      // Não bloqueia o playback. Só descobre status/content-type/UA do canal.
-      // Se nenhum UA aceitar (todos 401/403/404), grava no host-profile o UA
-      // que respondeu — playlist subsequente já tenta com ele direto.
-      void (async () => {
-        try {
-          const report = await probeLiveStream(workingSrc, forcedUA);
-          logLiveProbeReport(report, { originalSrc: src, finalCandidates: playbackCandidates });
-          if (diagSessionIdRef.current) liveDiagAttachProbe(diagSessionIdRef.current, report);
-          // Se um UA não-preferido foi o único que funcionou, memoriza para
-          // reuso (apenas log; aplicação efetiva via compat fica para o user
-          // por enquanto, evitando regressões silenciosas).
-          if (report.best?.ok && report.best.ua !== "preferred" && !forcedUA) {
-            console.log("[LIVE DEBUG] UA recomendado para este host:", {
-              host: liveHost,
-              ua: report.best.ua,
-              uaString: report.best.uaString,
-              dica: "Para fixar: Settings → User-Agent da lista, ou updateHostProfile(host, { ... }).",
-            });
-          }
-          // Se content-type vier como HLS mas estamos pulando HLS (preset),
-          // sinaliza para o usuário que talvez valha reativar HLS neste host.
-          if (report.best?.ok && liveDisableHls && liveContentKind(report.best.contentType) === "hls") {
-            console.warn("[LIVE DEBUG] Host responde HLS mas disableHlsConversion=true. Considere updateHostProfile(host, { disableHlsConversion: false, preferTs: false }).");
-          }
-        } catch (e) {
-          console.warn("[LIVE DEBUG] probe falhou:", (e as Error).message);
-        }
-      })();
-    }
-
-    if (isVod) {
-      const vodHost = hostOf(workingSrc);
-      const sourceKind = /\/series\//i.test(workingSrc)
-        ? "series"
-        : /\/movie\//i.test(workingSrc)
-          ? "movie"
-          : "vod";
-      // ===== [VOD WEB|ANDROID] dump por plataforma ==========================
-      // Prefixo automático via vod-platform-log → qualquer regressão cruzada
-      // (log "VOD WEB" aparecendo num APK ou vice-versa) vira flag imediata.
-      assertPlatform(PLATFORM_ANDROID ? "android" : "web");
-      vgroup(`${sourceKind.toUpperCase()} session`);
-      vlog("plataforma:", {
-        label: platformLabel(),
-        web_desktop: PLATFORM_WEB_DESKTOP,
-        android: PLATFORM_ANDROID,
-        android_tv: PLATFORM_ANDROID_TV,
-      });
-      vlog("urls:", {
-        original_src: src,
-        working_src: workingSrc,
-        canonical_xtream: src,
-        direct_source_fallbacks: fallbackSrcs,
-        host: vodHost,
-      });
-      vlog("transporte:", {
-        forcedUA: forcedUA ?? "(auto: proxy cicla)",
-        forceProxy, forceDirect,
-        platformCfg_proxy: getPlatformConfig().proxy,
-        engine_esperado: PLATFORM_ANDROID ? "ExoPlayer/Native" : "HTML5/HLS.js + proxy fast-path",
-      });
-      vlog("ordem_tentativas:", playbackCandidates);
-      vgroupEnd();
-      vodDiagSessionIdRef.current = vodDiagStart({
-        sourceKind,
-        originalUrl: src,
-        workingSrc,
-        host: vodHost,
-        forcedUA,
-        finalCandidates: playbackCandidates.slice(),
-      });
-      setVodDiagOpen(false);
-    }
-
-    // ===== [503 BYPASS] — host já marcado nesta sessão =====================
-    // Se já vimos esse host responder 503 antes, prioriza diretos.
-    const srcHost = hostOf(workingSrc);
-    if (srcHost && getHostProfile(srcHost).disableProxy && !forceProxy && !isVod) {
-      const directs: string[] = [];
-      for (const url of directCandidates) {
-        directs.push(url);
-        const secure = httpsVariant(url);
-        if (secure) directs.push(secure);
-      }
-      const merged = Array.from(new Set([...directs, ...playbackCandidates]));
-      playbackCandidates.splice(0, playbackCandidates.length, ...merged);
-      console.log("[503 BYPASS] host previamente marcado — diretos priorizados", { host: srcHost, candidates: playbackCandidates });
-    }
+      : directCandidates.map((url) => proxiedX(url, kind));
 
 
-    // ===== [STREAM DEBUG] inicialização =====================================
-    // Bloco puramente informativo. Não altera nenhuma lógica de reprodução —
-    // só lista o que o player vai tentar e como (para diagnóstico de canais
-    // que disparam "Não foi possível reproduzir este canal.").
-    try {
-      console.group("[STREAM DEBUG]");
-      console.log("ETAPA 1 — Canal selecionado:", {
-        src,
-        streamIdInferido: (src.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?|$)/i)?.[1]) ?? null,
-        kind: kind ?? "(indef)",
-      });
-      console.log("ETAPA 2 — URL original (src recebido):", src);
-      console.log("ETAPA 3 — URLs finais montadas (ordem de tentativa):", playbackCandidates);
-      console.log("ETAPA 4 — Formato detectado:", detectFormat(workingSrc), {
-        hlsCandidate,
-        workingSrc,
-        httpsForçado: !!httpsSrc,
-      });
-      console.log("ETAPA 8 — Estratégia inicial de player:", hlsCandidate ? "HLS (hls.js)" : "Direto (mpegts.js/HTML5/ExoPlayer)");
-      console.log("ETAPA 9 — User-Agent forçado (compat):", forcedUA ?? "(auto: proxy cicla XCIPTV/TiviMate/IPTV Smarters/VLC/okhttp/…)");
-      console.log("Compat resolvida para esta lista:", compat);
-      console.log("Etapas 5/6/7 (HTTP Status, Content-Type, Redirects) serão impressas no relatório final via headers X-Upstream-*.");
-      console.groupEnd();
-    } catch { /* console pode não suportar group em algum runtime */ }
-
-    // [PLAYBACK ENGINE] Decisão determinística da ordem de engines.
-    // Apenas log/telemetria — a execução continua via candidate URLs.
-    try {
-      const envForLog: "native-apk" | "web" = shouldUseNativePlayer ? "native-apk" : "web";
-      const order = decideEngineOrder(hostOf(workingSrc), kind, envForLog);
-      plog("start", { host: hostOf(workingSrc), kind, env: envForLog, src });
-      plog("engine-pick", {
-        host: hostOf(workingSrc),
-        ordem: order,
-        memorizada: hostOf(workingSrc) ? getHostProfile(hostOf(workingSrc)!).preferPlayer ?? null : null,
-        candidatos: playbackCandidates.length,
-      });
-    } catch { /* noop */ }
-
-    auditEvent(diagSessionIdRef.current, "channel-open", {
-      src, kind, host: hostOf(workingSrc), isLive, isVod, candidates: playbackCandidates.length,
-    });
-    auditEvent(diagSessionIdRef.current, "engine-pick", {
-      ordem: decideEngineOrder(hostOf(workingSrc), kind, shouldUseNativePlayer ? "native-apk" : "web"),
-    });
-
-
-    const effectStartT = performance.now();
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
     let cancelled = false;
@@ -657,9 +321,6 @@ export function VideoPlayer({
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let nativeDirect = false;
     let currentHlsUrl: string | null = null;
-    let currentPlaybackUrl: string | null = null;
-    // Estratégia de player atualmente em uso (alimenta o painel DEBUG VISUAL).
-    let lastPlayerStrategy = "(indef)";
     let detachStallListeners: (() => void) | null = null;
 
     const clearWatchdog = () => {
@@ -676,486 +337,32 @@ export function VideoPlayer({
       tsPlayer = null;
     };
 
-    const reportPlaybackFailure = async (reason: string) => {
-      try {
-        const currentUrl = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-        const isProxy = isStreamProxyUrl(currentUrl);
-        const directVodProbeBase = !isProxy && isVod && /^https?:\/\//i.test(currentUrl)
-          ? proxiedX(currentUrl, "vod")
-          : "";
-        let probeStatus: number | string = "n/a";
-        let upstreamStatus = "";
-        let upstreamCt = "";
-        let upstreamFinal = "";
-        let upstreamRedirectLocation = "";
-        let upstreamDirectCandidate = "";
-        let upstreamUA = "";
-        let upstreamOriginHdrs = "";
-        let upstreamRedirected = "";
-        let upstreamRedirectCookie = "";
-        let upstreamRedirectMode = "";
-        let upstreamFailureClass = "";
-        let upstreamDeadMediaBases = "";
-        let contentLength = "";
-        let contentRange = "";
-        let acceptRanges = "";
-        if (isProxy || directVodProbeBase) {
-          const ac = new AbortController();
-          const probeTimer = setTimeout(() => ac.abort(), 10_000);
-          try {
-            const probeBase = isProxy ? currentUrl : directVodProbeBase;
-            const probeUrl = `${probeBase}${probeBase.includes("?") ? "&" : "?"}probe=1`;
-            // No preview/TanStack, HEAD em rota server às vezes vira network
-            // error no browser mesmo quando o GET funcionaria. Para diagnóstico
-            // VOD usamos GET sem corpo útil; o proxy responde sem payload quando
-            // probe=1, mantendo baixo custo e evitando "Failed to fetch" vazio.
-            const res = await fetch(probeUrl, {
-              method: "GET",
-              headers: { Range: "bytes=0-0" },
-              cache: "no-store",
-              redirect: "manual",
-              signal: ac.signal,
-            });
-            probeStatus = res.status;
-            upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
-            upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
-            upstreamFinal = res.headers.get("X-Upstream-Final-Url") ?? "";
-            upstreamRedirectLocation = res.headers.get("X-Upstream-Redirect-Location") ?? "";
-            upstreamDirectCandidate = res.headers.get("X-Upstream-Direct-Candidate") ?? "";
-            upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
-            upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
-            upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
-            upstreamRedirectCookie = res.headers.get("X-Upstream-Redirect-Cookie") ?? "";
-            upstreamRedirectMode = res.headers.get("X-Stream-Redirect-Mode") ?? "";
-            upstreamFailureClass = res.headers.get("X-Upstream-Failure-Class") ?? "";
-            upstreamDeadMediaBases = res.headers.get("X-Upstream-Dead-Media-Bases") ?? "";
-            contentLength = res.headers.get("content-length") ?? "";
-            contentRange = res.headers.get("content-range") ?? "";
-            acceptRanges = res.headers.get("accept-ranges") ?? "";
-          } catch (e) {
-            probeStatus = `probe-fail: ${(e as Error).message}`;
-          } finally {
-            clearTimeout(probeTimer);
-          }
-        }
-        // eslint-disable-next-line no-console
-        console.error("[player] RELATÓRIO DE FALHA DE REPRODUÇÃO", {
-          motivo: reason,
-          urlOriginal: src,
-          urlTrabalho: workingSrc,
-          urlFinalCliente: currentUrl,
-          totalCandidatos: playbackCandidates.length,
-          tentativaAtual: vodIdx,
-          isLive,
-          isVod,
-          formato: detectFormat(workingSrc),
-          forcedUA: forcedUA ?? "(auto)",
-          httpStatusProxy: probeStatus,
-          httpStatusUpstream: upstreamStatus,
-          contentTypeUpstream: upstreamCt,
-          contentLength,
-          contentRange,
-          acceptRanges,
-          urlFinalUpstream: upstreamFinal,
-          redirectLocationUpstream: upstreamRedirectLocation,
-          directCandidateUpstream: upstreamDirectCandidate,
-          uaUsadoUpstream: upstreamUA,
-          headersOrigemReferer: upstreamOriginHdrs === "1",
-          redirecionado: upstreamRedirected === "1",
-          cookieRedirect: upstreamRedirectCookie === "1",
-          modoRedirect: upstreamRedirectMode,
-          classeFalha: upstreamFailureClass,
-          basesCdnMortas: upstreamDeadMediaBases,
-          playerEstrategia: lastPlayerStrategy,
-        });
-        if (isVod && vodDiagSessionIdRef.current) {
-          vodDiagAttachFinalProbe(vodDiagSessionIdRef.current, {
-            clientStatus: probeStatus,
-            upstreamStatus,
-            contentType: upstreamCt,
-            contentLength,
-            contentRange,
-            acceptRanges,
-            finalUrl: upstreamFinal,
-            redirectLocation: upstreamRedirectLocation,
-            directCandidate: upstreamDirectCandidate,
-            userAgent: upstreamUA,
-            originHeaders: upstreamOriginHdrs === "1",
-            redirected: upstreamRedirected === "1",
-            redirectCookie: upstreamRedirectCookie === "1",
-            failureClass: upstreamFailureClass,
-            deadMediaBases: upstreamDeadMediaBases,
-            redirectMode: upstreamRedirectMode,
-          });
-        }
-        // Painel visual removido — diagnóstico fica nos logs acima.
-
-      } catch {
-        /* noop */
-      }
-    };
-
-
-    // ===== [503 BYPASS] — detecta 503 do proxy e injeta candidatos diretos ==
-    // Probe HEAD no candidato que acabou de falhar. Se for /api/stream e o
-    // proxy/upstream retornou 503, marcamos o host na memória de sessão e
-    // injetamos as variantes diretas (sem proxy) logo após a posição atual,
-    // mantendo os demais como último recurso. Não toca em listas que funcionam.
-    const maybeInject503Bypass = async () => {
-      try {
-        // VOD tem tratamento próprio de redirect/CDN abaixo. Não faz sentido
-        // gastar um HEAD completo aqui (pode seguir 302→404 e atrasar fallback).
-        if (isVod) return false;
-        const failedUrl = playbackCandidates[vodIdx];
-        // [HTTPS SKIP] Se o candidato que falhou era https de um host cuja
-        // origem é http, marcamos o host para nunca mais promover.
-        if (failedUrl) {
-          const decoded = (() => { try { return decodeURIComponent(failedUrl.replace(/^.*?[?&]u=/, "")); } catch { return failedUrl; } })();
-            const target = isStreamProxyUrl(failedUrl) ? decoded : failedUrl;
-          try {
-            const t = new URL(target);
-            const original = new URL(workingSrc);
-            if (t.protocol === "https:" && original.protocol === "http:" && t.host.toLowerCase() === original.host.toLowerCase()) {
-              rememberHttpsFailure(t.host.toLowerCase());
-            }
-          } catch { /* noop */ }
-        }
-        if (!failedUrl || !isStreamProxyUrl(failedUrl)) return false;
-        // FIX D10 (audit IPTV): HEAD probe não tinha timeout — se host estiver
-        // offline, o probe podia segurar ~30s (timeout default do browser)
-        // dobrando o tempo de recuperação por candidato. Agora 4s máx.
-        const ac = new AbortController();
-        const probeTimer = setTimeout(() => ac.abort(), 4_000);
-        let res: Response;
-        try {
-          res = await fetch(failedUrl, { method: "HEAD", signal: ac.signal });
-        } finally {
-          clearTimeout(probeTimer);
-        }
-        const upstream = res.headers.get("X-Upstream-Status") ?? "";
-
-        // 502/503/504 → proxy não conseguiu falar com upstream. Marca o host
-        // como "proxy morto" e injeta candidatos diretos no fluxo.
-        const proxyDead = isProxyDeadStatus(res.status) || isProxyDeadStatus(upstream);
-        if (!proxyDead) return false;
-        const host = hostOf(workingSrc);
-        if (host) rememberProxyDead(host, upstream || String(res.status));
-
-        // Constrói diretos não presentes ainda na fila
-        const directs: string[] = [];
-        for (const u of directCandidates) {
-          if (!playbackCandidates.includes(u)) directs.push(u);
-          const secure = httpsVariant(u);
-          if (secure && !playbackCandidates.includes(secure)) directs.push(secure);
-        }
-
-        if (!directs.length) {
-          console.log("[503 BYPASS] proxy falhou (503) — sem diretos novos para injetar", { host, failedUrl });
-          return false;
-        }
-        playbackCandidates.splice(vodIdx + 1, 0, ...directs);
-        console.log("[503 BYPASS] proxy falhou (503) — tentando conexão direta", {
-          host,
-          urlProxyFalhou: failedUrl,
-          diretosInjetados: directs,
-          ordemAtualizada: playbackCandidates,
-        });
-        return true;
-      } catch (e) {
-        console.log("[503 BYPASS] probe HEAD falhou", { erro: (e as Error).message });
-        return false;
-      }
-    };
-
-    const maybeInjectVodRedirectDirect = async () => {
-      if (!isVod) return false;
-      const failedUrl = playbackCandidates[vodIdx];
-      if (!isStreamProxyUrl(failedUrl)) return false;
-      const originalTarget = apiStreamTarget(failedUrl);
-      if (!originalTarget) return false;
-
-      try {
-        const ac = new AbortController();
-        const probeTimer = setTimeout(() => ac.abort(), 7_000);
-        let res: Response;
-        try {
-          const peekUrl = `${failedUrl}${failedUrl.includes("?") ? "&" : "?"}redirect=peek`;
-          // GET evita falhas de HEAD no preview web; redirect=peek retorna 204
-          // sem corpo, apenas headers de diagnóstico/candidato direto.
-          res = await fetch(peekUrl, {
-            method: "GET",
-            headers: { Range: "bytes=0-0" },
-            cache: "no-store",
-            signal: ac.signal,
-          });
-        } finally {
-          clearTimeout(probeTimer);
-        }
-        const direct = res.headers.get("X-Upstream-Direct-Candidate") || "";
-        const redirectLocation = res.headers.get("X-Upstream-Redirect-Location") || "";
-        const failureClass = res.headers.get("X-Upstream-Failure-Class") || "";
-        const deadBases = (res.headers.get("X-Upstream-Dead-Media-Bases") || "").split(",").map((s) => s.trim()).filter(Boolean);
-        if (!direct || !/^https?:\/\//i.test(direct)) return false;
-
-        vodRedirectDirectCache.set(originalTarget, direct);
-        const secureOriginal = httpsVariantIgnoringHostProfile(originalTarget);
-        if (secureOriginal) vodRedirectDirectCache.set(secureOriginal, direct);
-        const sourceBase = mediaBaseKey(originalTarget);
-        const directBase = mediaBaseKey(direct) ?? mediaBaseKey(redirectLocation);
-        if (sourceBase && directBase) vodRedirectSourceBaseByDirectBase.set(directBase, sourceBase);
-
-        if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
-          for (const dead of deadBases) deadVodRedirectBases.add(dead);
-          if (directBase) deadVodRedirectBases.add(directBase);
-          console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo fallbacks Xtream e evitando apenas o CDN final repetido", {
-            originalTarget,
-            direct,
-            failureClass,
-            deadBases,
-          });
-        }
-
-        if (playbackCandidates.includes(direct)) return false;
-        playbackCandidates.splice(vodIdx + 1, 0, direct);
-        syncVodDiagCandidates();
-        console.log("[VOD DEBUG] redirect do proxy detectado — tentando CDN final direto", {
-          originalTarget,
-          redirectLocation,
-          direct,
-          ordemAtualizada: playbackCandidates,
-        });
-        return true;
-      } catch (e) {
-        console.log("[VOD DEBUG] redirect peek falhou", { erro: (e as Error).message });
-        return false;
-      }
-    };
-
-    const syncVodDiagCandidates = () => {
-      if (isVod && vodDiagSessionIdRef.current) {
-        vodDiagUpdateCandidates(vodDiagSessionIdRef.current, playbackCandidates.slice());
-      }
-    };
-
-    const pruneDeadVodRedirectFamily = (deadBase: string | null, reason: string) => {
-      if (!isVod || !deadBase) return 0;
-      deadVodRedirectBases.add(deadBase);
-      const sourceBase = vodRedirectSourceBaseByDirectBase.get(deadBase) ?? null;
-
-      const shouldDrop = (candidate: string): boolean => {
-        const target = playableTargetForCandidate(candidate);
-        const base = mediaBaseKey(target);
-        const secureTarget = target ? httpsVariantIgnoringHostProfile(target) : null;
-        const cachedDirect = target ? (vodRedirectDirectCache.get(target) ?? (secureTarget ? vodRedirectDirectCache.get(secureTarget) : undefined) ?? null) : null;
-        const cachedBase = mediaBaseKey(cachedDirect);
-        const mappedSource = base ? vodRedirectSourceBaseByDirectBase.get(base) : null;
-        return !!(
-          (base && (base === deadBase || deadVodRedirectBases.has(base))) ||
-          (cachedBase && (cachedBase === deadBase || deadVodRedirectBases.has(cachedBase))) ||
-          (mappedSource && (mappedSource === deadBase || deadVodRedirectBases.has(mappedSource)))
-        );
-      };
-
-      const before = playbackCandidates.length;
-      for (let i = playbackCandidates.length - 1; i > vodIdx; i -= 1) {
-        if (shouldDrop(playbackCandidates[i])) playbackCandidates.splice(i, 1);
-      }
-      const removed = before - playbackCandidates.length;
-      if (removed > 0) {
-        console.warn("[VOD DEBUG] CDN final marcado como indisponível — pulando variações equivalentes", {
-          deadBase,
-          sourceBase,
-          removidos: removed,
-          reason,
-          ordemAtualizada: playbackCandidates,
-        });
-        syncVodDiagCandidates();
-      }
-      return removed;
-    };
-
-    const recordFailedAttempt = (errMsg?: string) => {
-      let kind: LivePlayerKind = "unknown";
-      if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
-      else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
-      else if (lastPlayerStrategy.startsWith("HTML5")) kind = "html5";
-      const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-      const ve = videoRef.current?.error ?? null;
-      const baseError = errMsg ?? ve?.message ?? lastPlayerStrategy;
-      if (isLive && diagSessionIdRef.current) {
-        liveDiagRecordAttempt(diagSessionIdRef.current, {
-          player: kind,
-          url,
-          result: "fail",
-          error: baseError,
-          videoErrorCode: ve?.code ?? null,
-          at: Date.now(),
-        });
-      }
-      if (isVod && vodDiagSessionIdRef.current) {
-        const sessionId = vodDiagSessionIdRef.current;
-        const attemptId = vodDiagRecordAttempt(vodDiagSessionIdRef.current, {
-          player: kind as VodPlayerKind,
-          url,
-          result: "fail",
-          error: baseError,
-          videoErrorCode: ve?.code ?? null,
-          readyState: video.readyState,
-          networkState: video.networkState,
-          currentTime: video.currentTime,
-          duration: Number.isFinite(video.duration) ? video.duration : undefined,
-          at: Date.now(),
-        });
-        const currentBase = mediaBaseKey(playableTargetForCandidate(url));
-        const mappedSource = currentBase ? vodRedirectSourceBaseByDirectBase.get(currentBase) : null;
-        if (currentBase && (deadVodRedirectBases.has(currentBase) || (mappedSource && deadVodRedirectBases.has(mappedSource)))) {
-          pruneDeadVodRedirectFamily(currentBase, `player VOD: CDN final já marcado como 404/HTML (${baseError})`);
-        }
-        void probeVodCandidateForDiag(url).then((probe) => {
-          vodDiagPatchAttempt(sessionId, attemptId, probe);
-          const wasProxyAttempt = isStreamProxyUrl(url);
-          const status = Number(probe.upstreamStatus || probe.clientStatus || 0);
-          const directBase = mediaBaseKey(probe.directCandidate) ?? mediaBaseKey(probe.finalUrl);
-          const currentBase = mediaBaseKey(playableTargetForCandidate(url));
-          const deadBases = (probe.deadMediaBases ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-          const isRedirectedCdn404 = status === 404 && probe.redirected && (
-            probe.failureClass === "redirected-cdn-404-html" || /text\/html/i.test(probe.contentType ?? "")
-          );
-          if (isRedirectedCdn404 && !wasProxyAttempt) {
-            pruneDeadVodRedirectFamily(directBase ?? currentBase, `probe VOD: CDN final 404 (${probe.failureClass || probe.contentType || "sem classe"})`);
-          }
-          if (!wasProxyAttempt) {
-            for (const dead of deadBases) pruneDeadVodRedirectFamily(dead, "probe VOD: X-Upstream-Dead-Media-Bases");
-          }
-        });
-        console.warn("[VOD DEBUG] tentativa falhou", {
-          player: kind,
-          url,
-          error: baseError,
-          videoErrorCode: ve?.code ?? null,
-          readyState: video.readyState,
-          networkState: video.networkState,
-        });
-      }
-    };
-
-    const tryNextVod = (reason?: string) => {
+    const tryNextVod = () => {
       clearWatchdog();
-      recordFailedAttempt(reason);
       if (hls) {
         hls.destroy();
         hls = null;
       }
       destroyTsPlayer();
-      // Tenta bypass 503 antes de avançar. Se injetar diretos, eles entram
-      // logo após vodIdx; ao incrementar, cairemos no primeiro direto.
-      void (async () => {
-        await maybeInject503Bypass();
-        await maybeInjectVodRedirectDirect();
-      })().finally(() => {
-        vodIdx += 1;
-        if (vodIdx < playbackCandidates.length) {
-          const next = playbackCandidates[vodIdx];
-          auditEvent(diagSessionIdRef.current, "fallback-next-candidate", {
-            idx: vodIdx, total: playbackCandidates.length, url: next,
-          });
-          if (next && !isStreamProxyUrl(next)) {
-            console.log("[503 BYPASS] próxima tentativa via URL direta", { url: next });
-          }
-          playDirect();
-        } else {
-          // FIX D11 (audit IPTV): mensagem específica baseada no último motivo
-          // de falha detectado, em vez de uma única genérica para todos os modos.
-          const ve = videoRef.current?.error ?? null;
-          const code = ve?.code ?? null;
-          let msg: string;
-          if (isLive) {
-            if (code === 4) msg = "Formato deste canal não é compatível com o navegador. Tente no app Android.";
-            else if (code === 3) msg = "Erro de decodificação. Pode ser codec não suportado (ex.: HEVC/EAC3).";
-            else if (code === 2) msg = "Falha de rede ao conectar ao canal. Verifique sua conexão.";
-            else msg = `Não foi possível reproduzir este canal após ${playbackCandidates.length} tentativas.`;
-          } else {
-            if (code === 4) msg = "Formato deste vídeo não é compatível com seu navegador.";
-            else if (code === 3) msg = "Erro de decodificação do vídeo.";
-            else if (code === 2) msg = "Falha de rede ao carregar este vídeo.";
-            else msg = "Não foi possível reproduzir esta mídia.";
-          }
-          console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", {
-            arquivo: "src/components/VideoPlayer.tsx",
-            linha: 429,
-            funcao: "tryNextVod()",
-            motivo: "Todos os candidatos da lista playbackCandidates foram tentados e falharam (esgotamento de fallbacks VOD/Live).",
-            mensagem: msg,
-            videoErrorCode: code,
-            vodIdx,
-            totalCandidatos: playbackCandidates.length,
-          });
-          plog("final-fail", {
-            host: hostOf(workingSrc),
-            tentativas: playbackCandidates.length,
-            ultimaEstrategia: lastPlayerStrategy,
-            videoErrorCode: code,
-          });
-          auditEvent(diagSessionIdRef.current, "final-fail", {
-            host: hostOf(workingSrc),
-            attempts: playbackCandidates.length,
-            lastStrategy: lastPlayerStrategy,
-            videoErrorCode: code,
-          });
-          // Para VOD aguardamos o HEAD rápido do proxy antes de abrir o painel,
-          // senão o usuário via "Sem probe" enquanto o fetch ainda estava em
-          // andamento. LIVE mantém comportamento anterior para não mexer nos canais.
-          if (isVod) {
-            vodDiagFinalizingRef.current = true;
-            void reportPlaybackFailure(msg).finally(() => {
-              vodDiagFinalizingRef.current = false;
-              if (cancelled) return;
-              if (vodDiagSessionIdRef.current) vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
-              setVodDiagOpen(true);
-            });
-          } else {
-            void reportPlaybackFailure(msg);
-          }
-          if (isLive && diagSessionIdRef.current) {
-            liveDiagMarkFailed(diagSessionIdRef.current, msg);
-            setDiagOpen(true);
-          }
-          setError(msg);
-        }
-
-      });
+      vodIdx += 1;
+      if (vodIdx < playbackCandidates.length) playDirect();
+      else setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
     };
-
 
     const armVodWatchdog = () => {
+      if (!isVod) return;
       clearWatchdog();
-      if (isVod) {
-        watchdog = setTimeout(() => {
-          if (cancelled) return;
-          // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
-          // que o servidor respondeu — esperar mais 6s evita falso negativo em
-          // VOD de painel lento que demorou pra começar a entregar bytes.
-          if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
-          else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-            watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
-          }
-        }, 18_000);
-        return;
-      }
-      // FIX D1 (audit IPTV): LIVE .ts direto não tinha NENHUM watchdog —
-      // host que aceita TCP sem enviar dados pendurava o player indefinidamente.
-      // Agora: 22s sem first-frame (currentTime ainda 0 e sem dados) → próximo
-      // candidato. Cancelado naturalmente por clearWatchdog() em onPlaying/
-      // onCanPlay/onLoadedData ou em tryNextVod.
       watchdog = setTimeout(() => {
         if (cancelled) return;
-        if (video.currentTime <= 0 && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          console.warn("[LIVE DEBUG] startup watchdog LIVE 22s — sem first-frame, próximo candidato");
-          tryNextVod();
+        // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
+        // que o servidor respondeu — esperar mais 6s evita falso negativo em
+        // VOD de painel lento que demorou pra começar a entregar bytes.
+        if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
+        else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
         }
-      }, 22_000);
+      }, 18_000);
     };
-
 
     const bufferedAhead = () => {
       try {
@@ -1171,16 +378,8 @@ export function VideoPlayer({
       return 0;
     };
 
-    const safeDecodeUrl = (url: string) => {
-      try { return decodeURIComponent(url); } catch { return url; }
-    };
-
-    // [LIVE STABILITY] estatísticas mais recentes do mpegts.js (usado nos
-    // logs de freeze e no relatório de diagnóstico).
-    const mpegtsStats = { decodedFrames: 0, droppedFrames: 0, speedKbps: 0 };
-
     const playMpegTs = async (url: string) => {
-      if (!isLive && !isVod) return false;
+      if (!isLive) return false;
       try {
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
@@ -1188,104 +387,22 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
-        // Config de plataforma (APK vs Web) — fonte única em src/lib/platform.ts.
-        // Qualquer ajuste futuro de APK não pode vazar pro browser e vice-versa.
-        const platformCfg = getPlatformConfig();
-        const absoluteUrl =
-          platformCfg.absolutizeProxyUrl &&
-          !/^https?:\/\//i.test(url) &&
-          typeof window !== "undefined"
-            ? new URL(url, window.location.origin).toString()
-            : url;
-        currentPlaybackUrl = absoluteUrl;
-        lastPlayerStrategy = "mpegts.js";
-        // [LIVE STABILITY] Config relaxada para H.265/HEVC FHD:
-        //  - liveBufferLatencyChasing OFF: deixava o player descartar buffer
-        //    agressivamente para perseguir o edge, causando starvation em
-        //    streams pesados (HEVC FHD).
-        //  - liveBufferLatencyMaxLatency 45s + MinRemain 20s: tolera variação
-        //    de chegada de pacotes sem cortar.
-        //  - enableStashBuffer ON + autoCleanup agressivo desligado:
-        //    mantém pelo menos ~20s à frente; SourceBuffer só limpa o passado.
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive, url: absoluteUrl },
+          { type: "mpegts", isLive: true, url },
           {
-            isLive,
-            // enableWorker vem do preset por plataforma:
-            //   web  → false (Blob worker = origin null = "Failed to fetch")
-            //   apk  → true  (WebView Android aceita)
-            enableWorker: platformCfg.mpegts.enableWorker,
-            enableStashBuffer: true,
-            stashInitialSize: isLive ? 1024 : 384, // LIVE folgado; VOD menor para abrir rápido
-            liveBufferLatencyChasing: false,
-            liveBufferLatencyMaxLatency: 45,
-            liveBufferLatencyMinRemain: 20,
-            autoCleanupSourceBuffer: false,
-            lazyLoad: false,
-            seekType: "range",
+            isLive: true,
+            enableWorker: true,
+            enableStashBuffer: false,
+            liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, (...args: unknown[]) => {
-          // mpegts.js emite ERROR como (type, details, info?). Capturamos
-          // tudo para que o diagnóstico LIVE mostre o motivo real (Network
-          // EarlyEof, CodeError, MediaError MSE_ADD_SOURCEBUFFER, etc.) em
-          // vez do genérico "mpegts.js".
-          const [errType, errDetails, errInfo] = args as [unknown, unknown, unknown];
-          const detailMsg =
-            (errInfo && typeof errInfo === "object" && "msg" in (errInfo as Record<string, unknown>)
-              ? String((errInfo as { msg?: unknown }).msg ?? "")
-              : "") ||
-            (typeof errDetails === "string" ? errDetails : "") ||
-            "";
-          const composed = [errType, errDetails, detailMsg].filter(Boolean).join(" | ");
-          console.warn("[TS DEBUG] mpegts.js ERROR", { url, type: errType, details: errDetails, info: errInfo, isLive, isVod });
-          if (!cancelled) tryNextVod(`mpegts.js: ${composed || "unknown"}`);
-        });
-        // FIX D5 (audit IPTV): provedor que fecha a conexão TS graciosamente
-        // (sem RST) dispara LOADING_COMPLETE — antes não havia handler e o
-        // vídeo congelava sem trocar de candidato. Agora escala para o próximo
-        // candidato se o canal ainda não estabilizou (sem frames decodificados
-        // recentes) ou se o stream encerrou antes do primeiro frame.
-        tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
-          if (cancelled) return;
-          const decoded = mpegtsStats.decodedFrames || 0;
-          console.warn("[TS DEBUG] mpegts.js LOADING_COMPLETE", {
-            url, decodedFrames: decoded, currentTime: video.currentTime, isLive, isVod,
-          });
-          if (!isLive) {
-            if (video.currentTime < 1) tryNextVod("mpegts.js loading_complete antes do primeiro frame");
-            return;
-          }
-          // Se nunca avançou para o primeiro frame ou parou logo após início,
-          // tratamos como canal terminado/offline e tentamos o próximo.
-          if (decoded < 30 || video.currentTime < 1) {
-            tryNextVod();
-          }
-        });
-
-        // Captura codec/resolução real do stream.
-        tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
-          const m = info as {
-            videoCodec?: string; audioCodec?: string;
-            width?: number; height?: number; fps?: number;
-          };
-          const payload = {
-            videoCodec: m.videoCodec, audioCodec: m.audioCodec,
-            width: m.width, height: m.height, fps: m.fps,
-          };
-          console.log("[LIVE STABILITY] MEDIA_INFO", payload);
-          if (diagSessionIdRef.current) liveDiagSetMediaInfo(diagSessionIdRef.current, payload);
-        });
-        // Estatísticas contínuas (frames/speed).
-        tsPlayer.on(mpegts.Events.STATISTICS_INFO, (info: unknown) => {
-          const s = info as { decodedFrames?: number; droppedFrames?: number; speed?: number };
-          if (s.decodedFrames != null) mpegtsStats.decodedFrames = s.decodedFrames;
-          if (s.droppedFrames != null) mpegtsStats.droppedFrames = s.droppedFrames;
-          if (s.speed != null) mpegtsStats.speedKbps = Math.round(s.speed); // KB/s reportado
+        tsPlayer.on(mpegts.Events.ERROR, () => {
+          if (!cancelled) tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
-        armVodWatchdog();
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
           playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
@@ -1306,96 +423,29 @@ export function VideoPlayer({
       destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
-      currentPlaybackUrl = url;
-      const decodedUrl = safeDecodeUrl(url);
-      if (import.meta.env.DEV) {
-        console.debug("[player] playDirect", {
-          vodIdx,
-          total: playbackCandidates.length,
-          url,
-          format: detectFormat(decodedUrl),
-          isLive,
-          isVod,
-        });
-      }
-
+      const decodedUrl = (() => {
+        try {
+          return decodeURIComponent(url);
+        } catch {
+          return url;
+        }
+      })();
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
       }
       if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
-        // [LIVE DEBUG] Ordem para LIVE .ts: Native HTML5 → mpegts.js → (HLS).
-        // Empiricamente, <video> nativo com .ts entrega frame mais rápido em
-        // dispositivos que aceitam o container; mpegts.js (demux JS) fica
-        // como fallback. Para VOD/outros casos, mantém heurística por host.
-        const h = hostOf(workingSrc) ?? "";
-        const profile = getHostProfile(h);
-        // FIX 5.1: navegador web desktop (Chrome/Edge/Firefox) NÃO decodifica
-        // MPEG-TS via <video src=".ts"> — tentar HTML5 primeiro desperdiça ~3s
-        // até o erro 4 (SRC_NOT_SUPPORTED) e força fallback para mpegts.js.
-        // Em APK nativo (ExoPlayer) e em hosts com profile.preferPlayer="html5"
-        // memorizado, mantém o comportamento atual.
-        const preferHtml5 =
-          !isVod && (
-            profile.preferPlayer === "html5" ||
-            (shouldUseNativePlayer && isLive) ||
-            (profile.disableProxy && profile.preferPlayer !== "mpegts")
-          );
-        const tStart = performance.now();
-        if (preferHtml5) {
-          console.log("[LIVE DEBUG] tentativa 1/2: HTML5 nativo (.ts direto)", {
-            host: h, url, memorizada: profile.preferPlayer ?? "(nenhuma)",
-          });
-
-          lastPlayerStrategy = "HTML5 <video> (.ts direto)";
-          video.pause();
-          video.currentTime = 0;
-          video.src = url;
-          video.load();
-          armVodWatchdog();
-          // Se HTML5 falhar em LIVE, tenta mpegts.js antes de iterar candidatos.
-          let html5FellBack = false;
-          const onceErr = () => {
-            if (cancelled || html5FellBack) return;
-            html5FellBack = true;
-            video.removeEventListener("error", onceErr);
-            const err = video.error;
-            console.warn("[LIVE DEBUG] HTML5 falhou", {
-              host: h,
-              videoErrorCode: err?.code ?? null,
-              videoErrorMessage: err?.message ?? null,
-              ms: Math.round(performance.now() - tStart),
-            });
-            if (isLive) {
-              console.log("[LIVE DEBUG] tentativa 2/2: mpegts.js");
-              void playMpegTs(url).then((handled) => {
-                if (!handled && !cancelled) {
-                  console.warn("[LIVE DEBUG] mpegts.js também falhou — próximo candidato");
-                  tryNextVod();
-                }
-              });
-            }
-          };
-          video.addEventListener("error", onceErr, { once: true });
-          video.play().then(() => {
-            setCanManualPlay(false);
-            console.log("[LIVE DEBUG] HTML5 .ts iniciou", { host: h, ms: Math.round(performance.now() - tStart) });
-          }).catch(() => setCanManualPlay(true));
-        } else {
-          void playMpegTs(url).then((handled) => {
-            if (!handled && !cancelled) {
-              lastPlayerStrategy = "HTML5 <video> (.ts direto)";
-              video.pause();
-              video.currentTime = 0;
-              video.src = url;
-              video.load();
-              video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
-            }
-          });
-        }
+        void playMpegTs(url).then((handled) => {
+          if (!handled && !cancelled) {
+            video.pause();
+            video.currentTime = 0;
+            video.src = url;
+            video.load();
+            video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+          }
+        });
         return;
       }
-      lastPlayerStrategy = "HTML5 <video>";
       video.pause();
       video.currentTime = 0;
       video.src = url;
@@ -1404,344 +454,36 @@ export function VideoPlayer({
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
 
-    // [BUFFER OPTIMIZATION] Marca quando o vídeo começou a tocar de fato.
-    // Depois disso, falhas transitórias não reiniciam a estratégia inteira:
-    // tentamos só video.play() e deixamos o stall-watchdog do hls.js/MSE
-    // recuperar. Evita o flicker de trocar de player no meio do canal.
-    let hasStartedPlaying = false;
     const onVideoError = () => {
       if (cancelled || hls) return;
-      if (hasStartedPlaying) {
-        // FIX D12 (audit IPTV): MediaError code=3 (MEDIA_ERR_DECODE) e code=4
-        // (SRC_NOT_SUPPORTED) pós-início são fatais — apenas chamar play() não
-        // recupera. Escalamos para o próximo candidato. code=1/2 (transitório)
-        // continua tratado pelo recovery silencioso anterior.
-        const errCode = video.error?.code;
-        if (errCode === 3 || errCode === 4) {
-          console.warn("[VIDEO ERROR] erro fatal pós-início (code=" + errCode + ") — próximo candidato");
-          hasStartedPlaying = false;
-          tryNextVod();
-          return;
-        }
-        console.log("[BUFFER OPTIMIZATION] engasgo após início — recover sem trocar player");
-        void video.play().catch(() => undefined);
-        return;
-      }
       tryNextVod();
     };
-
     const onVideoReady = () => clearWatchdog();
     const onPlaying = () => {
       clearWatchdog();
       setCanManualPlay(false);
-      if (!hasStartedPlaying) {
-        hasStartedPlaying = true;
-        auditEvent(diagSessionIdRef.current, "engine-ok", {
-          strategy: lastPlayerStrategy,
-          attemptsBeforeOk: vodIdx + 1,
-          elapsedMs: Math.round(performance.now() - effectStartT),
-        });
-        const h = hostOf(workingSrc);
-        if (h) {
-          // Mapeia lastPlayerStrategy → PlaybackStrategy normalizada.
-          let strat: PlaybackStrategy = "html5";
-          if (lastPlayerStrategy.startsWith("HLS")) strat = "hls";
-          else if (lastPlayerStrategy.startsWith("mpegts")) strat = "mpegts";
-          else if (lastPlayerStrategy.startsWith("HTML5")) strat = "html5";
-          if (getHostProfile(h).preferPlayer !== strat) {
-            rememberPreferredPlayer(h, strat);
-            console.log("[BUFFER OPTIMIZATION] estratégia memorizada", { host: h, estrategia: strat });
-          }
-          // [LIVE DIAG] marca sucesso (LIVE só).
-          if (isLive && diagSessionIdRef.current) {
-            let kind: LivePlayerKind = "html5";
-            if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
-            else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
-            const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-            liveDiagMarkPlaying(diagSessionIdRef.current, kind, url);
-          }
-          if (isVod && vodDiagSessionIdRef.current) {
-            let kind: VodPlayerKind = "html5";
-            if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
-            else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
-            const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-            vodDiagMarkPlaying(vodDiagSessionIdRef.current, kind, url);
-          }
-        }
-
-        try {
-          const ahead = bufferedAhead();
-          console.log("[BUFFER OPTIMIZATION] playing", {
-            host: hostOf(workingSrc),
-            estrategia: lastPlayerStrategy,
-            bufferAhead: Number(ahead.toFixed(2)),
-          });
-        } catch { /* noop */ }
-      }
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
 
-    // ===== [LIVE STABILITY] Telemetria de estabilidade do <video> ===========
-    // Loga waiting/stalled/suspend/canplay/canplaythrough + currentTime,
-    // buffered, readyState, networkState, bytes/s (estimado pelo crescimento
-    // de buffered). Só ativa para LIVE; VOD segue inalterado.
-    let stabCleanup: (() => void) | null = null;
-    if (isLive) {
-      const fmtRanges = () => {
-        try {
-          const r: string[] = [];
-          for (let i = 0; i < video.buffered.length; i++) {
-            r.push(`[${video.buffered.start(i).toFixed(2)}-${video.buffered.end(i).toFixed(2)}]`);
-          }
-          return r.join(",") || "(vazio)";
-        } catch { return "(erro)"; }
-      };
-      const snapshot = () => ({
-        currentTime: video.currentTime,
-        bufferedAhead: bufferedAhead(),
-        bufferedRanges: fmtRanges(),
-        readyState: video.readyState,
-        networkState: video.networkState,
-        decodedFrames: (() => {
-          const q = typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality() : null;
-          return mpegtsStats.decodedFrames || q?.totalVideoFrames || 0;
-        })(),
-        droppedFrames: (() => {
-          const q = typeof video.getVideoPlaybackQuality === "function" ? video.getVideoPlaybackQuality() : null;
-          return mpegtsStats.droppedFrames || q?.droppedVideoFrames || 0;
-        })(),
-        speedKbps: mpegtsStats.speedKbps,
-      });
-      const logFreeze = (trigger: "waiting" | "stalled" | "suspend" | "watchdog") => {
-        const snap = snapshot();
-        const payload = { trigger, ...snap, host: hostOf(workingSrc), strategy: lastPlayerStrategy };
-        console.warn("[LIVE STABILITY] FREEZE", payload);
-        if (diagSessionIdRef.current) {
-          liveDiagRecordFreeze(diagSessionIdRef.current, { at: Date.now(), ...snap, trigger });
-        }
-      };
-      let liveRecoveryBusy = false;
-      let lastLiveRecoveryAt = 0;
-      let html5LiveReconnects = 0;
-      let pendingRecoverTimer: ReturnType<typeof setTimeout> | null = null;
-      const clearPendingRecover = () => {
-        if (pendingRecoverTimer) clearTimeout(pendingRecoverTimer);
-        pendingRecoverTimer = null;
-      };
-      const nudgeIntoBufferedRange = () => {
-        const ahead = bufferedAhead();
-        if (ahead <= 2) return false;
-        try {
-          video.currentTime = Math.min(video.currentTime + 0.35, video.currentTime + Math.max(0.1, ahead - 0.5));
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      // FIX D8 (audit IPTV): escalada de stalls recorrentes. Antes, o sistema
-      // ficava em loop eterno de recovery sem nunca trocar de candidato. Agora:
-      // 4 stalls em 60s do MESMO candidato → tryNextVod(). VOD usa watchdog
-      // próprio, então isso só vale para LIVE.
-      const webStallTimestamps: number[] = [];
-      const recoverLiveWebStall = (reason: "waiting" | "stalled" | "suspend" | "watchdog") => {
-        if (cancelled || liveRecoveryBusy) return;
-        const now = Date.now();
-        if (now - lastLiveRecoveryAt < 7_000) return;
-        lastLiveRecoveryAt = now;
-        webStallTimestamps.push(now);
-        while (webStallTimestamps.length && now - webStallTimestamps[0] > 60_000) {
-          webStallTimestamps.shift();
-        }
-        if (webStallTimestamps.length >= 4) {
-          console.warn("[STALL ESCALATION] 4 stalls em 60s no mesmo candidato — escalando para próximo", {
-            strategy: lastPlayerStrategy,
-            vodIdx,
-            total: playbackCandidates.length,
-          });
-          webStallTimestamps.length = 0;
-          tryNextVod();
-          return;
-        }
-        const url = currentPlaybackUrl ?? playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-        const decoded = safeDecodeUrl(url);
-        const ahead = bufferedAhead();
-        console.warn("[LIVE STABILITY] RECOVERY", {
-          reason,
-          strategy: lastPlayerStrategy,
-          url,
-          bufferAhead: Number(ahead.toFixed(2)),
-          html5LiveReconnects,
-        });
-        liveRecoveryBusy = true;
-        const finish = () => { liveRecoveryBusy = false; };
-
-
-        // HTML5 direto com .ts consegue abrir em vários Androids, mas às vezes
-        // congela sem disparar erro. Reconecta ao edge LIVE sem recarregar a tela;
-        // se repetir, troca para mpegts.js como fallback do mesmo candidato.
-        if (lastPlayerStrategy.startsWith("HTML5") && /\.ts(\?|&|$)/i.test(decoded)) {
-          if (html5LiveReconnects < 2) {
-            html5LiveReconnects += 1;
-            try {
-              video.pause();
-              video.src = url;
-              video.load();
-              void video.play().finally(finish);
-            } catch {
-              finish();
-            }
-            return;
-          }
-          void playMpegTs(url).finally(finish);
-          return;
-        }
-
-        if (lastPlayerStrategy.startsWith("mpegts") && tsPlayer) {
-          try {
-            if (!nudgeIntoBufferedRange()) {
-              tsPlayer.unload();
-              tsPlayer.load();
-            }
-            const p = tsPlayer.play();
-            if (p && typeof p.then === "function") void p.finally(finish);
-            else finish();
-          } catch {
-            finish();
-          }
-          return;
-        }
-
-        if (lastPlayerStrategy.startsWith("HLS") && hls) {
-          try {
-            hls.startLoad();
-            nudgeIntoBufferedRange();
-            void video.play().finally(finish);
-          } catch {
-            finish();
-          }
-          return;
-        }
-
-        if (!nudgeIntoBufferedRange()) {
-          try { video.load(); } catch { /* noop */ }
-        }
-        void video.play().finally(finish);
-      };
-      const scheduleRecovery = (trigger: "waiting" | "stalled" | "suspend" | "watchdog") => {
-        clearPendingRecover();
-        pendingRecoverTimer = setTimeout(() => {
-          pendingRecoverTimer = null;
-          if (cancelled || video.paused || video.ended) return;
-          if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 2) {
-            logFreeze(trigger);
-            recoverLiveWebStall(trigger);
-          }
-        }, 4_000);
-      };
-      const onWaitingStab   = () => { logFreeze("waiting"); scheduleRecovery("waiting"); };
-      const onStalledStab   = () => { logFreeze("stalled"); scheduleRecovery("stalled"); };
-      const onSuspendStab   = () => {
-        // suspend é comum quando o browser pausa downloads — só registra se
-        // não estamos com buffer suficiente, evita ruído.
-        if (bufferedAhead() < 5) { logFreeze("suspend"); scheduleRecovery("suspend"); }
-      };
-      const onCanPlayStab        = () => console.log("[LIVE STABILITY] canplay",        snapshot());
-      const onCanPlayThroughStab = () => console.log("[LIVE STABILITY] canplaythrough", snapshot());
-      const onPlayingStab        = () => { clearPendingRecover(); };
-
-      // Telemetria periódica + estimativa de bytes/s via mpegts.speed.
-      let lastBufEnd = 0;
-      let lastT = performance.now();
-      let lastMediaTime = video.currentTime;
-      let noProgressTicks = 0;
-      const tick = setInterval(() => {
-        if (cancelled) return;
-        const now = performance.now();
-        let curBufEnd = 0;
-        try { curBufEnd = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0; } catch { /* noop */ }
-        const dt = (now - lastT) / 1000;
-        const bufGrowthSec = dt > 0 ? (curBufEnd - lastBufEnd) / dt : 0;
-        lastT = now; lastBufEnd = curBufEnd;
-        const moved = Math.abs(video.currentTime - lastMediaTime);
-        lastMediaTime = video.currentTime;
-        if (!video.paused && !video.ended && moved < 0.15) noProgressTicks += 1;
-        else noProgressTicks = 0;
-        if (noProgressTicks >= 2) {
-          noProgressTicks = 0;
-          logFreeze("watchdog");
-          recoverLiveWebStall("watchdog");
-        }
-        if (DEBUG) {
-          console.log("[LIVE STABILITY] tick", {
-            ...snapshot(),
-            bufGrowthSecPerSec: Number(bufGrowthSec.toFixed(2)),
-            noProgressTicks,
-          });
-        }
-      }, 5_000);
-
-      video.addEventListener("waiting", onWaitingStab);
-      video.addEventListener("stalled", onStalledStab);
-      video.addEventListener("suspend", onSuspendStab);
-      video.addEventListener("canplay", onCanPlayStab);
-      video.addEventListener("canplaythrough", onCanPlayThroughStab);
-      video.addEventListener("playing", onPlayingStab);
-      stabCleanup = () => {
-        clearInterval(tick);
-        clearPendingRecover();
-        video.removeEventListener("waiting", onWaitingStab);
-        video.removeEventListener("stalled", onStalledStab);
-        video.removeEventListener("suspend", onSuspendStab);
-        video.removeEventListener("canplay", onCanPlayStab);
-        video.removeEventListener("canplaythrough", onCanPlayThroughStab);
-        video.removeEventListener("playing", onPlayingStab);
-      };
-    }
-
-
-
     const attachHls = (url: string) => {
       currentHlsUrl = url;
-      currentPlaybackUrl = url;
-      if (import.meta.env.DEV) console.debug("[player] attachHls", { url, isLive, kind, forcedUA });
-      // Watchdog de abertura para LIVE: se o manifesto não for parseado em 15s,
-      // abandona o caminho HLS e cai direto pro .ts (mpegts.js/native).
-      // Painéis Xtream que não expõem variante .m3u8 retornam 404 em todos os
-      // UAs e o hls.js gastaria ~30s+ em retries antes de desistir sozinho.
-      let hlsStartupTimer: ReturnType<typeof setTimeout> | null = null;
-      const clearHlsStartup = () => {
-        if (hlsStartupTimer) { clearTimeout(hlsStartupTimer); hlsStartupTimer = null; }
-      };
-      if (isLive) {
-        hlsStartupTimer = setTimeout(() => {
-          if (cancelled) return;
-          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return;
-          if (import.meta.env.DEV) console.warn("[player] HLS startup timeout — fallback para .ts direto", { url });
-          detachStallListeners?.();
-          try { hls?.destroy(); } catch { /* noop */ }
-          hls = null;
-          // Vai pro playDirect() (mpegts.js .ts via proxy / native), sem travar UI.
-          playDirect();
-        }, 15_000);
-      }
       if (Hls.isSupported()) {
-
-        lastPlayerStrategy = "HLS (hls.js)";
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Config estável para LIVE: buffer mais folgado, sem latência agressiva.
+          // Config estável (revertida da versão agressiva que travava abertura).
+          // Live: buffer enxuto, como o player nativo do APK trabalha.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          // hls.js mantém ~20-45s à frente em LIVE para reduzir starvation.
-          backBufferLength: isLive ? 20 : 30,
-          maxBufferLength: isLive ? 45 : 60,
-          maxMaxBufferLength: isLive ? 90 : 180,
-          maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
-          maxBufferHole: isLive ? 2 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 3 : 3,
+          // hls.js mantém ainda assim ~30-90s de buffer à frente — suficiente.
+          backBufferLength: isLive ? 10 : 30,
+          maxBufferLength: isLive ? 30 : 60,
+          maxMaxBufferLength: isLive ? 60 : 180,
+          maxBufferSize: isLive ? 60 * 1000 * 1000 : 90 * 1000 * 1000,
+          maxBufferHole: isLive ? 1.5 : 0.5,
+          highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
           fragLoadingMaxRetry: 8,
@@ -1753,8 +495,8 @@ export function VideoPlayer({
           levelLoadingTimeOut: 15_000,
           // Fica mais perto do edge (como nativo) e re-sincroniza rápido
           // quando a latência sobe — evita travar acumulando atraso.
-          liveSyncDurationCount: 5,
-          liveMaxLatencyDurationCount: 15,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10,
           // Live: começa pelo nível mais baixo e sem teste de banda — muitos
           // servidores IPTV não respondem ao probe de bandwidth do hls.js
           // (era o que travava a abertura dos canais no APK).
@@ -1775,11 +517,8 @@ export function VideoPlayer({
         // autoPlay do browser engatar, reduz delay até primeiro frame.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
-          clearHlsStartup();
-          if (import.meta.env.DEV) console.debug("[player] HLS manifest parseado", { url });
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
-
 
         let netRetries = 0;
         const MAX_NET_RETRIES = 5;
@@ -1869,8 +608,6 @@ export function VideoPlayer({
 
         detachStallListeners = () => {
           clearStall();
-          clearHlsStartup();
-
           if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
           video.removeEventListener("waiting", onWaiting);
           video.removeEventListener("playing", onResumed);
@@ -1906,7 +643,7 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 774, funcao: "attachHls()/hls.on(ERROR) NETWORK_ERROR", motivo: "hls.js retornou NETWORK_ERROR fatal após esgotar netRetries e sem candidato direto restante." }); void reportPlaybackFailure("HLS NETWORK_ERROR fatal"); setError("Conexão instável com o canal. Tente novamente."); }
+                  else setError("Conexão instável com o canal. Tente novamente.");
                   return;
                 }
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
@@ -1916,7 +653,7 @@ export function VideoPlayer({
                 }, delay);
               } else {
                 detachStallListeners?.();
-                tryNextVod(`HLS NETWORK_ERROR: ${data.details ?? "unknown"}`);
+                tryNextVod();
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1926,13 +663,13 @@ export function VideoPlayer({
                   hls?.destroy();
                   hls = null;
                   if (!triedDirect) playDirect();
-                  else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 794, funcao: "attachHls()/hls.on(ERROR) MEDIA_ERROR", motivo: "hls.js retornou MEDIA_ERROR fatal após esgotar mediaRetries (recoverMediaError não recuperou)." }); void reportPlaybackFailure("HLS MEDIA_ERROR fatal"); setError("Erro de mídia no canal. Tente novamente."); }
+                  else setError("Erro de mídia no canal. Tente novamente.");
                   return;
                 }
                 hls?.recoverMediaError();
               } else {
                 detachStallListeners?.();
-                tryNextVod(`HLS MEDIA_ERROR: ${data.details ?? "unknown"}`);
+                tryNextVod();
               }
               return;
             default:
@@ -1940,12 +677,11 @@ export function VideoPlayer({
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
-              else { console.error("[STREAM DEBUG] ETAPA 10 — setError disparado", { arquivo: "src/components/VideoPlayer.tsx", linha: 808, funcao: "attachHls()/hls.on(ERROR) default", motivo: "hls.js retornou erro fatal de tipo não tratado (não NETWORK/MEDIA) e já tentamos playDirect()." }); void reportPlaybackFailure("HLS fatal (outro tipo)"); setError("Não foi possível reproduzir este canal."); }
+              else setError("Não foi possível reproduzir este canal.");
           }
         });
 
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        lastPlayerStrategy = "HTML5 nativo (HLS Safari/iOS)";
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
@@ -1987,7 +723,6 @@ export function VideoPlayer({
       cancelled = true;
       clearWatchdog();
       detachStallListeners?.();
-      stabCleanup?.();
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
@@ -1997,27 +732,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode, fallbackSrcs]);
-
-  // [LIVE DIAG] Quando setError dispara em LIVE, marca falha e abre painel.
-  // Cobre todos os caminhos (HLS NETWORK/MEDIA/default, esgotamento de candidatos).
-  useEffect(() => {
-    if (!error) return;
-    if (kind !== "live") return;
-    const id = diagSessionIdRef.current;
-    if (id) liveDiagMarkFailed(id, error);
-    setDiagOpen(true);
-  }, [error, kind]);
-
-  // [VOD DIAG] Quando filmes/séries falham, marca falha e abre painel.
-  useEffect(() => {
-    if (!error) return;
-    if (kind !== "vod") return;
-    if (vodDiagFinalizingRef.current) return;
-    const id = vodDiagSessionIdRef.current;
-    if (id) vodDiagMarkFailed(id, error);
-    setVodDiagOpen(true);
-  }, [error, kind]);
+  }, [src, kind, playerMode]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
@@ -2136,43 +851,12 @@ export function VideoPlayer({
 
 
 
-  // Auto-hide controles nativos após inatividade do mouse/toque
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revealNativeControls = useCallback(() => {
-    setControlsVisible(true);
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    const v = videoRef.current;
-    const playing = !!v && !v.paused && !v.ended;
-    if (playing) {
-      controlsTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
-    }
-  }, []);
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const onPlay = () => revealNativeControls();
-    const onPause = () => { setControlsVisible(true); if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
-    v.addEventListener("play", onPlay);
-    v.addEventListener("pause", onPause);
-    return () => {
-      v.removeEventListener("play", onPlay);
-      v.removeEventListener("pause", onPause);
-      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    };
-  }, [revealNativeControls]);
-
   return (
-    <div
-      className="relative h-full w-full bg-player"
-      onMouseMove={revealNativeControls}
-      onMouseEnter={revealNativeControls}
-      onTouchStart={revealNativeControls}
-    >
+    <div className="relative h-full w-full bg-player">
       <video
         ref={videoRef}
         poster={poster}
-        {...(controls && controlsVisible ? { controls: true } : {})}
+        controls
         autoPlay
         playsInline
         style={{
@@ -2180,7 +864,6 @@ export function VideoPlayer({
           // Realce visual estilo "HDR" (apenas CSS — não é HDR real).
           // Suave pra não estourar pele/branco. Se incomodar, é só reverter.
           filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
-          cursor: controlsVisible ? 'auto' : 'none',
         }}
         className={videoClass}
         hidden={playerMode === "native"}
@@ -2198,16 +881,15 @@ export function VideoPlayer({
         </div>
       )}
       {error && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive z-10">
+        <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       )}
-
       {canManualPlay && !error && playerMode === "web" && (
         <button
           type="button"
           onClick={() => videoRef.current?.play().then(() => setCanManualPlay(false)).catch(() => undefined)}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-glow flex items-center justify-center text-2xl z-10"
+          className="absolute inset-0 m-auto h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-glow flex items-center justify-center text-2xl"
           aria-label="Reproduzir"
         >
           ▶

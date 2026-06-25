@@ -68,13 +68,6 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       showControls?: boolean;
       displayMode?: string;
       startAtSec?: number;
-      // [BUFFER OPTIMIZATION] Campos opcionais lidos pelo ExoPlayer/Media3
-      // quando o plugin os repassa. Plugins que não conhecem esses campos
-      // simplesmente os ignoram (safe-by-default).
-      minBufferMs?: number;
-      maxBufferMs?: number;
-      bufferForPlaybackMs?: number;
-      bufferForPlaybackAfterRebufferMs?: number;
     };
 
     const args: InitArgs = {
@@ -90,11 +83,6 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       bkmodeEnabled: true,
       showControls: true,
       displayMode: "all",
-      // Buffer alvo: ~15s mín / 50s máx, com 3s antes de iniciar e 5s pós-rebuffer.
-      minBufferMs: 15000,
-      maxBufferMs: 50000,
-      bufferForPlaybackMs: 3000,
-      bufferForPlaybackAfterRebufferMs: 5000,
     };
     if (typeof opts.startAtSec === "number" && opts.startAtSec > 5) {
       args.startAtSec = opts.startAtSec;

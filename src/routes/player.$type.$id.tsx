@@ -6,14 +6,12 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
-import { isNativeAppSync } from "@/lib/platform";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
 type PlayerType = (typeof VALID_TYPES)[number];
 const isPlayerType = (t: string): t is PlayerType =>
   (VALID_TYPES as readonly string[]).includes(t);
-const EMPTY_FALLBACK_SRCS: string[] = [];
 
 export const Route = createFileRoute("/player/$type/$id")({
   validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
@@ -35,22 +33,6 @@ type MovieInfo = {
   };
 };
 
-function playableDirectSource(direct?: string, native = false): string | null {
-  if (!direct || !/^https?:\/\//i.test(direct)) return null;
-  try {
-    const path = new URL(direct).pathname.toLowerCase();
-    // No preview web, só aceite direct_source que o navegador costuma tocar
-    // direto. Containers como .ts/.mkv/.avi exigem MSE/CORS e, quando usados
-    // como primários, quebravam VOD que antes caía na URL Xtream canônica.
-    // No APK, ExoPlayer continua podendo usar esses formatos diretamente.
-    const webPlayable = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(path);
-    const nativePlayable = /\.(mkv|avi|ts)(\?|$)/i.test(path);
-    return webPlayable || (native && nativePlayable) ? direct : null;
-  } catch {
-    return null;
-  }
-}
-
 function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
@@ -63,7 +45,6 @@ function PlayerPage() {
     setCreds(store.getCreds());
   }, []);
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
-  const [episodeFallbackSrcs, setEpisodeFallbackSrcs] = useState<string[]>([]);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
@@ -88,13 +69,22 @@ function PlayerPage() {
   const playEpisode = useCallback(
     (ep: Episode) => {
       if (!creds) return;
-      const canonical = streamUrl.episode(creds, ep.id, ep.container_extension || "mp4");
-      const direct = playableDirectSource(ep.direct_source, isNativeAppSync());
-      // VOD que funcionava no preview usava `direct_source` quando o painel
-      // fornece uma URL de arquivo real. Mantemos a canônica Xtream como
-      // fallback, mas não deixamos ela atrasar/bloquear o caminho direto.
-      setEpisodeUrl(direct ?? canonical);
-      setEpisodeFallbackSrcs(Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[])));
+      const directPath = (() => {
+        try {
+          return ep.direct_source ? new URL(ep.direct_source).pathname.toLowerCase() : "";
+        } catch {
+          return "";
+        }
+      })();
+      const usableDirect =
+        ep.direct_source &&
+        /^https?:\/\//i.test(ep.direct_source) &&
+        /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+      setEpisodeUrl(
+        usableDirect
+          ? ep.direct_source!
+          : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
+      );
       setActiveEpisodeId(String(ep.id));
       setActiveTitle(`${name} — ${ep.title}`);
       store.setLastEpisode(id, String(ep.id));
@@ -128,27 +118,25 @@ function PlayerPage() {
     if (type === "movie") {
       // id may include ".ext"
       const [sid, ext] = id.split(".");
+      const direct = movieQ.data?.movie_data?.direct_source;
+      if (direct && /^https?:\/\//i.test(direct)) {
+        const directPath = (() => {
+          try {
+            return new URL(direct).pathname.toLowerCase();
+          } catch {
+            return "";
+          }
+        })();
+        const looksLikePlayableFile = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+        if (looksLikePlayableFile) return direct;
+      }
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
-      const canonical = streamUrl.movie(creds, movieId, movieExt);
-      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
-      return direct ?? canonical;
+      return streamUrl.movie(creds, movieId, movieExt);
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
   }, [creds, type, id, episodeUrl, movieQ.data]);
-
-  const movieFallbackSrcs = useMemo(() => {
-    if (!creds || type !== "movie") return [];
-    const [sid, ext] = id.split(".");
-    const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
-    const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
-    const canonical = streamUrl.movie(creds, movieId, movieExt);
-    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
-    return Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[]));
-  }, [creds, type, id, movieQ.data]);
-
-  const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : EMPTY_FALLBACK_SRCS;
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).
@@ -229,67 +217,27 @@ function PlayerPage() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
   }, []);
 
-  // Fase 7 — Fullscreen desktop padrão (F11 já é nativo do browser; aqui
-  // adicionamos tecla "F" e double-click no container, como Tivimate/Plex).
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const toggleFullscreen = useCallback(() => {
-    const d = document as Document & {
-      webkitFullscreenElement?: Element;
-      webkitExitFullscreen?: () => Promise<void> | void;
-    };
-    const el = stageRef.current as (HTMLElement & {
-      webkitRequestFullscreen?: () => Promise<void> | void;
-    }) | null;
-    if (!el) return;
-    const inFs = !!(document.fullscreenElement || d.webkitFullscreenElement);
-    try {
-      if (inFs) {
-        if (typeof document.exitFullscreen === "function") void document.exitFullscreen();
-        else if (typeof d.webkitExitFullscreen === "function") void d.webkitExitFullscreen();
-      } else {
-        if (typeof el.requestFullscreen === "function") void el.requestFullscreen();
-        else if (typeof el.webkitRequestFullscreen === "function") void el.webkitRequestFullscreen();
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Ignora se o usuário está digitando em algum input/textarea.
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "f" || e.key === "F") {
-        e.preventDefault();
-        toggleFullscreen();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggleFullscreen]);
-
   return (
     <AppShell immersive>
       <div
-        ref={stageRef}
         className="relative h-dvh w-dvw overflow-hidden bg-player text-player-foreground"
         onMouseMove={revealControls}
         onMouseEnter={revealControls}
         onTouchStart={revealControls}
-        onDoubleClick={toggleFullscreen}
       >
         <div className="absolute inset-0 bg-player">
           {url ? (
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
-              fallbackSrcs={vodFallbackSrcs}
               initialPosition={initialPosition}
               onProgress={handleProgress}
             />
           ) : (
-            <PlayerLoadingOrError type={type ?? "movie"} onBack={closePlayer} />
+            <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
+              {type === "series" ? "Carregando episódio…" : "Carregando…"}
+            </div>
           )}
-
         </div>
         {/* Seta de voltar — visível apenas ao mover o mouse */}
         <div
@@ -309,17 +257,9 @@ function PlayerPage() {
           </Button>
         </div>
 
-          {/* Título/tipo e botões extras ficam ocultos durante a reprodução.
-              Episódios segue o mesmo auto-hide do botão Voltar (showControls):
-              aparece com mouse/touch/D-Pad e some após inatividade. */}
+          {/* Título/tipo e botões extras ficam ocultos durante a reprodução. */}
         {type === "series" && (
-          <div
-            className={`absolute bottom-4 right-4 z-30 transition-opacity duration-300 ${
-              showControls ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-            }`}
-            aria-hidden={!showControls}
-          >
-          <details className="max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
+          <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
               Episódios
             </summary>
@@ -353,7 +293,6 @@ function PlayerPage() {
               ))}
             </div>
           </details>
-          </div>
         )}
         {null}
 
@@ -361,41 +300,3 @@ function PlayerPage() {
     </AppShell>
   );
 }
-
-// FIX D6 (audit IPTV): antes mostrava "Carregando…" indefinidamente quando
-// playlist vazia ou stream URL não resolveu. Agora após 12s exibe mensagem
-// de erro com botão "Voltar" para o usuário não ficar preso.
-function PlayerLoadingOrError({
-  type,
-  onBack,
-}: {
-  type: PlayerType;
-  onBack: () => void;
-}) {
-  const [timedOut, setTimedOut] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setTimedOut(true), 12_000);
-    return () => clearTimeout(t);
-  }, []);
-  if (!timedOut) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
-        {type === "series" ? "Carregando episódio…" : "Carregando…"}
-      </div>
-    );
-  }
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-player px-6 text-center text-muted-foreground">
-      <div className="text-base font-semibold text-foreground">
-        Não foi possível carregar este conteúdo.
-      </div>
-      <div className="text-sm">
-        Verifique sua conexão ou tente outro item.
-      </div>
-      <Button variant="outline" onClick={onBack} className="mt-2">
-        <ArrowLeft className="size-4 mr-1" /> Voltar
-      </Button>
-    </div>
-  );
-}
-
