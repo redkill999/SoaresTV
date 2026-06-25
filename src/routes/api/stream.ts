@@ -313,6 +313,8 @@ async function handle(request: Request) {
   let usedOriginHeaders = false;
   let usedFinalUrl = upstreamUrl.toString();
   let usedRedirected = false;
+  let passthroughRedirectLocation = "";
+  let passthroughRedirectStatus = 0;
   let redirectedVod404Count = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
@@ -354,7 +356,7 @@ async function handle(request: Request) {
             res = await fetch(upstreamUrl.toString(), {
               method: upstreamMethod,
               headers: buildHeaders(ua, rangeValue, originHeaderMode),
-              redirect: "follow",
+              redirect: vodContext ? "manual" : "follow",
               signal: controller.signal,
             });
           } finally {
@@ -366,6 +368,23 @@ async function handle(request: Request) {
           usedFinalUrl = res.url || upstreamUrl.toString();
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           const upstreamCt = res.headers.get("content-type") || "";
+          const manualLocation = res.headers.get("location");
+          if (vodContext && isRedirectStatus(res.status) && manualLocation) {
+            const resolvedLocation = resolveLocation(manualLocation, upstreamUrl);
+            usedFinalUrl = resolvedLocation;
+            usedRedirected = true;
+            // No VOD web desktop, seguir o 302 dentro do proxy faz o preview
+            // tocar a URL final a partir do IP do servidor Lovable. Alguns CDNs
+            // IPTV (caso suportejetflix.site -> flixbr.lat) respondem HEAD 200
+            // vazio e GET 404 para datacenter, mas o redirect original continua
+            // liberado para o navegador do usuário. Portanto, devolvemos o 302
+            // para o browser seguir diretamente. Isso só vale para VOD e não
+            // altera LIVE nem segmentos HLS reescritos.
+            passthroughRedirectLocation = resolvedLocation;
+            passthroughRedirectStatus = res.status;
+            upstream = res;
+            break attempt;
+          }
           // Probe diagnóstico: não varre dezenas de combinações. A primeira
           // resposta real já é a informação que precisamos exibir no painel
           // (status, URL final, UA e headers), e evita "signal aborted" vazio.
