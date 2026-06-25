@@ -29,7 +29,9 @@ type ProxyDiag = {
   handler_phase?: string | null;
   request_url?: string | null;
   attempts_total?: number;
-  attempts?: unknown[];
+  attempts?: Array<Record<string, unknown>>;
+  probe_matrix?: Array<Record<string, unknown>> | null;
+  timings_ms?: { last_attempt_ttfb?: number | null; last_attempt_total?: number | null; timeout_budget?: number | null } | null;
 };
 
 type Props = {
@@ -165,6 +167,10 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
     ["direct_candidate", diag?.direct_candidate ?? "-"],
     ["ua_last", diag?.ua_last ?? "-"],
     ["attempts_total", String(diag?.attempts_total ?? "-")],
+    ["last_attempt_ttfb_ms", String(diag?.timings_ms?.last_attempt_ttfb ?? "-")],
+    ["last_attempt_total_ms", String(diag?.timings_ms?.last_attempt_total ?? "-")],
+    ["timeout_budget_ms", String(diag?.timings_ms?.timeout_budget ?? "-")],
+    ["final_protocol", String((diag?.attempts?.at?.(-1) as { finalProtocol?: string } | undefined)?.finalProtocol ?? "-")],
     ["dead_media_bases", diag?.dead_media_bases?.join(", ") ?? "-"],
     ["probe", loading ? "loading…" : probeError ? `error: ${probeError}` : "ok"],
     ["player_error", errorMessage || "-"],
@@ -277,9 +283,15 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
             );
           })}
         </div>
+        {diag?.probe_matrix && diag.probe_matrix.length > 0 && (
+          <div className="mt-3 rounded border border-amber-400/40 bg-black/70 p-2 text-[10px] leading-snug text-amber-100">
+            <div className="mb-1 font-bold text-white/80">probe matrix (HEAD / GET 0-1 / GET full · 30s)</div>
+            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag.probe_matrix, null, 2)}</pre>
+          </div>
+        )}
         {diag?.attempts && diag.attempts.length > 0 && (
           <div className="mt-3 rounded bg-black/60 p-2 text-[10px] leading-snug text-sky-200/90">
-            <div className="mb-1 font-bold text-white/70">attempts ({diag.attempts.length})</div>
+            <div className="mb-1 font-bold text-white/70">attempts ({diag.attempts.length}) — com ttfbMs/durationMs/finalProtocol</div>
             <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag.attempts, null, 2)}</pre>
           </div>
         )}

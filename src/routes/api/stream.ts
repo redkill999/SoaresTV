@@ -464,15 +464,82 @@ async function handle(request: Request) {
     redirectStrategy?: RedirectStrategy;
     phase: "fetch" | "manual-redirect" | "final-follow";
     finalUrl?: string;
+    finalProtocol?: string;
     redirectLocation?: string;
     status?: number;
     contentType?: string;
     redirected?: boolean;
     error?: string;
     errorName?: string;
+    ttfbMs?: number;
     durationMs: number;
   };
   const attemptTraces: AttemptTrace[] = [];
+  // ===== Probe matrix (probe=1): mede HEAD vs GET 0-1 vs GET full =====
+  type ProbeMatrixRow = {
+    method: string;
+    range: string | null;
+    url: string;
+    protocol: string;
+    status: number | null;
+    contentType: string | null;
+    contentLength: string | null;
+    acceptRanges: string | null;
+    ttfbMs: number | null;
+    totalMs: number;
+    error: string | null;
+    errorName: string | null;
+    aborted: boolean;
+  };
+  const probeMatrix: ProbeMatrixRow[] = [];
+  const runProbeRow = async (method: string, url: string, rangeValue: string | null, ua: string): Promise<void> => {
+    const controller = new AbortController();
+    const timeoutMs = 30_000;
+    const startedAt = Date.now();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let ttfbMs: number | null = null;
+    let row: ProbeMatrixRow = {
+      method,
+      range: rangeValue,
+      url,
+      protocol: (() => { try { return new URL(url).protocol; } catch { return ""; } })(),
+      status: null,
+      contentType: null,
+      contentLength: null,
+      acceptRanges: null,
+      ttfbMs: null,
+      totalMs: 0,
+      error: null,
+      errorName: null,
+      aborted: false,
+    };
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: buildHeaders(ua, rangeValue, "none"),
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      ttfbMs = Date.now() - startedAt;
+      row.status = res.status;
+      row.contentType = res.headers.get("content-type");
+      row.contentLength = res.headers.get("content-length");
+      row.acceptRanges = res.headers.get("accept-ranges");
+      row.ttfbMs = ttfbMs;
+      row.protocol = (() => { try { return new URL(res.url || url).protocol; } catch { return row.protocol; } })();
+      row.url = res.url || url;
+      try { await res.body?.cancel(); } catch { /* noop */ }
+    } catch (e) {
+      const err = e as { name?: string; message?: string } | null;
+      row.error = err?.message || String(e);
+      row.errorName = err?.name || "Error";
+      row.aborted = err?.name === "AbortError";
+    } finally {
+      clearTimeout(timer);
+      row.totalMs = Date.now() - startedAt;
+      probeMatrix.push(row);
+    }
+  };
   // Atalho: se o upstream redireciona para o placeholder
   // "vod_nao_encontrado" do painel Hostinger, o asset NÃO existe. Detectar
   // isso evita queimar 50 tentativas (que estouram o timeout do Worker e o
@@ -629,8 +696,9 @@ async function handle(request: Request) {
         attemptTraces.push(trace);
         try {
           const controller = new AbortController();
-          const timeoutMs = isDiagProbe || playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
+          const timeoutMs = isDiagProbe ? 30_000 : playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
           const timeout = setTimeout(() => controller.abort(), timeoutMs);
+          const fetchStartedAt = Date.now();
           let res: Response;
           let resolvedRedirectManually = false;
           try {
@@ -732,6 +800,7 @@ async function handle(request: Request) {
           } finally {
             clearTimeout(timeout);
           }
+          trace.ttfbMs = Date.now() - fetchStartedAt;
           lastStatus = res.status;
           usedUA = ua;
           if (!resolvedRedirectManually) {
@@ -745,6 +814,7 @@ async function handle(request: Request) {
           trace.status = res.status;
           trace.contentType = upstreamCt;
           trace.finalUrl = usedFinalUrl;
+          try { trace.finalProtocol = new URL(usedFinalUrl).protocol; } catch { /* noop */ }
           trace.redirected = usedRedirected;
           trace.durationMs = Date.now() - attemptStart;
           if (vodContext && usedRedirected && isPlaceholderNotFoundUrl(usedFinalUrl)) {
@@ -763,6 +833,13 @@ async function handle(request: Request) {
           }
           if (isDiagProbe) {
             upstream = res;
+            // ===== Probe matrix: HEAD, GET 0-1, GET full contra a URL final =====
+            try {
+              const targetUrl = usedFinalUrl || upstreamUrl.toString();
+              await runProbeRow("HEAD", targetUrl, null, ua);
+              await runProbeRow("GET", targetUrl, "bytes=0-1", ua);
+              await runProbeRow("GET", targetUrl, null, ua);
+            } catch { /* diagnóstico não bloqueia */ }
             break attempt;
           }
           if (!shouldRetryVodResponse(res, rangeValue, usedRedirected, upstreamCt, usedFinalUrl)) {
@@ -776,10 +853,19 @@ async function handle(request: Request) {
           trace.error = err?.message || String(e);
           trace.errorName = err?.name || "Error";
           trace.durationMs = Date.now() - attemptStart;
+          trace.ttfbMs = trace.ttfbMs ?? (Date.now() - attemptStart);
           if (isDiagProbe) {
             usedUA = ua;
             usedOriginHeaders = originHeaderMode !== "none";
             usedFailureClass = err?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
+            // Probe matrix mesmo no abort — testa o destino redirecionado
+            // (se houver) ou a URL original, com 30s por método.
+            try {
+              const targetUrl = usedRedirectLocation || usedFinalUrl || upstreamUrl.toString();
+              await runProbeRow("HEAD", targetUrl, null, ua);
+              await runProbeRow("GET", targetUrl, "bytes=0-1", ua);
+              await runProbeRow("GET", targetUrl, null, ua);
+            } catch { /* diagnóstico não bloqueia */ }
             break attempt;
           }
         }
@@ -859,6 +945,12 @@ async function handle(request: Request) {
       exception_stack: errObj?.stack ?? null,
       attempts_total: attemptTraces.length,
       attempts: attemptTraces,
+      probe_matrix: probeMatrix.length ? probeMatrix : null,
+      timings_ms: {
+        last_attempt_ttfb: attemptTraces.at(-1)?.ttfbMs ?? null,
+        last_attempt_total: attemptTraces.at(-1)?.durationMs ?? null,
+        timeout_budget: isDiagProbe ? 30_000 : 12_000,
+      },
     } satisfies Debug502Payload;
     return debugJsonResponse(clientStatus, failurePayload, failHeaders);
   }
@@ -882,6 +974,13 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Redirect-Cookie", usedRedirectCookie ? "1" : "0");
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
+  if (probeMatrix.length) {
+    try { respHeaders.set("X-Probe-Matrix", JSON.stringify(probeMatrix)); } catch { /* noop */ }
+    const last = attemptTraces.at(-1);
+    if (last?.ttfbMs != null) respHeaders.set("X-Probe-TTFB-Ms", String(last.ttfbMs));
+    if (last?.durationMs != null) respHeaders.set("X-Probe-Total-Ms", String(last.durationMs));
+    if (last?.finalProtocol) respHeaders.set("X-Probe-Final-Protocol", last.finalProtocol);
+  }
   if (!upstream.ok) {
     if (upstream.status === 502) {
       try { await upstream.body?.cancel(); } catch { /* noop */ }
