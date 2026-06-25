@@ -658,7 +658,7 @@ async function handle(request: Request) {
           if (isDiagProbe) {
             usedUA = ua;
             usedOriginHeaders = originHeaderMode !== "none";
-            usedFailureClass = e instanceof DOMException && e.name === "AbortError" ? "probe-timeout" : "probe-network-error";
+            usedFailureClass = (e as { name?: string } | null)?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
             break attempt;
           }
         }
