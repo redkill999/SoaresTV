@@ -6,7 +6,8 @@ import { createFileRoute } from "@tanstack/react-router";
 //   1. Encaminhar a requisição ao upstream preservando Range/UA/Referer.
 //   2. Para playlists HLS (.m3u8): reescrever segmentos para também fluírem
 //      pelo proxy (resolve CORS / mixed-content no preview HTTPS).
-//   3. Tratar redirects (redirect: "follow" — não fazemos waterfall manual).
+//   3. Tratar redirects sem segui-los no servidor: devolvemos o Location para
+//      o navegador/app seguir pelo IP do usuário, como no fluxo que funcionava.
 //   4. Em caso de falha, retornar SEMPRE JSON estruturado (nunca HTML).
 //
 // Não-objetivos (removidos da versão anterior):
@@ -20,7 +21,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location",
 };
 
 // Lista curta de UAs IPTV-friendly. A maioria dos painéis aceita ao menos um destes.
@@ -43,6 +44,19 @@ const VOD_UA_CYCLE = [
 
 function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+function resolveLocation(location: string | null, baseUrl: URL): string | null {
+  if (!location) return null;
+  try {
+    return new URL(location, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod"): string {
@@ -102,7 +116,11 @@ async function tryFetch(target: URL, ua: string, range: string | null, method: "
     return await fetch(target.toString(), {
       method,
       headers,
-      redirect: "follow",
+      // Não seguir o redirect no proxy. Muitos painéis Xtream redirecionam
+      // /live, /movie e /series para CDN que bloqueia IP de datacenter, mas
+      // libera o IP residencial do usuário/APK. Seguir aqui transforma um
+      // stream válido em 404/502. Devolvemos o Location ao client.
+      redirect: "manual",
       signal: controller.signal,
     });
   } finally {
@@ -149,6 +167,19 @@ async function handle(request: Request): Promise<Response> {
 
       const upstreamContentType = res.headers.get("content-type") ?? "";
       const isHls = isPlaylistPath(target.pathname) || /mpegurl/i.test(upstreamContentType);
+
+      // Redirect do painel para CDN final: quem deve seguir é o navegador/app,
+      // não o proxy. Isso restaura o comportamento antigo do preview web e
+      // evita que o CDN julgue a requisição pelo IP do servidor do preview.
+      if (isRedirectStatus(res.status)) {
+        const location = resolveLocation(res.headers.get("location"), target);
+        if (location) {
+          const headers = new Headers(CORS);
+          headers.set("Location", location);
+          headers.set("Cache-Control", "no-store");
+          return new Response(null, { status: res.status, statusText: res.statusText, headers });
+        }
+      }
 
       // HLS playlist → reescreve.
       if (isHls && res.ok && request.method === "GET") {
