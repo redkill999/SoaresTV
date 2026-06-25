@@ -1191,7 +1191,7 @@ async function safeHandle(request: Request): Promise<Response> {
 
 
 
-export const Route = createFileRoute("/api/public/stream")({
+export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),

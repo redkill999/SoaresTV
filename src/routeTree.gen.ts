@@ -20,8 +20,8 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as GuideRouteImport } from './routes/guide'
 import { Route as FavoritesRouteImport } from './routes/favorites'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiStreamRouteImport } from './routes/api/stream'
 import { Route as PlayerTypeIdRouteImport } from './routes/player.$type.$id'
-import { Route as ApiPublicStreamRouteImport } from './routes/api/public/stream'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -78,14 +78,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStreamRoute = ApiStreamRouteImport.update({
+  id: '/api/stream',
+  path: '/api/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayerTypeIdRoute = PlayerTypeIdRouteImport.update({
   id: '/player/$type/$id',
   path: '/player/$type/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicStreamRoute = ApiPublicStreamRouteImport.update({
-  id: '/api/public/stream',
-  path: '/api/public/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -101,7 +101,7 @@ export interface FileRoutesByFullPath {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/public/stream': typeof ApiPublicStreamRoute
+  '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
 export interface FileRoutesByTo {
@@ -116,7 +116,7 @@ export interface FileRoutesByTo {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/public/stream': typeof ApiPublicStreamRoute
+  '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
 export interface FileRoutesById {
@@ -132,7 +132,7 @@ export interface FileRoutesById {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/public/stream': typeof ApiPublicStreamRoute
+  '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
 export interface FileRouteTypes {
@@ -149,7 +149,7 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/public/stream'
+    | '/api/stream'
     | '/player/$type/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -164,7 +164,7 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/public/stream'
+    | '/api/stream'
     | '/player/$type/$id'
   id:
     | '__root__'
@@ -179,7 +179,7 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/public/stream'
+    | '/api/stream'
     | '/player/$type/$id'
   fileRoutesById: FileRoutesById
 }
@@ -195,7 +195,7 @@ export interface RootRouteChildren {
   PlaylistRoute: typeof PlaylistRoute
   SeriesRoute: typeof SeriesRoute
   SettingsRoute: typeof SettingsRoute
-  ApiPublicStreamRoute: typeof ApiPublicStreamRoute
+  ApiStreamRoute: typeof ApiStreamRoute
   PlayerTypeIdRoute: typeof PlayerTypeIdRoute
 }
 
@@ -278,18 +278,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/stream': {
+      id: '/api/stream'
+      path: '/api/stream'
+      fullPath: '/api/stream'
+      preLoaderRoute: typeof ApiStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/player/$type/$id': {
       id: '/player/$type/$id'
       path: '/player/$type/$id'
       fullPath: '/player/$type/$id'
       preLoaderRoute: typeof PlayerTypeIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/stream': {
-      id: '/api/public/stream'
-      path: '/api/public/stream'
-      fullPath: '/api/public/stream'
-      preLoaderRoute: typeof ApiPublicStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -307,7 +307,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlaylistRoute: PlaylistRoute,
   SeriesRoute: SeriesRoute,
   SettingsRoute: SettingsRoute,
-  ApiPublicStreamRoute: ApiPublicStreamRoute,
+  ApiStreamRoute: ApiStreamRoute,
   PlayerTypeIdRoute: PlayerTypeIdRoute,
 }
 export const routeTree = rootRouteImport
