@@ -865,6 +865,9 @@ export function VideoPlayer({
         vodRedirectDirectCache.set(originalTarget, direct);
         const secureOriginal = httpsVariantIgnoringHostProfile(originalTarget);
         if (secureOriginal) vodRedirectDirectCache.set(secureOriginal, direct);
+        const sourceBase = mediaBaseKey(originalTarget);
+        const directBase = mediaBaseKey(direct) ?? mediaBaseKey(redirectLocation);
+        if (sourceBase && directBase) vodRedirectSourceBaseByDirectBase.set(directBase, sourceBase);
 
         if (playbackCandidates.includes(direct)) return false;
         playbackCandidates.splice(vodIdx + 1, 0, direct);
