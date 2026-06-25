@@ -40,6 +40,7 @@ import {
   type VodPlayerKind,
 } from "@/lib/vod-diag-store";
 import { VodDiagPanel } from "@/components/VodDiagPanel";
+import { VodDebugOverlay } from "@/components/VodDebugOverlay";
 import { DEBUG } from "@/lib/debug";
 import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
@@ -238,6 +239,8 @@ export function VideoPlayer({
   const diagSessionIdRef = useRef<string | null>(null);
   // [VOD DIAG] painel temporário para filmes/séries no preview web/APK.
   const [vodDiagOpen, setVodDiagOpen] = useState(false);
+  const [vodDebugDismissed, setVodDebugDismissed] = useState(false);
+  useEffect(() => { if (!error) setVodDebugDismissed(false); }, [error, src]);
   const vodDiagSessionIdRef = useRef<string | null>(null);
   const vodDiagFinalizingRef = useRef(false);
 
@@ -2219,6 +2222,16 @@ export function VideoPlayer({
         >
           Ver diagnóstico VOD
         </button>
+      )}
+      {/* VOD DEBUG OVERLAY (temporário). Para remover: apagar este bloco e o
+          import de VodDebugOverlay + o arquivo src/components/VodDebugOverlay.tsx. */}
+      {error && kind === "vod" && !vodDebugDismissed && (
+        <VodDebugOverlay
+          src={src}
+          errorMessage={error}
+          kind="vod"
+          onClose={() => setVodDebugDismissed(true)}
+        />
       )}
 
       {canManualPlay && !error && playerMode === "web" && (

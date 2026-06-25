@@ -815,6 +815,7 @@ async function handle(request: Request) {
       final_url: usedFinalUrl,
       content_type: attemptTraces.at(-1)?.contentType ?? null,
       redirects: attemptTraces.filter((a) => a.redirected).length,
+      redirect_count: attemptTraces.filter((a) => a.redirected).length,
       redirect_location: usedRedirectLocation || null,
       direct_candidate: usedDirectCandidate || null,
       candidate: usedDirectCandidate || usedFinalUrl,
@@ -822,6 +823,8 @@ async function handle(request: Request) {
       dead_media_bases: redirectedVodDeadBases.size ? Array.from(redirectedVodDeadBases) : null,
       ua_last: usedUA || null,
       exception: errObj ? { name: errObj.name, message: errObj.message } : null,
+      exception_message: errObj?.message ?? null,
+      exception_stack: errObj?.stack ?? null,
       attempts_total: attemptTraces.length,
       attempts: attemptTraces,
     }, null, 2), {
