@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { detectPlatform } from "@/lib/platform-flags";
+import { platformLabel } from "@/lib/platform-flags";
 
 // Overlay TEMPORÁRIO de diagnóstico VOD.
 // Como remover: deletar este arquivo e o trecho `<VodDebugOverlay .../>` em
