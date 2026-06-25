@@ -646,7 +646,17 @@ export function VideoPlayer({
           const probeTimer = setTimeout(() => ac.abort(), 10_000);
           try {
             const probeUrl = `${currentUrl}${currentUrl.includes("?") ? "&" : "?"}probe=1`;
-            const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", redirect: "manual", signal: ac.signal });
+            // No preview/TanStack, HEAD em rota server às vezes vira network
+            // error no browser mesmo quando o GET funcionaria. Para diagnóstico
+            // VOD usamos GET sem corpo útil; o proxy responde sem payload quando
+            // probe=1, mantendo baixo custo e evitando "Failed to fetch" vazio.
+            const res = await fetch(probeUrl, {
+              method: "GET",
+              headers: { Range: "bytes=0-0" },
+              cache: "no-store",
+              redirect: "manual",
+              signal: ac.signal,
+            });
             probeStatus = res.status;
             upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
             upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
@@ -802,7 +812,14 @@ export function VideoPlayer({
         let res: Response;
         try {
           const peekUrl = `${failedUrl}${failedUrl.includes("?") ? "&" : "?"}redirect=peek`;
-          res = await fetch(peekUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
+          // GET evita falhas de HEAD no preview web; redirect=peek retorna 204
+          // sem corpo, apenas headers de diagnóstico/candidato direto.
+          res = await fetch(peekUrl, {
+            method: "GET",
+            headers: { Range: "bytes=0-0" },
+            cache: "no-store",
+            signal: ac.signal,
+          });
         } finally {
           clearTimeout(probeTimer);
         }
