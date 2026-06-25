@@ -945,6 +945,12 @@ async function handle(request: Request) {
       exception_stack: errObj?.stack ?? null,
       attempts_total: attemptTraces.length,
       attempts: attemptTraces,
+      probe_matrix: probeMatrix.length ? probeMatrix : null,
+      timings_ms: {
+        last_attempt_ttfb: attemptTraces.at(-1)?.ttfbMs ?? null,
+        last_attempt_total: attemptTraces.at(-1)?.durationMs ?? null,
+        timeout_budget: isDiagProbe ? 30_000 : 12_000,
+      },
     } satisfies Debug502Payload;
     return debugJsonResponse(clientStatus, failurePayload, failHeaders);
   }
