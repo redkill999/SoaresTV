@@ -211,6 +211,7 @@ async function handle(request: Request) {
   const originHeaderModes: Array<"none" | "referer" | "origin"> = isVod
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
+  let vod404CompatAttempts = 0;
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
       for (const originHeaderMode of originHeaderModes) {
@@ -236,7 +237,7 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = isVod && res.status === 404;
+          const retryVodCompat404 = isVod && res.status === 404 && vod404CompatAttempts++ < 12;
           if (!retryBlocked && !retryBadRange && !retryVodCompat404) {
             upstream = res;
             break attempt;
@@ -251,7 +252,7 @@ async function handle(request: Request) {
   if (!upstream) {
     const failHeaders = new Headers(CORS);
     failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
-    failHeaders.set("X-Upstream-Final-Url", upstreamUrl.toString());
+    failHeaders.set("X-Upstream-Final-Url", usedFinalUrl || upstreamUrl.toString());
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     const clientStatus = lastStatus && lastStatus < 500 ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
