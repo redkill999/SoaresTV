@@ -112,7 +112,7 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
     };
   }, [src]);
 
-  const platform = detectPlatform();
+  const platform = platformLabel();
   const tag = classifyTag(diag, errorMessage);
   const phase = phaseLabel(diag);
   const redirectCount = diag?.redirect_count ?? diag?.redirects ?? 0;
