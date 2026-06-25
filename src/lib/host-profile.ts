@@ -65,12 +65,10 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // athra.sbs: painel bloqueia IPs de datacenter (proxy retorna 403/429),
-  // mas funciona via IP residencial do APK. Forçar bypass total do proxy
-  // para LIVE e priorizar TS original (painel típico Xtream sem HLS variant).
+  // athra.sbs: painel bloqueia IPs de datacenter. Mantemos proxy ATIVO
+  // (não setar disableProxy/forceHttp aqui — quebra login/lista). Só pedimos
+  // bypass do proxy para LIVE no APK e preferência por TS original.
   "athra.sbs": {
-    disableProxy: true,
-    forceHttp: true,
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
