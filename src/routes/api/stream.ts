@@ -416,6 +416,7 @@ async function handle(request: Request) {
     if (isVod) {
       if (isDiagProbe) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
+        return new Response(null, { status: upstream.status, headers: respHeaders });
       }
       // FIX D7 (audit IPTV): antes retornávamos 200+JSON em erro VOD, o que
       // fazia o player decodificar JSON como vídeo → MediaError code=4 sem
