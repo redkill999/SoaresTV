@@ -349,6 +349,8 @@ async function handle(request: Request) {
   let usedRedirected = false;
   let usedFailureClass = "";
   let redirectedVod404Count = 0;
+  let redirectedVod404HtmlCount = 0;
+  const redirectedVodDeadBases = new Set<string>();
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
     : playlistPath
@@ -466,7 +468,14 @@ async function handle(request: Request) {
             upstream = res;
             break attempt;
           }
-          if (vodContext && res.status === 404 && usedRedirected) redirectedVod404Count += 1;
+          if (vodContext && res.status === 404 && usedRedirected) {
+            redirectedVod404Count += 1;
+            if (isLikelyVodBlockContentType(upstreamCt)) {
+              redirectedVod404HtmlCount += 1;
+              const deadBase = mediaIdentityKey(usedFinalUrl);
+              if (deadBase) redirectedVodDeadBases.add(deadBase);
+            }
+          }
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
@@ -475,7 +484,7 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || redirectedVod404Count < 8);
+          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || (redirectedVod404Count < 3 && redirectedVod404HtmlCount < 2));
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
@@ -499,6 +508,7 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
     failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
     failHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
+    if (redirectedVodDeadBases.size) failHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: clientStatus,
@@ -523,6 +533,7 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
+  if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
   if (!upstream.ok) {
     if (isVod) {
       if (isDiagProbe) {
