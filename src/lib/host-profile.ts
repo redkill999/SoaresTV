@@ -65,12 +65,10 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // athra.sbs: painel bloqueia IPs de datacenter (proxy retorna 403/429),
-  // mas funciona via IP residencial do APK. Forçar bypass total do proxy
-  // para LIVE e priorizar TS original (painel típico Xtream sem HLS variant).
+  // athra.sbs: painel bloqueia IPs de datacenter. Mantemos proxy ATIVO
+  // (não setar disableProxy/forceHttp aqui — quebra login/lista). Só pedimos
+  // bypass do proxy para LIVE no APK e preferência por TS original.
   "athra.sbs": {
-    disableProxy: true,
-    forceHttp: true,
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
@@ -156,6 +154,17 @@ function migrateLegacyOnce(map: ProfileMap): ProfileMap {
 
 // Cache em memória — leitura síncrona, escrita propaga pro storage.
 const memory: ProfileMap = migrateLegacyOnce(readStorage());
+// Limpeza pontual: preset anterior de athra.sbs marcou disableProxy/forceHttp
+// e quebrou o login no APK. Remove essas flags se vieram do storage.
+if (memory["athra.sbs"]) {
+  const cur = memory["athra.sbs"];
+  if (cur.disableProxy || cur.forceHttp) {
+    const { disableProxy: _dp, forceHttp: _fh, ...rest } = cur;
+    memory["athra.sbs"] = rest;
+    writeStorage(memory);
+    console.log("[HOST PROFILE] limpou flags quebradas de athra.sbs");
+  }
+}
 // Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
 // sobrescrevendo: preset → storage → updateHostProfile.
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
