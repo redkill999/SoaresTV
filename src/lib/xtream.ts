@@ -43,6 +43,16 @@ const IPTV_HEADERS = {
   "Accept-Encoding": "identity",
 };
 
+// UAs alternativos tentados no caminho nativo (APK) quando o painel
+// rejeita o UA padrão com 401/403. Cobre painéis que filtram por UA.
+const NATIVE_FALLBACK_UAS = [
+  "TiviMate/5.1.0",
+  "IPTV Smarters Pro/4.0",
+  "okhttp/4.12.0",
+  "VLC/3.5.4",
+  "Mozilla/5.0 (Linux; Android 14)",
+];
+
 type NativeHttpResponse = { status: number; data: unknown };
 
 function hasWindowNativeBridge(): boolean {
