@@ -621,8 +621,10 @@ export function VideoPlayer({
         let contentRange = "";
         let acceptRanges = "";
         if (isProxy) {
+          const ac = new AbortController();
+          const probeTimer = setTimeout(() => ac.abort(), 6_000);
           try {
-            const res = await fetch(currentUrl, { method: "HEAD" });
+            const res = await fetch(currentUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
             probeStatus = res.status;
             upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
             upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
@@ -635,6 +637,8 @@ export function VideoPlayer({
             acceptRanges = res.headers.get("accept-ranges") ?? "";
           } catch (e) {
             probeStatus = `probe-fail: ${(e as Error).message}`;
+          } finally {
+            clearTimeout(probeTimer);
           }
         }
         // eslint-disable-next-line no-console
