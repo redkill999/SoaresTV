@@ -2,7 +2,7 @@
 // [LIVE DEBUG] Diagnóstico cirúrgico para canais ao vivo (LIVE).
 // ----------------------------------------------------------------------------
 // NÃO altera lógica de reprodução. Roda em paralelo ao playback, faz probe
-// HEAD via /api/stream (que reescreve User-Agent) ciclando UAs típicos de
+// HEAD via proxy de stream (que reescreve User-Agent) ciclando UAs típicos de
 // apps IPTV. Loga STATUS, CONTENT-TYPE, ACCEPT-RANGES, CONTENT-LENGTH,
 // URL final upstream e UA que respondeu.
 // Não toca em VOD, séries, filmes, login, layout, cache ou EPG.
@@ -15,6 +15,8 @@ export const LIVE_UAS = {
   okhttp:        "okhttp/4.12.0",
   VLC:           "VLC/3.0.20 LibVLC/3.0.20",
 } as const;
+
+const STREAM_PROXY_PATH = "/api/public/stream";
 
 export type LiveUaName = keyof typeof LIVE_UAS;
 
@@ -45,7 +47,7 @@ function num(v: string | null): number | null {
 }
 
 async function probeOnce(url: string, ua: string, name: LiveUaName | "preferred", timeoutMs = 6000): Promise<LiveProbeResult> {
-  const proxy = `/api/stream?u=${encodeURIComponent(url)}&ua=${encodeURIComponent(ua)}&v=7`;
+  const proxy = `${STREAM_PROXY_PATH}?u=${encodeURIComponent(url)}&ua=${encodeURIComponent(ua)}&v=7`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {

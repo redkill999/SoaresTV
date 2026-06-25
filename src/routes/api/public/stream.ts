@@ -41,7 +41,7 @@ function debugJsonResponse(status: number, payload: Debug502Payload, headersInit
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
   const kindPart = kind === "vod" ? "&kind=vod" : "";
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
+  return `/api/public/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -1132,7 +1132,7 @@ async function handle(request: Request) {
 async function safeHandle(request: Request): Promise<Response> {
   // ⚠️ PROOF-OF-LIFE: se este log não aparecer e o header
   // X-Api-Stream-Reached não chegar ao browser, é porque a request
-  // NÃO entrou em api/stream.ts (foi interceptada antes — Vite, edge,
+  // NÃO entrou em api/public/stream.ts (foi interceptada antes — Vite, edge,
   // worker bootstrap, etc).
   console.log("[API_STREAM_ENTER]", request.method, request.url);
   let phase = "handler-entry";
@@ -1184,14 +1184,14 @@ async function safeHandle(request: Request): Promise<Response> {
     }, headers);
   }
   // Marca toda resposta que saiu deste loader — prova de que a request
-  // foi efetivamente roteada para api/stream.ts.
+  // foi efetivamente roteada para api/public/stream.ts.
   try { response.headers.set("X-Api-Stream-Reached", "yes"); } catch { /* immutable */ }
   return response;
 }
 
 
 
-export const Route = createFileRoute("/api/stream")({
+export const Route = createFileRoute("/api/public/stream")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),

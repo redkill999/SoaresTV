@@ -97,7 +97,13 @@ async function unlockOrientation() {
 // Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
 // natively. Most providers also expose an HLS variant at the same path with
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
-// flows through our /api/stream proxy to dodge CORS / mixed-content.
+// flows through our stream proxy to dodge CORS / mixed-content.
+const STREAM_PROXY_PATH = "/api/public/stream";
+
+function isStreamProxyUrl(url: string | null | undefined): boolean {
+  return !!url && (url.startsWith(STREAM_PROXY_PATH) || url.startsWith("/api/stream"));
+}
+
 function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
   if (kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src)) return null;
   if (/\.m3u8(\?|$)/i.test(src)) return src;
@@ -110,7 +116,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=7`;
+  return `${STREAM_PROXY_PATH}?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=7`;
 }
 
 function liveDirectCandidates(src: string): string[] {
@@ -191,7 +197,7 @@ const deadVodRedirectBases = new Set<string>();
 const vodRedirectSourceBaseByDirectBase = new Map<string, string>();
 
 function apiStreamTarget(url: string): string | null {
-  if (!url.startsWith("/api/stream")) return null;
+  if (!isStreamProxyUrl(url)) return null;
   try {
     const base = typeof window !== "undefined" ? window.location.origin : "http://local";
     return new URL(url, base).searchParams.get("u");
@@ -667,7 +673,7 @@ export function VideoPlayer({
     const reportPlaybackFailure = async (reason: string) => {
       try {
         const currentUrl = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
-        const isProxy = currentUrl.startsWith("/api/stream");
+        const isProxy = isStreamProxyUrl(currentUrl);
         const directVodProbeBase = !isProxy && isVod && /^https?:\/\//i.test(currentUrl)
           ? proxiedX(currentUrl, "vod")
           : "";
@@ -799,7 +805,7 @@ export function VideoPlayer({
         // origem é http, marcamos o host para nunca mais promover.
         if (failedUrl) {
           const decoded = (() => { try { return decodeURIComponent(failedUrl.replace(/^.*?[?&]u=/, "")); } catch { return failedUrl; } })();
-          const target = failedUrl.startsWith("/api/stream") ? decoded : failedUrl;
+            const target = isStreamProxyUrl(failedUrl) ? decoded : failedUrl;
           try {
             const t = new URL(target);
             const original = new URL(workingSrc);
@@ -808,7 +814,7 @@ export function VideoPlayer({
             }
           } catch { /* noop */ }
         }
-        if (!failedUrl || !failedUrl.startsWith("/api/stream")) return false;
+        if (!failedUrl || !isStreamProxyUrl(failedUrl)) return false;
         // FIX D10 (audit IPTV): HEAD probe não tinha timeout — se host estiver
         // offline, o probe podia segurar ~30s (timeout default do browser)
         // dobrando o tempo de recuperação por candidato. Agora 4s máx.
@@ -858,7 +864,7 @@ export function VideoPlayer({
     const maybeInjectVodRedirectDirect = async () => {
       if (!isVod) return false;
       const failedUrl = playbackCandidates[vodIdx];
-      if (!failedUrl?.startsWith("/api/stream")) return false;
+      if (!isStreamProxyUrl(failedUrl)) return false;
       const originalTarget = apiStreamTarget(failedUrl);
       if (!originalTarget) return false;
 
@@ -1001,7 +1007,7 @@ export function VideoPlayer({
         }
         void probeVodCandidateForDiag(url).then((probe) => {
           vodDiagPatchAttempt(sessionId, attemptId, probe);
-          const wasProxyAttempt = url.startsWith("/api/stream");
+          const wasProxyAttempt = isStreamProxyUrl(url);
           const status = Number(probe.upstreamStatus || probe.clientStatus || 0);
           const directBase = mediaBaseKey(probe.directCandidate) ?? mediaBaseKey(probe.finalUrl);
           const currentBase = mediaBaseKey(playableTargetForCandidate(url));
@@ -1047,7 +1053,7 @@ export function VideoPlayer({
           auditEvent(diagSessionIdRef.current, "fallback-next-candidate", {
             idx: vodIdx, total: playbackCandidates.length, url: next,
           });
-          if (next && !next.startsWith("/api/stream")) {
+          if (next && !isStreamProxyUrl(next)) {
             console.log("[503 BYPASS] próxima tentativa via URL direta", { url: next });
           }
           playDirect();
