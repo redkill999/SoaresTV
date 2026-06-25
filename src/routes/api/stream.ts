@@ -800,6 +800,7 @@ async function handle(request: Request) {
           } finally {
             clearTimeout(timeout);
           }
+          trace.ttfbMs = Date.now() - fetchStartedAt;
           lastStatus = res.status;
           usedUA = ua;
           if (!resolvedRedirectManually) {
@@ -813,6 +814,7 @@ async function handle(request: Request) {
           trace.status = res.status;
           trace.contentType = upstreamCt;
           trace.finalUrl = usedFinalUrl;
+          try { trace.finalProtocol = new URL(usedFinalUrl).protocol; } catch { /* noop */ }
           trace.redirected = usedRedirected;
           trace.durationMs = Date.now() - attemptStart;
           if (vodContext && usedRedirected && isPlaceholderNotFoundUrl(usedFinalUrl)) {
@@ -831,6 +833,13 @@ async function handle(request: Request) {
           }
           if (isDiagProbe) {
             upstream = res;
+            // ===== Probe matrix: HEAD, GET 0-1, GET full contra a URL final =====
+            try {
+              const targetUrl = usedFinalUrl || upstreamUrl.toString();
+              await runProbeRow("HEAD", targetUrl, null, ua);
+              await runProbeRow("GET", targetUrl, "bytes=0-1", ua);
+              await runProbeRow("GET", targetUrl, null, ua);
+            } catch { /* diagnóstico não bloqueia */ }
             break attempt;
           }
           if (!shouldRetryVodResponse(res, rangeValue, usedRedirected, upstreamCt, usedFinalUrl)) {
