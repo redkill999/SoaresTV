@@ -135,6 +135,18 @@ function httpsVariant(url: string): string | null {
   }
 }
 
+function httpsVariantIgnoringHostProfile(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:") return /^https:$/i.test(parsed.protocol) ? parsed.toString() : null;
+    parsed.protocol = "https:";
+    if (parsed.port === "80") parsed.port = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
@@ -370,7 +382,7 @@ export function VideoPlayer({
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
-          const secure = httpsVariant(url);
+          const secure = isWebPlayback ? httpsVariantIgnoringHostProfile(url) : httpsVariant(url);
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
           // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
           let candidates: (string | null)[];
