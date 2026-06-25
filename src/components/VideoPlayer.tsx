@@ -426,31 +426,19 @@ export function VideoPlayer({
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
     const isLive = isLiveUrl;
+    // [RESTORE VOD] Não explodir mais o filme em 4 extensões × N variantes.
+    // O fluxo que reproduzia VOD no preview/APK usava a URL canônica do
+    // painel Xtream (já com a extensão correta vinda de get_vod_info) e,
+    // quando o painel fornecia, o `direct_source`. Esses são exatamente os
+    // valores em `workingSrc` + `fallbackSrcs`. Multiplicar extensões gerava
+    // 15-20 candidatos que entupiam o proxy e empurravam o timeout.
     const vodCandidates: string[] = [];
     const vodSourceInputs = Array.from(new Set([
       workingSrc,
       ...(isVod ? fallbackSrcs : []),
     ].filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))));
     for (const vodSource of vodSourceInputs) {
-      const vodMatch = vodSource.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
-      if (vodMatch && (!hlsCandidate || isVod)) {
-        const [, base, ext, qs = ""] = vodMatch;
-        const currentExt = ext.toLowerCase();
-        // Quando o usuário força "mp4", prioriza containers progressivos.
-        const preferred = compat.streamFormat === "mp4"
-          ? ["mp4", "m4v", "mkv", currentExt]
-          : isVod
-            ? currentExt === "m3u8"
-              ? ["m3u8", "mp4", "m4v", "mkv"]
-              : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
-            : [currentExt, "mp4", "m4v", "mkv"];
-        for (const alt of preferred) {
-          const candidate = `${base}.${alt}${qs}`;
-          if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
-        }
-      } else if (!vodCandidates.includes(vodSource)) {
-        vodCandidates.push(vodSource);
-      }
+      if (!vodCandidates.includes(vodSource)) vodCandidates.push(vodSource);
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
