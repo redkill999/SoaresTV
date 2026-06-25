@@ -1,6 +1,6 @@
 // Stub vazio — buffer de diagnóstico LIVE removido na Fase 1.
 // Mantém a API original em formato no-op para preservar imports.
-export type LivePlayerKind = "hls" | "native" | "mpegts" | "exo" | "unknown";
+export type LivePlayerKind = "hls" | "native" | "mpegts" | "exo" | "html5" | "unknown";
 export type LiveDiagSession = {
   id: string;
   startedAt: number;

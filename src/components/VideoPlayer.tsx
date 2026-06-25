@@ -32,15 +32,12 @@ import {
   liveDiagSetMediaInfo, liveDiagRecordFreeze,
   type LivePlayerKind,
 } from "@/lib/live-diag-store";
-import { LiveDiagPanel } from "@/components/LiveDiagPanel";
 import {
   vodDiagStart, vodDiagRecordAttempt, vodDiagPatchAttempt,
   vodDiagMarkPlaying, vodDiagMarkFailed, vodDiagLatestFailedFor,
   vodDiagAttachFinalProbe, vodDiagUpdateCandidates, probeVodCandidateForDiag,
   type VodPlayerKind,
 } from "@/lib/vod-diag-store";
-import { VodDiagPanel } from "@/components/VodDiagPanel";
-import { VodDebugOverlay } from "@/components/VodDebugOverlay";
 import { DEBUG } from "@/lib/debug";
 import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
@@ -2204,49 +2201,6 @@ export function VideoPlayer({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive z-10">
           {error}
         </div>
-      )}
-      {/* Painel visual de debug removido (apenas logs internos). */}
-      {kind === "live" && (
-        <LiveDiagPanel
-          session={diagSessionIdRef.current ? liveDiagLatestFailedFor(src) : null}
-          open={diagOpen}
-          onClose={() => setDiagOpen(false)}
-        />
-      )}
-      {kind === "vod" && (
-        <VodDiagPanel
-          session={vodDiagSessionIdRef.current ? vodDiagLatestFailedFor(src) : null}
-          open={vodDiagOpen}
-          onClose={() => setVodDiagOpen(false)}
-        />
-      )}
-      {error && kind === "live" && !diagOpen && (
-        <button
-          type="button"
-          onClick={() => setDiagOpen(true)}
-          className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
-        >
-          Ver diagnóstico
-        </button>
-      )}
-      {error && kind === "vod" && !vodDiagOpen && (
-        <button
-          type="button"
-          onClick={() => setVodDiagOpen(true)}
-          className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
-        >
-          Ver diagnóstico VOD
-        </button>
-      )}
-      {/* VOD DEBUG OVERLAY (temporário). Para remover: apagar este bloco e o
-          import de VodDebugOverlay + o arquivo src/components/VodDebugOverlay.tsx. */}
-      {error && kind === "vod" && !vodDebugDismissed && (
-        <VodDebugOverlay
-          src={src}
-          errorMessage={error}
-          kind="vod"
-          onClose={() => setVodDebugDismissed(true)}
-        />
       )}
 
       {canManualPlay && !error && playerMode === "web" && (
