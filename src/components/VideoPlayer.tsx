@@ -866,6 +866,8 @@ export function VideoPlayer({
         if (sourceBase && directBase) vodRedirectSourceBaseByDirectBase.set(directBase, sourceBase);
 
         if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
+          for (const dead of deadBases) deadVodRedirectBases.add(dead);
+          if (directBase) deadVodRedirectBases.add(directBase);
           console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo tentativa direta uma vez e removendo variações equivalentes", {
             originalTarget,
             direct,
@@ -966,6 +968,11 @@ export function VideoPlayer({
           duration: Number.isFinite(video.duration) ? video.duration : undefined,
           at: Date.now(),
         });
+        const currentBase = mediaBaseKey(playableTargetForCandidate(url));
+        const mappedSource = currentBase ? vodRedirectSourceBaseByDirectBase.get(currentBase) : null;
+        if (currentBase && (deadVodRedirectBases.has(currentBase) || (mappedSource && deadVodRedirectBases.has(mappedSource)))) {
+          pruneDeadVodRedirectFamily(currentBase, `player VOD: CDN final já marcado como 404/HTML (${baseError})`);
+        }
         void probeVodCandidateForDiag(url).then((probe) => {
           vodDiagPatchAttempt(sessionId, attemptId, probe);
           const wasProxyAttempt = url.startsWith("/api/stream");
