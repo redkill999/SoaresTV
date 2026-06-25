@@ -212,16 +212,6 @@ function mediaBaseKey(url: string | null | undefined): string | null {
   }
 }
 
-function mediaExt(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.pathname.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function VideoPlayer({
   src,
   poster,
