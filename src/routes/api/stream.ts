@@ -15,9 +15,10 @@ const CORS = {
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 
-function proxyUrl(absolute: string, ua?: string | null) {
+function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
+  const kindPart = kind === "vod" ? "&kind=vod" : "";
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=6${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -189,7 +190,7 @@ function sliceReadableStream(
   });
 }
 
-function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
+function rewritePlaylist(text: string, baseUrl: string, ua?: string | null, kind?: "live" | "vod"): string {
   const base = new URL(baseUrl);
   return text
     .split(/\r?\n/)
@@ -199,7 +200,7 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
       // URI="..." attributes (EXT-X-KEY, EXT-X-MAP, etc.)
       const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
         try {
-          return `URI="${proxyUrl(new URL(uri, base).toString(), ua)}"`;
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua, kind)}"`;
         } catch {
           return `URI="${uri}"`;
         }
@@ -207,7 +208,7 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
       if (withUri.startsWith("#")) return withUri;
       // bare URL line (segment / sub-playlist)
       try {
-        return proxyUrl(new URL(withUri, base).toString(), ua);
+        return proxyUrl(new URL(withUri, base).toString(), ua, kind);
       } catch {
         return withUri;
       }
@@ -234,7 +235,9 @@ async function handle(request: Request) {
 
   const range = request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
-  const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const vodContext = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
+  const isVod = !playlistPath && vodContext;
+  const isDiagProbe = url.searchParams.get("probe") === "1";
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
@@ -269,14 +272,14 @@ async function handle(request: Request) {
   ];
   const forcedUA = url.searchParams.get("ua");
   const UA_CANDIDATES = forcedUA
-    ? Array.from(new Set([forcedUA, ...(isVod ? VOD_UAS : DEFAULT_UAS)]))
-    : (isVod ? Array.from(new Set(VOD_UAS)) : DEFAULT_UAS);
+    ? Array.from(new Set([forcedUA, ...(vodContext ? VOD_UAS : DEFAULT_UAS)]))
+    : (vodContext ? Array.from(new Set(VOD_UAS)) : DEFAULT_UAS);
 
 
   const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin") => {
     const h = new Headers();
     h.set("User-Agent", ua);
-    h.set("Accept", isVod ? "video/*,*/*;q=0.9" : "*/*");
+    h.set("Accept", playlistPath ? "application/vnd.apple.mpegurl,application/x-mpegURL,*/*;q=0.8" : isVod ? "video/*,*/*;q=0.9" : "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
     if (originHeaderMode === "referer" || originHeaderMode === "origin") {
@@ -303,7 +306,7 @@ async function handle(request: Request) {
     : playlistPath
       ? [range]
       : Array.from(new Set([range, "bytes=0-", null]));
-  const originHeaderModes: OriginHeaderMode[] = isVod
+  const originHeaderModes: OriginHeaderMode[] = vodContext
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
   const attemptPlans: UpstreamAttempt[] = isVod
@@ -328,12 +331,15 @@ async function handle(request: Request) {
         try {
           const controller = new AbortController();
           // VOD pode demorar para o CDN entregar o primeiro byte no preview;
-          // 8s fazia o proxy abortar filmes/séries que antes abriam.
-          const timeout = setTimeout(() => controller.abort(), 20_000);
+          // porém probes/manifestos de VOD precisam falhar rápido para não
+          // deixar o <video>/hls.js preso em CDNs que retornam HEAD 200 vazio
+          // e GET 404 (caso suportejetflix.site → flixbr.lat).
+          const timeout = setTimeout(() => controller.abort(), isDiagProbe || playlistPath ? 7_000 : 20_000);
           let res: Response;
           try {
+            const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
             res = await fetch(upstreamUrl.toString(), {
-              method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+              method: upstreamMethod,
               headers: buildHeaders(ua, rangeValue, originHeaderMode),
               redirect: "follow",
               signal: controller.signal,
@@ -349,17 +355,17 @@ async function handle(request: Request) {
           const upstreamCt = res.headers.get("content-type") || "";
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
-          const retryVodServerError = isVod && (res.status === 408 || res.status === 429 || res.status >= 500);
+          const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
           // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
           // Referer ausente ou User-Agent de player. Antes aceitávamos esse
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = isVod && res.status === 404;
+          const retryVodCompat404 = vodContext && res.status === 404;
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
-          const retryVodBadContent = isVod && res.ok && isLikelyVodBlockContentType(upstreamCt);
+          const retryVodBadContent = vodContext && res.ok && isLikelyVodBlockContentType(upstreamCt);
           if (!retryBlocked && !retryBadRange && !retryVodCompat404 && !retryVodBadContent && !retryVodServerError) {
             upstream = res;
             break attempt;
@@ -418,15 +424,25 @@ async function handle(request: Request) {
   }
 
   if (isPlaylist && upstream.ok) {
-    if (request.method === "HEAD") {
+    if (request.method === "HEAD" && !vodContext && !isDiagProbe) {
       respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
       return new Response(null, { status: upstream.status, headers: respHeaders });
     }
     const text = await upstream.text();
-    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
+    const trimmed = text.trim();
+    // VOD HLS em alguns painéis responde HEAD 200/content-length 0, mas o GET
+    // real vem vazio/HTML/404 no CDN final. Não entregue manifesto vazio como
+    // 200, senão o hls.js acusa apenas manifestLoadError sem causa útil.
+    if (vodContext && (!trimmed || !trimmed.includes("#EXTM3U"))) {
+      respHeaders.set("Content-Type", "text/plain; charset=utf-8");
+      respHeaders.delete("content-length");
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+      return new Response(trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest", { status: 502, headers: respHeaders });
+    }
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA, vodContext ? "vod" : undefined);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
     respHeaders.delete("content-length");
-    return new Response(rewritten, { status: upstream.status, headers: respHeaders });
+    return new Response(isDiagProbe ? null : rewritten, { status: upstream.status, headers: respHeaders });
   }
 
   // VOD / segmentos: deduzir Content-Type pelo path quando o upstream manda
@@ -444,7 +460,7 @@ async function handle(request: Request) {
   const contentLength = respHeaders.get("content-length");
   if (isVod && status === 206 && effectiveVodRange) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
-    return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+    return new Response(request.method === "HEAD" || isDiagProbe ? null : upstream.body, { status, headers: respHeaders });
   }
   if (isVod && status === 200 && requestedRange) {
     const parsed = parseByteRange(requestedRange);
@@ -456,7 +472,7 @@ async function handle(request: Request) {
       respHeaders.set("Content-Length", String(len));
       respHeaders.set("Content-Range", `bytes ${start}-${end}/${total}`);
       respHeaders.set("Accept-Ranges", "bytes");
-      const body = request.method === "HEAD"
+      const body = request.method === "HEAD" || isDiagProbe
         ? null
         : start === 0 && len === total
           ? upstream.body
@@ -481,7 +497,7 @@ async function handle(request: Request) {
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
+  return new Response(request.method === "HEAD" || isDiagProbe ? null : upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
