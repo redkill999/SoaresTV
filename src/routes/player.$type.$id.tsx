@@ -6,6 +6,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { isNativeAppSync } from "@/lib/platform";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
@@ -34,11 +35,17 @@ type MovieInfo = {
   };
 };
 
-function playableDirectSource(direct?: string): string | null {
+function playableDirectSource(direct?: string, native = false): string | null {
   if (!direct || !/^https?:\/\//i.test(direct)) return null;
   try {
     const path = new URL(direct).pathname.toLowerCase();
-    return /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(path) ? direct : null;
+    // No preview web, só aceite direct_source que o navegador costuma tocar
+    // direto. Containers como .ts/.mkv/.avi exigem MSE/CORS e, quando usados
+    // como primários, quebravam VOD que antes caía na URL Xtream canônica.
+    // No APK, ExoPlayer continua podendo usar esses formatos diretamente.
+    const webPlayable = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(path);
+    const nativePlayable = /\.(mkv|avi|ts)(\?|$)/i.test(path);
+    return webPlayable || (native && nativePlayable) ? direct : null;
   } catch {
     return null;
   }
@@ -82,7 +89,7 @@ function PlayerPage() {
     (ep: Episode) => {
       if (!creds) return;
       const canonical = streamUrl.episode(creds, ep.id, ep.container_extension || "mp4");
-      const direct = playableDirectSource(ep.direct_source);
+      const direct = playableDirectSource(ep.direct_source, isNativeAppSync());
       // VOD que funcionava no preview usava `direct_source` quando o painel
       // fornece uma URL de arquivo real. Mantemos a canônica Xtream como
       // fallback, mas não deixamos ela atrasar/bloquear o caminho direto.
@@ -124,7 +131,7 @@ function PlayerPage() {
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
       const canonical = streamUrl.movie(creds, movieId, movieExt);
-      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
+      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
       return direct ?? canonical;
     }
     if (type === "series") return episodeUrl ?? "";
@@ -137,7 +144,7 @@ function PlayerPage() {
     const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
     const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
     const canonical = streamUrl.movie(creds, movieId, movieExt);
-    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
+    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
     return Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[]));
   }, [creds, type, id, movieQ.data]);
 
