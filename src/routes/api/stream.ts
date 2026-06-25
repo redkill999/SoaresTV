@@ -430,6 +430,19 @@ async function handle(request: Request) {
   }
 
   const ct = upstream.headers.get("content-type") || "";
+  if (vodContext && passthroughRedirectLocation) {
+    const respHeaders = new Headers(CORS);
+    respHeaders.set("Location", passthroughRedirectLocation);
+    respHeaders.set("X-Stream-Redirect-Mode", "browser-direct-vod");
+    respHeaders.set("X-Upstream-Status", String(passthroughRedirectStatus || upstream.status));
+    respHeaders.set("X-Upstream-Content-Type", ct || "");
+    respHeaders.set("X-Upstream-Final-Url", passthroughRedirectLocation);
+    respHeaders.set("X-Upstream-User-Agent", usedUA);
+    respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
+    respHeaders.set("X-Upstream-Redirected", "1");
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return new Response(null, { status: passthroughRedirectStatus || 302, headers: respHeaders });
+  }
   const isPlaylist =
     /mpegurl/i.test(ct) ||
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
