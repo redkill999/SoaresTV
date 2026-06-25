@@ -854,6 +854,8 @@ export function VideoPlayer({
         }
         const direct = res.headers.get("X-Upstream-Direct-Candidate") || "";
         const redirectLocation = res.headers.get("X-Upstream-Redirect-Location") || "";
+        const failureClass = res.headers.get("X-Upstream-Failure-Class") || "";
+        const deadBases = (res.headers.get("X-Upstream-Dead-Media-Bases") || "").split(",").map((s) => s.trim()).filter(Boolean);
         if (!direct || !/^https?:\/\//i.test(direct)) return false;
 
         vodRedirectDirectCache.set(originalTarget, direct);
@@ -862,6 +864,15 @@ export function VideoPlayer({
         const sourceBase = mediaBaseKey(originalTarget);
         const directBase = mediaBaseKey(direct) ?? mediaBaseKey(redirectLocation);
         if (sourceBase && directBase) vodRedirectSourceBaseByDirectBase.set(directBase, sourceBase);
+
+        if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
+          console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo tentativa direta uma vez e removendo variações equivalentes", {
+            originalTarget,
+            direct,
+            failureClass,
+            deadBases,
+          });
+        }
 
         if (playbackCandidates.includes(direct)) return false;
         playbackCandidates.splice(vodIdx + 1, 0, direct);
