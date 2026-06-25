@@ -261,9 +261,10 @@ export function vodDiagFormatAll(): string {
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
   if (!url.startsWith("/api/stream")) return { probeError: "URL direta: probe HTTP omitido para evitar CORS" };
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 6_000);
+  const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
-    const res = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
+    const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
     return {
       clientStatus: res.status,
       upstreamStatus: res.headers.get("X-Upstream-Status") ?? "",
