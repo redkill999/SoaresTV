@@ -432,6 +432,30 @@ async function handle(request: Request) {
   let redirectedVod404Count = 0;
   let redirectedVod404HtmlCount = 0;
   const redirectedVodDeadBases = new Set<string>();
+  // Trilha completa de tentativas — chave para diagnosticar 502/timeout no client.
+  type AttemptTrace = {
+    n: number;
+    ua: string;
+    range: string | null;
+    originHeaderMode: OriginHeaderMode;
+    redirectStrategy?: RedirectStrategy;
+    phase: "fetch" | "manual-redirect" | "final-follow";
+    finalUrl?: string;
+    redirectLocation?: string;
+    status?: number;
+    contentType?: string;
+    redirected?: boolean;
+    error?: string;
+    errorName?: string;
+    durationMs: number;
+  };
+  const attemptTraces: AttemptTrace[] = [];
+  // Atalho: se o upstream redireciona para o placeholder
+  // "vod_nao_encontrado" do painel Hostinger, o asset NÃO existe. Detectar
+  // isso evita queimar 50 tentativas (que estouram o timeout do Worker e o
+  // browser vê 502 em vez do 404 real).
+  const isPlaceholderNotFoundUrl = (u: string | null | undefined): boolean =>
+    !!u && /vod_nao_encontrado|nao_encontrado|not_found/i.test(u);
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
     : playlistPath
