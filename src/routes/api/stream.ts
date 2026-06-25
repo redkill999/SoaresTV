@@ -112,13 +112,19 @@ function mediaIdentityKey(url: string | null | undefined): string | null {
 }
 
 type OriginHeaderMode = "none" | "referer" | "origin";
-type UpstreamAttempt = { ua: string; rangeValue: string | null; originHeaderMode: OriginHeaderMode };
+type RedirectStrategy = "manual" | "follow";
+type UpstreamAttempt = {
+  ua: string;
+  rangeValue: string | null;
+  originHeaderMode: OriginHeaderMode;
+  redirectStrategy?: RedirectStrategy;
+};
 
 function uniqueAttempts(attempts: UpstreamAttempt[]): UpstreamAttempt[] {
   const seen = new Set<string>();
   const out: UpstreamAttempt[] = [];
   for (const attempt of attempts) {
-    const key = `${attempt.ua}\n${attempt.rangeValue ?? ""}\n${attempt.originHeaderMode}`;
+    const key = `${attempt.ua}\n${attempt.rangeValue ?? ""}\n${attempt.originHeaderMode}\n${attempt.redirectStrategy ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(attempt);
@@ -434,8 +440,25 @@ async function handle(request: Request) {
   const originHeaderModes: OriginHeaderMode[] = vodContext
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
+
+  // ===== [VOD FAST PATH WEB] ============================================
+  // Restaura o comportamento histórico simples para VOD no preview web:
+  // 1 UA de navegador + redirect:"follow" + Range do cliente. A maioria
+  // dos painéis Xtream respondem direto a esse fluxo. Só se falhar é que
+  // entramos no waterfall pesado (UA cycling + redirect manual + cookies).
+  // Importante: NÃO afeta APK (que prefere bypass de proxy) nem LIVE
+  // (que tem caminho separado). Só ativa para VOD não-playlist no GET real.
+  const vodFastPath: UpstreamAttempt[] = isVod && !isDiagProbe && !isRedirectPeek && request.method !== "HEAD"
+    ? [
+        { ua: VOD_UAS[0], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const, redirectStrategy: "follow" as const },
+        { ua: VOD_UAS[1], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const, redirectStrategy: "follow" as const },
+      ]
+    : [];
+
   const attemptPlans: UpstreamAttempt[] = isVod
-    ? uniqueAttempts(UA_CANDIDATES.flatMap((ua) => [
+    ? uniqueAttempts([
+        ...vodFastPath,
+        ...UA_CANDIDATES.flatMap((ua) => [
         // Waterfall por UA: se XCIPTV funcionar sem Range/Referer, não espera
         // todos os outros UAs falharem primeiro. Isso reduz timeout no preview.
         { ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const },
@@ -446,7 +469,8 @@ async function handle(request: Request) {
         { ua, rangeValue: null, originHeaderMode: "referer" as const },
         { ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const },
         { ua, rangeValue: range, originHeaderMode: "none" as const },
-      ]))
+        ]),
+      ])
     : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
         rangeCandidates.flatMap((rangeValue) =>
           originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
@@ -544,19 +568,32 @@ async function handle(request: Request) {
     return new Response(null, { status: 204, headers: peekHeaders });
   }
 
-  attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
+  attempt: for (const { ua, rangeValue, originHeaderMode, redirectStrategy } of attemptPlans) {
         try {
           const controller = new AbortController();
           // VOD pode demorar para o CDN entregar o primeiro byte no preview;
           // porém probes/manifestos de VOD precisam falhar rápido para não
           // deixar o <video>/hls.js preso em CDNs que retornam HEAD 200 vazio
           // e GET 404 (caso suportejetflix.site → flixbr.lat).
-          const timeout = setTimeout(() => controller.abort(), isDiagProbe || playlistPath ? 7_000 : 20_000);
+          // Fast-path web (redirectStrategy="follow") usa timeout menor para
+          // não segurar 20s antes de cair no waterfall pesado.
+          const timeoutMs = isDiagProbe || playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
+          const timeout = setTimeout(() => controller.abort(), timeoutMs);
           let res: Response;
           let resolvedRedirectManually = false;
           try {
             const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
-            if (vodContext && upstreamMethod === "GET") {
+            // FAST PATH WEB VOD: simples `redirect: follow`, sem cookie/header dance.
+            // Restaura o comportamento histórico onde o proxy era um pipe fino.
+            // Só falha se o upstream der erro real — aí cai no waterfall manual.
+            if (vodContext && upstreamMethod === "GET" && redirectStrategy === "follow") {
+              res = await fetch(upstreamUrl.toString(), {
+                method: "GET",
+                headers: buildHeaders(ua, rangeValue, originHeaderMode),
+                redirect: "follow",
+                signal: controller.signal,
+              });
+            } else if (vodContext && upstreamMethod === "GET") {
               const first = await fetch(upstreamUrl.toString(), {
                 method: "GET",
                 headers: buildHeaders(ua, rangeValue, originHeaderMode),
