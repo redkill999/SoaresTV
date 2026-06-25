@@ -655,6 +655,9 @@ export function VideoPlayer({
       try {
         const currentUrl = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
         const isProxy = currentUrl.startsWith("/api/stream");
+        const directVodProbeBase = !isProxy && isVod && /^https?:\/\//i.test(currentUrl)
+          ? proxiedX(currentUrl, "vod")
+          : "";
         let probeStatus: number | string = "n/a";
         let upstreamStatus = "";
         let upstreamCt = "";
@@ -670,11 +673,12 @@ export function VideoPlayer({
         let contentLength = "";
         let contentRange = "";
         let acceptRanges = "";
-        if (isProxy) {
+        if (isProxy || directVodProbeBase) {
           const ac = new AbortController();
           const probeTimer = setTimeout(() => ac.abort(), 10_000);
           try {
-            const probeUrl = `${currentUrl}${currentUrl.includes("?") ? "&" : "?"}probe=1`;
+            const probeBase = isProxy ? currentUrl : directVodProbeBase;
+            const probeUrl = `${probeBase}${probeBase.includes("?") ? "&" : "?"}probe=1`;
             // No preview/TanStack, HEAD em rota server às vezes vira network
             // error no browser mesmo quando o GET funcionaria. Para diagnóstico
             // VOD usamos GET sem corpo útil; o proxy responde sem payload quando
