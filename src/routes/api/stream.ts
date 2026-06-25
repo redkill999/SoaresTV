@@ -434,8 +434,24 @@ async function handle(request: Request) {
   const originHeaderModes: OriginHeaderMode[] = vodContext
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
+
+  // ===== [VOD FAST PATH WEB] ============================================
+  // Restaura o comportamento histórico simples para VOD no preview web:
+  // 1 UA de navegador + redirect:"follow" + Range do cliente. A maioria
+  // dos painéis Xtream respondem direto a esse fluxo. Só se falhar é que
+  // entramos no waterfall pesado (UA cycling + redirect manual + cookies).
+  // Importante: NÃO afeta APK (que prefere bypass de proxy) nem LIVE
+  // (que tem caminho separado). Só ativa para VOD não-playlist no GET real.
+  const vodFastPath: UpstreamAttempt[] = isVod && !isDiagProbe && !isRedirectPeek && request.method !== "HEAD"
+    ? [
+        { ua: VOD_UAS[0], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const },
+      ]
+    : [];
+
   const attemptPlans: UpstreamAttempt[] = isVod
-    ? uniqueAttempts(UA_CANDIDATES.flatMap((ua) => [
+    ? uniqueAttempts([
+        ...vodFastPath,
+        ...UA_CANDIDATES.flatMap((ua) => [
         // Waterfall por UA: se XCIPTV funcionar sem Range/Referer, não espera
         // todos os outros UAs falharem primeiro. Isso reduz timeout no preview.
         { ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const },
@@ -446,7 +462,8 @@ async function handle(request: Request) {
         { ua, rangeValue: null, originHeaderMode: "referer" as const },
         { ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const },
         { ua, rangeValue: range, originHeaderMode: "none" as const },
-      ]))
+        ]),
+      ])
     : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
         rangeCandidates.flatMap((rangeValue) =>
           originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
