@@ -744,12 +744,13 @@ export function VideoPlayer({
       else if (lastPlayerStrategy.startsWith("HTML5")) kind = "html5";
       const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
       const ve = videoRef.current?.error ?? null;
+      const baseError = errMsg ?? ve?.message ?? lastPlayerStrategy;
       if (isLive && diagSessionIdRef.current) {
         liveDiagRecordAttempt(diagSessionIdRef.current, {
           player: kind,
           url,
           result: "fail",
-          error: errMsg ?? ve?.message ?? lastPlayerStrategy,
+          error: baseError,
           videoErrorCode: ve?.code ?? null,
           at: Date.now(),
         });
@@ -759,7 +760,7 @@ export function VideoPlayer({
           player: kind as VodPlayerKind,
           url,
           result: "fail",
-          error: errMsg ?? ve?.message ?? lastPlayerStrategy,
+          error: baseError,
           videoErrorCode: ve?.code ?? null,
           readyState: video.readyState,
           networkState: video.networkState,
@@ -769,6 +770,14 @@ export function VideoPlayer({
         });
         void probeVodCandidateForDiag(url).then((probe) => {
           if (vodDiagSessionIdRef.current) vodDiagPatchAttempt(vodDiagSessionIdRef.current, attemptId, probe);
+        });
+        console.warn("[VOD DEBUG] tentativa falhou", {
+          player: kind,
+          url,
+          error: baseError,
+          videoErrorCode: ve?.code ?? null,
+          readyState: video.readyState,
+          networkState: video.networkState,
         });
       }
     };

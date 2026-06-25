@@ -52,6 +52,10 @@ export type VodDiagSession = {
   finalProbe?: VodHttpProbe;
 };
 
+function fixed(n: number | undefined, digits = 2): string {
+  return typeof n === "number" && Number.isFinite(n) ? n.toFixed(digits) : "?";
+}
+
 const MAX_SESSIONS = 50;
 const STORAGE_KEY = "vod-diag-sessions:v1";
 
@@ -215,7 +219,7 @@ export function vodDiagFormat(s: VodDiagSession): string {
       lines.push(`   url:   ${a.url}`);
       if (a.error) lines.push(`   erro:  ${a.error}`);
       if (a.videoErrorCode != null) lines.push(`   video error code: ${a.videoErrorCode}`);
-      lines.push(`   ready/network: ${a.readyState ?? "?"}/${a.networkState ?? "?"} t=${a.currentTime?.toFixed?.(2) ?? "?"} dur=${Number.isFinite(a.duration) ? a.duration?.toFixed?.(2) : "?"}`);
+      lines.push(`   ready/network: ${a.readyState ?? "?"}/${a.networkState ?? "?"} t=${fixed(a.currentTime)} dur=${fixed(a.duration)}`);
       if (a.clientStatus != null || a.upstreamStatus || a.contentType || a.error) {
         lines.push("   HTTP:");
         const sub: string[] = [];
