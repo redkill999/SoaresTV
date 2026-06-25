@@ -884,6 +884,50 @@ export function VideoPlayer({
       }
     };
 
+    const syncVodDiagCandidates = () => {
+      if (isVod && vodDiagSessionIdRef.current) {
+        vodDiagUpdateCandidates(vodDiagSessionIdRef.current, playbackCandidates.slice());
+      }
+    };
+
+    const pruneDeadVodRedirectFamily = (deadBase: string | null, reason: string) => {
+      if (!isVod || !deadBase) return 0;
+      deadVodRedirectBases.add(deadBase);
+      const sourceBase = vodRedirectSourceBaseByDirectBase.get(deadBase) ?? null;
+      if (sourceBase) deadVodRedirectBases.add(sourceBase);
+
+      const shouldDrop = (candidate: string): boolean => {
+        const target = playableTargetForCandidate(candidate);
+        const base = mediaBaseKey(target);
+        const secureTarget = target ? httpsVariantIgnoringHostProfile(target) : null;
+        const cachedDirect = target ? (vodRedirectDirectCache.get(target) ?? (secureTarget ? vodRedirectDirectCache.get(secureTarget) : undefined) ?? null) : null;
+        const cachedBase = mediaBaseKey(cachedDirect);
+        const mappedSource = base ? vodRedirectSourceBaseByDirectBase.get(base) : null;
+        return !!(
+          (base && (base === deadBase || base === sourceBase || deadVodRedirectBases.has(base))) ||
+          (cachedBase && (cachedBase === deadBase || deadVodRedirectBases.has(cachedBase))) ||
+          (mappedSource && (mappedSource === sourceBase || mappedSource === deadBase || deadVodRedirectBases.has(mappedSource)))
+        );
+      };
+
+      const before = playbackCandidates.length;
+      for (let i = playbackCandidates.length - 1; i > vodIdx; i -= 1) {
+        if (shouldDrop(playbackCandidates[i])) playbackCandidates.splice(i, 1);
+      }
+      const removed = before - playbackCandidates.length;
+      if (removed > 0) {
+        console.warn("[VOD DEBUG] CDN final marcado como indisponível — pulando variações equivalentes", {
+          deadBase,
+          sourceBase,
+          removidos: removed,
+          reason,
+          ordemAtualizada: playbackCandidates,
+        });
+        syncVodDiagCandidates();
+      }
+      return removed;
+    };
+
     const recordFailedAttempt = (errMsg?: string) => {
       let kind: LivePlayerKind = "unknown";
       if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
