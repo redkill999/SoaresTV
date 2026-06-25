@@ -461,13 +461,6 @@ async function handle(request: Request) {
           } else if (vodContext && res.status >= 500) {
             usedFailureClass = "vod-upstream-server-error";
           }
-          // Probe diagnóstico: não varre dezenas de combinações. A primeira
-          // resposta real já é a informação que precisamos exibir no painel
-          // (status, URL final, UA e headers), e evita "signal aborted" vazio.
-          if (isDiagProbe) {
-            upstream = res;
-            break attempt;
-          }
           if (vodContext && res.status === 404 && usedRedirected) {
             redirectedVod404Count += 1;
             if (isLikelyVodBlockContentType(upstreamCt)) {
@@ -475,6 +468,13 @@ async function handle(request: Request) {
               const deadBase = mediaIdentityKey(usedFinalUrl);
               if (deadBase) redirectedVodDeadBases.add(deadBase);
             }
+          }
+          // Probe diagnóstico: não varre dezenas de combinações. A primeira
+          // resposta real já é a informação que precisamos exibir no painel
+          // (status, URL final, UA e headers), e evita "signal aborted" vazio.
+          if (isDiagProbe) {
+            upstream = res;
+            break attempt;
           }
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
