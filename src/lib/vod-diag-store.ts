@@ -19,6 +19,7 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  redirectMode?: string;
   probeError?: string;
   error?: string;
 };
@@ -189,6 +190,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
+  if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
   if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
 
@@ -282,6 +284,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
+      redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
     };
   } catch (e) {
     return { probeError: e instanceof Error ? e.message : "probe falhou" };
