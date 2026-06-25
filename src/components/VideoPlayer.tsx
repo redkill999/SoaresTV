@@ -1803,7 +1803,7 @@ export function VideoPlayer({
         </div>
       )}
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive z-10">
           {error}
         </div>
       )}
