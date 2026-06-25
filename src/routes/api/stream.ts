@@ -309,13 +309,17 @@ async function handle(request: Request) {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 20_000);
-          const res = await fetch(upstreamUrl.toString(), {
-            method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
-            headers: buildHeaders(ua, rangeValue, originHeaderMode),
-            redirect: "follow",
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
+          let res: Response;
+          try {
+            res = await fetch(upstreamUrl.toString(), {
+              method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+              headers: buildHeaders(ua, rangeValue, originHeaderMode),
+              redirect: "follow",
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeout);
+          }
           lastStatus = res.status;
           usedUA = ua;
           usedOriginHeaders = originHeaderMode !== "none";

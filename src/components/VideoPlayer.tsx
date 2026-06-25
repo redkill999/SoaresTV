@@ -813,7 +813,7 @@ export function VideoPlayer({
     const mpegtsStats = { decodedFrames: 0, droppedFrames: 0, speedKbps: 0 };
 
     const playMpegTs = async (url: string) => {
-      if (!isLive) return false;
+      if (!isLive && !isVod) return false;
       try {
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
@@ -841,15 +841,15 @@ export function VideoPlayer({
         //  - enableStashBuffer ON + autoCleanup agressivo desligado:
         //    mantém pelo menos ~20s à frente; SourceBuffer só limpa o passado.
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive: true, url: absoluteUrl },
+          { type: "mpegts", isLive, url: absoluteUrl },
           {
-            isLive: true,
+            isLive,
             // enableWorker vem do preset por plataforma:
             //   web  → false (Blob worker = origin null = "Failed to fetch")
             //   apk  → true  (WebView Android aceita)
             enableWorker: platformCfg.mpegts.enableWorker,
             enableStashBuffer: true,
-            stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
+            stashInitialSize: isLive ? 1024 : 384, // LIVE folgado; VOD menor para abrir rápido
             liveBufferLatencyChasing: false,
             liveBufferLatencyMaxLatency: 45,
             liveBufferLatencyMinRemain: 20,
@@ -871,7 +871,7 @@ export function VideoPlayer({
             (typeof errDetails === "string" ? errDetails : "") ||
             "";
           const composed = [errType, errDetails, detailMsg].filter(Boolean).join(" | ");
-          console.warn("[LIVE DEBUG] mpegts.js ERROR", { url, type: errType, details: errDetails, info: errInfo });
+          console.warn("[TS DEBUG] mpegts.js ERROR", { url, type: errType, details: errDetails, info: errInfo, isLive, isVod });
           if (!cancelled) tryNextVod(`mpegts.js: ${composed || "unknown"}`);
         });
         // FIX D5 (audit IPTV): provedor que fecha a conexão TS graciosamente
@@ -882,9 +882,13 @@ export function VideoPlayer({
         tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
           if (cancelled) return;
           const decoded = mpegtsStats.decodedFrames || 0;
-          console.warn("[LIVE DEBUG] mpegts.js LOADING_COMPLETE", {
-            url, decodedFrames: decoded, currentTime: video.currentTime,
+          console.warn("[TS DEBUG] mpegts.js LOADING_COMPLETE", {
+            url, decodedFrames: decoded, currentTime: video.currentTime, isLive, isVod,
           });
+          if (!isLive) {
+            if (video.currentTime < 1) tryNextVod("mpegts.js loading_complete antes do primeiro frame");
+            return;
+          }
           // Se nunca avançou para o primeiro frame ou parou logo após início,
           // tratamos como canal terminado/offline e tentamos o próximo.
           if (decoded < 30 || video.currentTime < 1) {
@@ -914,6 +918,7 @@ export function VideoPlayer({
         });
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
+        armVodWatchdog();
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
           playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
@@ -964,9 +969,11 @@ export function VideoPlayer({
         // Em APK nativo (ExoPlayer) e em hosts com profile.preferPlayer="html5"
         // memorizado, mantém o comportamento atual.
         const preferHtml5 =
-          profile.preferPlayer === "html5" ||
-          (shouldUseNativePlayer && isLive) ||
-          (profile.disableProxy && profile.preferPlayer !== "mpegts");
+          !isVod && (
+            profile.preferPlayer === "html5" ||
+            (shouldUseNativePlayer && isLive) ||
+            (profile.disableProxy && profile.preferPlayer !== "mpegts")
+          );
         const tStart = performance.now();
         if (preferHtml5) {
           console.log("[LIVE DEBUG] tentativa 1/2: HTML5 nativo (.ts direto)", {

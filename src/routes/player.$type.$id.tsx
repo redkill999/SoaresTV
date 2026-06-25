@@ -79,7 +79,7 @@ function PlayerPage() {
       const usableDirect =
         ep.direct_source &&
         /^https?:\/\//i.test(ep.direct_source) &&
-        /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+        /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(directPath);
       setEpisodeUrl(
         usableDirect
           ? ep.direct_source!
@@ -127,7 +127,7 @@ function PlayerPage() {
             return "";
           }
         })();
-        const looksLikePlayableFile = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(directPath);
+        const looksLikePlayableFile = /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(directPath);
         if (looksLikePlayableFile) return direct;
       }
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
