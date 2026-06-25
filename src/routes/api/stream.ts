@@ -386,6 +386,8 @@ async function handle(request: Request) {
     let peekOriginHeaders = false;
     let peekLocation = "";
     let peekDirect = "";
+    let peekFailureClass = "";
+    const peekDeadBases = new Set<string>();
     for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 12)) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 7_000);
@@ -404,6 +406,21 @@ async function handle(request: Request) {
         if (isRedirectStatus(res.status) && loc) {
           peekLocation = loc;
           peekDirect = browserDirectVodCandidate(loc) || "";
+          try {
+            const finalRes = await fetch(loc, {
+              method: "GET",
+              headers: buildHeaders(ua, rangeValue || "bytes=0-0", originHeaderMode),
+              redirect: "follow",
+              signal: controller.signal,
+            });
+            const finalCt = finalRes.headers.get("content-type") || "";
+            if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
+              peekFailureClass = "redirected-cdn-404-html";
+              const deadBase = mediaIdentityKey(finalRes.url || loc);
+              if (deadBase) peekDeadBases.add(deadBase);
+            }
+            try { await finalRes.body?.cancel(); } catch { /* noop */ }
+          } catch { /* só diagnóstico/otimização; não bloqueia o candidato direto */ }
         }
         try { await res.body?.cancel(); } catch { /* noop */ }
         if (peekDirect) break;
@@ -421,6 +438,8 @@ async function handle(request: Request) {
     peekHeaders.set("X-Upstream-User-Agent", peekUA || (forcedUA ?? ""));
     peekHeaders.set("X-Upstream-Origin-Headers", peekOriginHeaders ? "1" : "0");
     peekHeaders.set("X-Upstream-Redirected", peekLocation ? "1" : "0");
+    peekHeaders.set("X-Upstream-Failure-Class", peekFailureClass);
+    if (peekDeadBases.size) peekHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(peekDeadBases).join(","));
     peekHeaders.set("X-Stream-Redirect-Mode", "peek");
     return new Response(null, { status: 204, headers: peekHeaders });
   }
