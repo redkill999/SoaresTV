@@ -1130,10 +1130,16 @@ async function handle(request: Request) {
 }
 
 async function safeHandle(request: Request): Promise<Response> {
+  // ⚠️ PROOF-OF-LIFE: se este log não aparecer e o header
+  // X-Api-Stream-Reached não chegar ao browser, é porque a request
+  // NÃO entrou em api/stream.ts (foi interceptada antes — Vite, edge,
+  // worker bootstrap, etc).
+  console.log("[API_STREAM_ENTER]", request.method, request.url);
   let phase = "handler-entry";
   let kind: "vod" | "live" | "unknown" = "unknown";
   let probe = false;
   let url = "";
+  let response: Response;
   try {
     url = request.url;
     try {
@@ -1143,8 +1149,46 @@ async function safeHandle(request: Request): Promise<Response> {
       kind = u.searchParams.get("kind") === "vod" ? "vod" : (target && isVodPath(new URL(target).pathname) ? "vod" : "live");
     } catch { /* noop */ }
     phase = "handle";
-    return await handle(request);
+    response = await handle(request);
   } catch (e) {
+    const err = e as { name?: string; message?: string; stack?: string } | null;
+    console.error("[API_STREAM_FATAL]", {
+      phase, url, error: err?.message, stack: err?.stack, name: err?.name, kind, probe,
+    });
+    const headers = new Headers(CORS);
+    headers.set("X-Upstream-Status", "0");
+    headers.set("X-Upstream-Final-Url", "");
+    headers.set("X-Upstream-Failure-Class", "internal-proxy-failure");
+    response = debugJsonResponse(502, {
+      error: "INTERNAL_PROXY_FAILURE",
+      debug_phase: "safe-handle-catch",
+      debug_reason: "unhandled-exception",
+      debug_line: 1026,
+      phase: "internal-proxy-failure",
+      upstream_status: null,
+      upstream_url: null,
+      final_url: null,
+      redirects: 0,
+      redirect_count: 0,
+      content_type: null,
+      candidate: null,
+      failure_class: "internal-proxy-failure",
+      handler_phase: phase,
+      request_url: url,
+      kind,
+      probe,
+      exception: err ? { name: err.name, message: err.message } : null,
+      exception_message: err?.message ?? null,
+      exception_name: err?.name ?? null,
+      exception_stack: err?.stack ?? null,
+    }, headers);
+  }
+  // Marca toda resposta que saiu deste loader — prova de que a request
+  // foi efetivamente roteada para api/stream.ts.
+  try { response.headers.set("X-Api-Stream-Reached", "yes"); } catch { /* immutable */ }
+  return response;
+}
+
     const err = e as { name?: string; message?: string; stack?: string } | null;
     // Log obrigatório — esta é a falha INTERNA do proxy (não respondeu nada
     // de upstream). Sem isso o browser só vê 502 HTML genérico do worker.
