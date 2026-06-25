@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -49,11 +49,31 @@ function isRedirectStatus(status: number): boolean {
   return status >= 300 && status < 400;
 }
 
-function resolveLocation(location: string, base: URL): string {
+function resolveLocation(location: string | null, baseUrl: URL): string | null {
+  if (!location) return null;
   try {
-    return new URL(location, base).toString();
+    return new URL(location, baseUrl).toString();
   } catch {
-    return location;
+    return null;
+  }
+}
+
+function browserDirectVodCandidate(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    // O preview roda em HTTPS. Se o painel redireciona para CDN HTTP, entregar
+    // esse 302 ao browser vira Mixed Content. Como muitos CDNs também aceitam
+    // HTTPS no mesmo path, expomos a variante HTTPS para o player tentar direto
+    // a partir do IP do usuário (não do datacenter do proxy).
+    if (u.protocol === "http:") {
+      u.protocol = "https:";
+      if (u.port === "80") u.port = "";
+    }
+    return u.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -250,6 +270,7 @@ async function handle(request: Request) {
   const vodContext = url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname);
   const isVod = !playlistPath && vodContext;
   const isDiagProbe = url.searchParams.get("probe") === "1";
+  const isRedirectPeek = vodContext && url.searchParams.get("redirect") === "peek";
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
@@ -312,9 +333,9 @@ async function handle(request: Request) {
   let usedUA = "";
   let usedOriginHeaders = false;
   let usedFinalUrl = upstreamUrl.toString();
+  let usedRedirectLocation = "";
+  let usedDirectCandidate = "";
   let usedRedirected = false;
-  let passthroughRedirectLocation = "";
-  let passthroughRedirectStatus = 0;
   let redirectedVod404Count = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
@@ -342,6 +363,54 @@ async function handle(request: Request) {
           originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
         ),
       ));
+
+  if (isRedirectPeek) {
+    const peekHeaders = new Headers(CORS);
+    let peekStatus = 0;
+    let peekCt = "";
+    let peekUA = "";
+    let peekOriginHeaders = false;
+    let peekLocation = "";
+    let peekDirect = "";
+    for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 12)) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7_000);
+      try {
+        const res = await fetch(upstreamUrl.toString(), {
+          method: "GET",
+          headers: buildHeaders(ua, rangeValue, originHeaderMode),
+          redirect: "manual",
+          signal: controller.signal,
+        });
+        peekStatus = res.status;
+        peekCt = res.headers.get("content-type") || "";
+        peekUA = ua;
+        peekOriginHeaders = originHeaderMode !== "none";
+        const loc = resolveLocation(res.headers.get("location"), upstreamUrl);
+        if (isRedirectStatus(res.status) && loc) {
+          peekLocation = loc;
+          peekDirect = browserDirectVodCandidate(loc) || "";
+        }
+        try { await res.body?.cancel(); } catch { /* noop */ }
+        if (peekDirect) break;
+      } catch (e) {
+        lastError = e;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    peekHeaders.set("X-Upstream-Status", String(peekStatus || 0));
+    peekHeaders.set("X-Upstream-Content-Type", peekCt);
+    peekHeaders.set("X-Upstream-Final-Url", upstreamUrl.toString());
+    peekHeaders.set("X-Upstream-Redirect-Location", peekLocation);
+    peekHeaders.set("X-Upstream-Direct-Candidate", peekDirect);
+    peekHeaders.set("X-Upstream-User-Agent", peekUA || (forcedUA ?? ""));
+    peekHeaders.set("X-Upstream-Origin-Headers", peekOriginHeaders ? "1" : "0");
+    peekHeaders.set("X-Upstream-Redirected", peekLocation ? "1" : "0");
+    peekHeaders.set("X-Stream-Redirect-Mode", "peek");
+    return new Response(null, { status: 204, headers: peekHeaders });
+  }
+
   attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
         try {
           const controller = new AbortController();
@@ -356,7 +425,7 @@ async function handle(request: Request) {
             res = await fetch(upstreamUrl.toString(), {
               method: upstreamMethod,
               headers: buildHeaders(ua, rangeValue, originHeaderMode),
-              redirect: vodContext ? "manual" : "follow",
+              redirect: "follow",
               signal: controller.signal,
             });
           } finally {
@@ -367,24 +436,8 @@ async function handle(request: Request) {
           usedOriginHeaders = originHeaderMode !== "none";
           usedFinalUrl = res.url || upstreamUrl.toString();
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
+          usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
           const upstreamCt = res.headers.get("content-type") || "";
-          const manualLocation = res.headers.get("location");
-          if (vodContext && isRedirectStatus(res.status) && manualLocation) {
-            const resolvedLocation = resolveLocation(manualLocation, upstreamUrl);
-            usedFinalUrl = resolvedLocation;
-            usedRedirected = true;
-            // No VOD web desktop, seguir o 302 dentro do proxy faz o preview
-            // tocar a URL final a partir do IP do servidor Lovable. Alguns CDNs
-            // IPTV (caso suportejetflix.site -> flixbr.lat) respondem HEAD 200
-            // vazio e GET 404 para datacenter, mas o redirect original continua
-            // liberado para o navegador do usuário. Portanto, devolvemos o 302
-            // para o browser seguir diretamente. Isso só vale para VOD e não
-            // altera LIVE nem segmentos HLS reescritos.
-            passthroughRedirectLocation = resolvedLocation;
-            passthroughRedirectStatus = res.status;
-            upstream = res;
-            break attempt;
-          }
           // Probe diagnóstico: não varre dezenas de combinações. A primeira
           // resposta real já é a informação que precisamos exibir no painel
           // (status, URL final, UA e headers), e evita "signal aborted" vazio.
@@ -419,6 +472,8 @@ async function handle(request: Request) {
     const failHeaders = new Headers(CORS);
     failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
     failHeaders.set("X-Upstream-Final-Url", usedFinalUrl || upstreamUrl.toString());
+    failHeaders.set("X-Upstream-Redirect-Location", usedRedirectLocation);
+    failHeaders.set("X-Upstream-Direct-Candidate", usedDirectCandidate);
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
     failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
@@ -430,19 +485,6 @@ async function handle(request: Request) {
   }
 
   const ct = upstream.headers.get("content-type") || "";
-  if (vodContext && passthroughRedirectLocation) {
-    const respHeaders = new Headers(CORS);
-    respHeaders.set("Location", passthroughRedirectLocation);
-    respHeaders.set("X-Stream-Redirect-Mode", "browser-direct-vod");
-    respHeaders.set("X-Upstream-Status", String(passthroughRedirectStatus || upstream.status));
-    respHeaders.set("X-Upstream-Content-Type", ct || "");
-    respHeaders.set("X-Upstream-Final-Url", passthroughRedirectLocation);
-    respHeaders.set("X-Upstream-User-Agent", usedUA);
-    respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
-    respHeaders.set("X-Upstream-Redirected", "1");
-    try { await upstream.body?.cancel(); } catch { /* noop */ }
-    return new Response(null, { status: passthroughRedirectStatus || 302, headers: respHeaders });
-  }
   const isPlaylist =
     /mpegurl/i.test(ct) ||
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
@@ -453,6 +495,8 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Status", String(upstream.status));
   respHeaders.set("X-Upstream-Content-Type", ct || "");
   respHeaders.set("X-Upstream-Final-Url", usedFinalUrl);
+  respHeaders.set("X-Upstream-Redirect-Location", usedRedirectLocation);
+  respHeaders.set("X-Upstream-Direct-Candidate", usedDirectCandidate);
   respHeaders.set("X-Upstream-User-Agent", usedUA);
   respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");

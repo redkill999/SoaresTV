@@ -16,6 +16,8 @@ export type VodHttpProbe = {
   contentRange?: string;
   acceptRanges?: string;
   finalUrl?: string;
+  redirectLocation?: string;
+  directCandidate?: string;
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
@@ -187,6 +189,8 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`content-range:      ${probe.contentRange || "(vazio)"}`);
   lines.push(`accept-ranges:      ${probe.acceptRanges || "(vazio)"}`);
   lines.push(`final-url:          ${probe.finalUrl || "(vazio)"}`);
+  if (probe.redirectLocation) lines.push(`redirect-location:  ${probe.redirectLocation}`);
+  if (probe.directCandidate) lines.push(`direct-candidate:   ${probe.directCandidate}`);
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
@@ -251,6 +255,9 @@ export function vodDiagFormat(s: VodDiagSession): string {
   if ((last?.redirected || s.finalProbe?.redirected) && status === 404) {
     diag.push("  → Redirecionamento VOD quebrou: URL final do CDN retornou 404; manter fallback para outras extensões/URL original.");
   }
+  if (last?.directCandidate || s.finalProbe?.directCandidate) {
+    diag.push("  → Proxy detectou CDN final; o player também tentou/irá tentar a URL final direta em HTTPS.");
+  }
   if (last?.videoErrorCode === 4) diag.push("  → Browser recebeu algo que não conseguiu tratar como mídia compatível.");
   if (last?.videoErrorCode === 3) diag.push("  → Erro de decodificação: codec/container pode não ser suportado no navegador.");
   if (!diag.length) diag.push("  → Sem conclusão automática; copie este log para análise.");
@@ -272,7 +279,14 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
   const t = setTimeout(() => ctrl.abort(), 10_000);
   try {
     const probeUrl = `${url}${url.includes("?") ? "&" : "?"}probe=1`;
-    const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    // Evita "Failed to fetch" vazio em previews onde HEAD em server route é
+    // instável; /api/stream?probe=1 responde sem corpo mesmo via GET.
+    const res = await fetch(probeUrl, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
     return {
       clientStatus: res.status,
       upstreamStatus: res.headers.get("X-Upstream-Status") ?? "",
@@ -281,6 +295,8 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       contentRange: res.headers.get("content-range") ?? "",
       acceptRanges: res.headers.get("accept-ranges") ?? "",
       finalUrl: res.headers.get("X-Upstream-Final-Url") ?? "",
+      redirectLocation: res.headers.get("X-Upstream-Redirect-Location") ?? "",
+      directCandidate: res.headers.get("X-Upstream-Direct-Candidate") ?? "",
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
