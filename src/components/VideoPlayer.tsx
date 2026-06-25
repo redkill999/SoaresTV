@@ -877,13 +877,6 @@ export function VideoPlayer({
         if (playbackCandidates.includes(direct)) return false;
         playbackCandidates.splice(vodIdx + 1, 0, direct);
         syncVodDiagCandidates();
-        if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
-          queueMicrotask(() => {
-            for (const dead of (deadBases.length ? deadBases : [directBase].filter(Boolean) as string[])) {
-              pruneDeadVodRedirectFamily(dead, "redirect peek: CDN final 404/HTML");
-            }
-          });
-        }
         console.log("[VOD DEBUG] redirect do proxy detectado — tentando CDN final direto", {
           originalTarget,
           redirectLocation,
