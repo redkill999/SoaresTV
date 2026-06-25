@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -43,6 +43,18 @@ function isPlaylistPath(path: string): boolean {
 
 function isLikelyVodBlockContentType(contentType: string): boolean {
   return /text\/html|application\/json|application\/xml|text\/xml/i.test(contentType);
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+function resolveLocation(location: string, base: URL): string {
+  try {
+    return new URL(location, base).toString();
+  } catch {
+    return location;
+  }
 }
 
 type OriginHeaderMode = "none" | "referer" | "origin";
