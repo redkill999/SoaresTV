@@ -166,20 +166,28 @@ async function handle(request: Request) {
     "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "VLC/3.0.20 LibVLC/3.0.20",
   ];
+  const VOD_UAS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+    ...DEFAULT_UAS,
+  ];
   const forcedUA = url.searchParams.get("ua");
   const UA_CANDIDATES = forcedUA
-    ? Array.from(new Set([forcedUA, ...DEFAULT_UAS]))
-    : DEFAULT_UAS;
+    ? Array.from(new Set([forcedUA, ...(isVod ? VOD_UAS : DEFAULT_UAS)]))
+    : (isVod ? Array.from(new Set(VOD_UAS)) : DEFAULT_UAS);
 
 
-  const buildHeaders = (ua: string, rangeValue: string | null, includeOriginHeaders: boolean) => {
+  const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin") => {
     const h = new Headers();
     h.set("User-Agent", ua);
-    h.set("Accept", "*/*");
+    h.set("Accept", isVod ? "video/*,*/*;q=0.9" : "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
-    if (includeOriginHeaders) {
+    if (originHeaderMode === "referer" || originHeaderMode === "origin") {
       h.set("Referer", `${upstreamUrl.origin}/`);
+    }
+    if (originHeaderMode === "origin") {
       h.set("Origin", upstreamUrl.origin);
     }
     if (rangeValue) h.set("Range", rangeValue);
@@ -196,19 +204,22 @@ async function handle(request: Request) {
   let usedFinalUrl = upstreamUrl.toString();
   let usedRedirected = false;
   const rangeCandidates = isVod
-    ? Array.from(new Set([effectiveVodRange, range, null]))
+    ? Array.from(new Set([effectiveVodRange, range, "bytes=0-", null]))
     : playlistPath
       ? [range]
       : Array.from(new Set([range, "bytes=0-", null]));
+  const originHeaderModes: Array<"none" | "referer" | "origin"> = isVod
+    ? ["none", "referer", "origin"]
+    : ["none", "origin"];
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
-      for (const includeOriginHeaders of [false, true]) {
+      for (const originHeaderMode of originHeaderModes) {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 20_000);
           const res = await fetch(upstreamUrl.toString(), {
             method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
-            headers: buildHeaders(ua, rangeValue, includeOriginHeaders),
+            headers: buildHeaders(ua, rangeValue, originHeaderMode),
             redirect: "follow",
             signal: controller.signal,
           });
@@ -216,10 +227,16 @@ async function handle(request: Request) {
           lastStatus = res.status;
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
-          if (!retryBlocked && !retryBadRange) {
+          // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
+          // Referer ausente ou User-Agent de player. Antes aceitávamos esse
+          // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
+          // vira tentativa de compatibilidade: testa sem Range, com Referer e
+          // com UA de navegador desktop antes de concluir que é inexistente.
+          const retryVodCompat404 = isVod && res.status === 404;
+          if (!retryBlocked && !retryBadRange && !retryVodCompat404) {
             upstream = res;
             usedUA = ua;
-            usedOriginHeaders = includeOriginHeaders;
+            usedOriginHeaders = originHeaderMode !== "none";
             usedFinalUrl = res.url || upstreamUrl.toString();
             usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
             break attempt;
