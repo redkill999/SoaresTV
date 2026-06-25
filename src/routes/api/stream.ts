@@ -353,6 +353,24 @@ async function handle(request: Request) {
     return retryBlocked || retryBadRange || retryVodCompat404 || retryVodBadContent || retryVodServerError;
   };
 
+  const finalRedirectHeaderPlans = (initialMode: OriginHeaderMode, finalUrl: URL) => {
+    const plans = [
+      { originHeaderMode: initialMode, headerUrl: upstreamUrl },
+      { originHeaderMode: "none" as const, headerUrl: upstreamUrl },
+      { originHeaderMode: "referer" as const, headerUrl: upstreamUrl },
+      { originHeaderMode: "origin" as const, headerUrl: upstreamUrl },
+      { originHeaderMode: "referer" as const, headerUrl: finalUrl },
+      { originHeaderMode: "origin" as const, headerUrl: finalUrl },
+    ];
+    const seen = new Set<string>();
+    return plans.filter((p) => {
+      const key = `${p.originHeaderMode}|${p.headerUrl.origin}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   let upstream: Response | null = null;
   let lastError: unknown = null;
   let lastStatus = 0;
