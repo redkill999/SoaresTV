@@ -1038,14 +1038,17 @@ async function safeHandle(request: Request): Promise<Response> {
       probe,
     });
     const headers = new Headers(CORS);
-    headers.set("Content-Type", "application/json; charset=utf-8");
     headers.set("X-Upstream-Status", "0");
     headers.set("X-Upstream-Final-Url", "");
     headers.set("X-Upstream-Failure-Class", "internal-proxy-failure");
-    return new Response(JSON.stringify({
+    return debugJsonResponse(502, {
       error: "INTERNAL_PROXY_FAILURE",
+      debug_phase: "safe-handle-catch",
+      debug_reason: "unhandled-exception",
+      debug_line: 1026,
       phase: "internal-proxy-failure",
       upstream_status: null,
+      upstream_url: null,
       final_url: null,
       redirects: 0,
       redirect_count: 0,
@@ -1060,7 +1063,7 @@ async function safeHandle(request: Request): Promise<Response> {
       exception_message: err?.message ?? null,
       exception_name: err?.name ?? null,
       exception_stack: err?.stack ?? null,
-    }, null, 2), { status: 502, headers });
+    }, headers);
   }
 }
 
