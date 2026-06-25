@@ -92,13 +92,22 @@ function buildHeaders(target: URL, ua: string, range: string | null): Headers {
 
 async function tryFetch(target: URL, ua: string, range: string | null, method: "GET" | "HEAD"): Promise<Response> {
   const headers = buildHeaders(target, ua, range);
-  return fetch(target.toString(), {
-    method,
-    headers,
-    redirect: "follow",
-    // 25s é folgado o suficiente p/ CDNs lentos sem segurar o Worker.
-    signal: AbortSignal.timeout(25_000),
-  });
+  // IMPORTANTE: o AbortSignal passado a fetch() aborta TAMBÉM o corpo da
+  // resposta após o timeout. Para um stream LIVE/.ts ou um download de filme,
+  // isso matava a reprodução em ~25s. Usamos um controller manual e cancelamos
+  // o timeout assim que recebemos os headers — a partir daí o body flui livre.
+  const controller = new AbortController();
+  const handshakeTimer = setTimeout(() => controller.abort(), 25_000);
+  try {
+    return await fetch(target.toString(), {
+      method,
+      headers,
+      redirect: "follow",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(handshakeTimer);
+  }
 }
 
 async function handle(request: Request): Promise<Response> {
