@@ -853,10 +853,19 @@ async function handle(request: Request) {
           trace.error = err?.message || String(e);
           trace.errorName = err?.name || "Error";
           trace.durationMs = Date.now() - attemptStart;
+          trace.ttfbMs = trace.ttfbMs ?? (Date.now() - fetchStartedAt);
           if (isDiagProbe) {
             usedUA = ua;
             usedOriginHeaders = originHeaderMode !== "none";
             usedFailureClass = err?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
+            // Probe matrix mesmo no abort — testa o destino redirecionado
+            // (se houver) ou a URL original, com 30s por método.
+            try {
+              const targetUrl = usedRedirectLocation || usedFinalUrl || upstreamUrl.toString();
+              await runProbeRow("HEAD", targetUrl, null, ua);
+              await runProbeRow("GET", targetUrl, "bytes=0-1", ua);
+              await runProbeRow("GET", targetUrl, null, ua);
+            } catch { /* diagnóstico não bloqueia */ }
             break attempt;
           }
         }
