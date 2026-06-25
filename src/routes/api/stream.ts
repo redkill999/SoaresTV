@@ -519,6 +519,7 @@ async function handle(request: Request) {
           // e GET 404 (caso suportejetflix.site → flixbr.lat).
           const timeout = setTimeout(() => controller.abort(), isDiagProbe || playlistPath ? 7_000 : 20_000);
           let res: Response;
+          let resolvedRedirectManually = false;
           try {
             const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
             if (vodContext && upstreamMethod === "GET") {
@@ -530,6 +531,7 @@ async function handle(request: Request) {
               });
               const loc = resolveLocation(first.headers.get("location"), upstreamUrl);
               if (isRedirectStatus(first.status) && loc) {
+                resolvedRedirectManually = true;
                 try { await first.body?.cancel(); } catch { /* noop */ }
                 usedRedirectLocation = loc;
                 const direct = browserDirectVodCandidate(loc);
@@ -581,10 +583,12 @@ async function handle(request: Request) {
           }
           lastStatus = res.status;
           usedUA = ua;
-          usedOriginHeaders = originHeaderMode !== "none";
-          usedFinalUrl = res.url || upstreamUrl.toString();
-          usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
-          usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
+          if (!resolvedRedirectManually) {
+            usedOriginHeaders = originHeaderMode !== "none";
+            usedFinalUrl = res.url || upstreamUrl.toString();
+            usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
+            usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
+          }
           const upstreamCt = res.headers.get("content-type") || "";
           usedFailureClass = classifyVodFailure(res.status, usedRedirected, upstreamCt);
           if (vodContext && res.status === 404 && usedRedirected) {
