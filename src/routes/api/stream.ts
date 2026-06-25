@@ -112,13 +112,19 @@ function mediaIdentityKey(url: string | null | undefined): string | null {
 }
 
 type OriginHeaderMode = "none" | "referer" | "origin";
-type UpstreamAttempt = { ua: string; rangeValue: string | null; originHeaderMode: OriginHeaderMode };
+type RedirectStrategy = "manual" | "follow";
+type UpstreamAttempt = {
+  ua: string;
+  rangeValue: string | null;
+  originHeaderMode: OriginHeaderMode;
+  redirectStrategy?: RedirectStrategy;
+};
 
 function uniqueAttempts(attempts: UpstreamAttempt[]): UpstreamAttempt[] {
   const seen = new Set<string>();
   const out: UpstreamAttempt[] = [];
   for (const attempt of attempts) {
-    const key = `${attempt.ua}\n${attempt.rangeValue ?? ""}\n${attempt.originHeaderMode}`;
+    const key = `${attempt.ua}\n${attempt.rangeValue ?? ""}\n${attempt.originHeaderMode}\n${attempt.redirectStrategy ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(attempt);
