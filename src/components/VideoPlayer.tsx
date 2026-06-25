@@ -107,7 +107,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=7`;
 }
 
 function liveDirectCandidates(src: string): string[] {
@@ -657,6 +657,7 @@ export function VideoPlayer({
         let upstreamUA = "";
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
+        let upstreamRedirectCookie = "";
         let upstreamRedirectMode = "";
         let upstreamFailureClass = "";
         let upstreamDeadMediaBases = "";
@@ -689,6 +690,7 @@ export function VideoPlayer({
             upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
+            upstreamRedirectCookie = res.headers.get("X-Upstream-Redirect-Cookie") ?? "";
             upstreamRedirectMode = res.headers.get("X-Stream-Redirect-Mode") ?? "";
             upstreamFailureClass = res.headers.get("X-Upstream-Failure-Class") ?? "";
             upstreamDeadMediaBases = res.headers.get("X-Upstream-Dead-Media-Bases") ?? "";
@@ -725,6 +727,7 @@ export function VideoPlayer({
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
+          cookieRedirect: upstreamRedirectCookie === "1",
           modoRedirect: upstreamRedirectMode,
           classeFalha: upstreamFailureClass,
           basesCdnMortas: upstreamDeadMediaBases,
@@ -744,6 +747,7 @@ export function VideoPlayer({
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
             redirected: upstreamRedirected === "1",
+            redirectCookie: upstreamRedirectCookie === "1",
             failureClass: upstreamFailureClass,
             deadMediaBases: upstreamDeadMediaBases,
             redirectMode: upstreamRedirectMode,

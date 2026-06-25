@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -18,7 +18,7 @@ const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
   const kindPart = kind === "vod" ? "&kind=vod" : "";
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=6${uaPart}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -56,6 +56,29 @@ function resolveLocation(location: string | null, baseUrl: URL): string | null {
   } catch {
     return null;
   }
+}
+
+function splitSetCookieHeader(raw: string): string[] {
+  // Fetch em alguns runtimes junta múltiplos Set-Cookie em um único header.
+  // Divide apenas em vírgulas que parecem iniciar outro cookie, preservando
+  // vírgulas internas de Expires=Wed, 21 Oct...
+  return raw.split(/,(?=\s*[^;,\s]+=)/g).map((v) => v.trim()).filter(Boolean);
+}
+
+function redirectCookieHeader(headers: Headers): string {
+  const values: string[] = [];
+  const withGetSetCookie = headers as Headers & { getSetCookie?: () => string[] };
+  try {
+    const many = withGetSetCookie.getSetCookie?.();
+    if (Array.isArray(many)) values.push(...many);
+  } catch { /* noop */ }
+  const single = headers.get("set-cookie");
+  if (single) values.push(...splitSetCookieHeader(single));
+
+  const pairs = values
+    .map((cookie) => cookie.split(";")[0]?.trim() ?? "")
+    .filter((pair) => /^[^=;\s]+=/.test(pair));
+  return Array.from(new Set(pairs)).join("; ");
 }
 
 function browserDirectVodCandidate(url: string | null): string | null {
@@ -320,18 +343,24 @@ async function handle(request: Request) {
     : (vodContext ? Array.from(new Set(VOD_UAS)) : DEFAULT_UAS);
 
 
-  const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin", headerUrl: URL = upstreamUrl) => {
+  const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin", headerUrl: URL = upstreamUrl, cookieHeader?: string | null) => {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", playlistPath ? "application/vnd.apple.mpegurl,application/x-mpegURL,*/*;q=0.8" : isVod ? "video/*,*/*;q=0.9" : "*/*");
+    h.set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
     if (originHeaderMode === "referer" || originHeaderMode === "origin") {
-      h.set("Referer", `${headerUrl.origin}/`);
+      // VOD redirecionado em alguns painéis valida o Referer completo da URL
+      // Xtream original. Usar só a raiz do host ainda resultava em falso 404
+      // no CDN final; para o próprio host original mandamos path completo.
+      const referer = headerUrl.origin === upstreamUrl.origin ? upstreamUrl.toString() : `${headerUrl.origin}/`;
+      h.set("Referer", referer);
     }
     if (originHeaderMode === "origin") {
       h.set("Origin", headerUrl.origin);
     }
+    if (cookieHeader) h.set("Cookie", cookieHeader);
     if (rangeValue) h.set("Range", rangeValue);
     return h;
   };
@@ -348,14 +377,14 @@ async function handle(request: Request) {
     const retryBlocked = res.status === 401 || res.status === 403;
     const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
     const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
-    const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(finalUrl) && (!redirected || (redirectedVod404Count < 8 && redirectedVod404HtmlCount < 6));
+    const retryVodCompat404 = vodContext && res.status === 404 && (!redirected || (redirectedVod404Count < 10 && redirectedVod404HtmlCount < 8));
     const retryVodBadContent = vodContext && res.ok && isLikelyVodBlockContentType(contentType);
     return retryBlocked || retryBadRange || retryVodCompat404 || retryVodBadContent || retryVodServerError;
   };
 
   const shouldTryNextRedirectHeader = (res: Response, rangeValue: string | null, contentType: string, finalUrl: string): boolean => {
     if (!vodContext) return false;
-    if (res.status === 404 && !isPlaylistPath(finalUrl)) return true;
+    if (res.status === 404) return true;
     if (res.status === 401 || res.status === 403) return true;
     if (isVod && !!rangeValue && (res.status === 400 || res.status === 416)) return true;
     if (res.status === 408 || res.status === 429 || res.status >= 500) return true;
@@ -392,6 +421,7 @@ async function handle(request: Request) {
   let usedRedirectLocation = "";
   let usedDirectCandidate = "";
   let usedRedirected = false;
+  let usedRedirectCookie = false;
   let usedFailureClass = "";
   let redirectedVod404Count = 0;
   let redirectedVod404HtmlCount = 0;
@@ -431,6 +461,7 @@ async function handle(request: Request) {
     let peekOriginHeaders = false;
     let peekLocation = "";
     let peekDirect = "";
+    let peekRedirectCookie = false;
     let peekFailureClass = "";
     const peekDeadBases = new Set<string>();
     for (const { ua, rangeValue, originHeaderMode } of attemptPlans.slice(0, 18)) {
@@ -452,6 +483,8 @@ async function handle(request: Request) {
         if (isRedirectStatus(res.status) && loc) {
           peekLocation = loc;
           peekDirect = browserDirectVodCandidate(loc) || "";
+          const cookieHeader = redirectCookieHeader(res.headers);
+          peekRedirectCookie = !!cookieHeader;
           try {
             const direct = browserDirectVodCandidate(loc);
             const finalUrlCandidates = Array.from(new Set([loc, direct].filter(Boolean) as string[]));
@@ -460,7 +493,7 @@ async function handle(request: Request) {
               for (const plan of finalRedirectHeaderPlans(originHeaderMode, finalUrlForHeaders)) {
                 const finalRes = await fetch(finalUrl, {
                   method: "GET",
-                  headers: buildHeaders(ua, rangeValue || "bytes=0-0", plan.originHeaderMode, plan.headerUrl),
+                  headers: buildHeaders(ua, rangeValue || "bytes=0-0", plan.originHeaderMode, plan.headerUrl, cookieHeader),
                   redirect: "follow",
                   signal: controller.signal,
                 });
@@ -504,6 +537,7 @@ async function handle(request: Request) {
     peekHeaders.set("X-Upstream-User-Agent", peekUA || (forcedUA ?? ""));
     peekHeaders.set("X-Upstream-Origin-Headers", peekOriginHeaders ? "1" : "0");
     peekHeaders.set("X-Upstream-Redirected", peekLocation ? "1" : "0");
+    peekHeaders.set("X-Upstream-Redirect-Cookie", peekRedirectCookie ? "1" : "0");
     peekHeaders.set("X-Upstream-Failure-Class", peekFailureClass);
     if (peekDeadBases.size) peekHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(peekDeadBases).join(","));
     peekHeaders.set("X-Stream-Redirect-Mode", "peek");
@@ -534,6 +568,8 @@ async function handle(request: Request) {
                 resolvedRedirectManually = true;
                 try { await first.body?.cancel(); } catch { /* noop */ }
                 usedRedirectLocation = loc;
+                const cookieHeader = redirectCookieHeader(first.headers);
+                usedRedirectCookie = !!cookieHeader;
                 const direct = browserDirectVodCandidate(loc);
                 const finalUrlCandidates = Array.from(new Set([loc, direct].filter(Boolean) as string[]));
                 let lastFinal: Response | null = null;
@@ -542,7 +578,7 @@ async function handle(request: Request) {
                   for (const plan of finalRedirectHeaderPlans(originHeaderMode, finalUrlObj)) {
                     const finalRes = await fetch(finalUrl, {
                       method: "GET",
-                      headers: buildHeaders(ua, rangeValue, plan.originHeaderMode, plan.headerUrl),
+                      headers: buildHeaders(ua, rangeValue, plan.originHeaderMode, plan.headerUrl, cookieHeader),
                       redirect: "follow",
                       signal: controller.signal,
                     });
@@ -619,6 +655,12 @@ async function handle(request: Request) {
           try { await res.body?.cancel(); } catch { /* noop */ }
         } catch (e) {
           lastError = e;
+          if (isDiagProbe) {
+            usedUA = ua;
+            usedOriginHeaders = originHeaderMode !== "none";
+            usedFailureClass = (e as { name?: string } | null)?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
+            break attempt;
+          }
         }
   }
   if (!upstream) {
@@ -630,6 +672,7 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
     failHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
     failHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+    failHeaders.set("X-Upstream-Redirect-Cookie", usedRedirectCookie ? "1" : "0");
     failHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
     if (redirectedVodDeadBases.size) failHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
@@ -655,6 +698,7 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-User-Agent", usedUA);
   respHeaders.set("X-Upstream-Origin-Headers", usedOriginHeaders ? "1" : "0");
   respHeaders.set("X-Upstream-Redirected", usedRedirected ? "1" : "0");
+  respHeaders.set("X-Upstream-Redirect-Cookie", usedRedirectCookie ? "1" : "0");
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
   if (!upstream.ok) {
