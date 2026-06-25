@@ -13,7 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
 import { syncLangFromStorage } from "../lib/i18n";
-import { PlatformBadge } from "../components/PlatformBadge";
+
 
 function NotFoundComponent() {
   return (
@@ -291,7 +291,6 @@ function RootComponent() {
       <ThemeProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
-        <PlatformBadge />
       </ThemeProvider>
     </QueryClientProvider>
   );
