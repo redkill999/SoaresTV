@@ -322,26 +322,30 @@ export function VideoPlayer({
     // Detecção automática pelo sufixo da URL. Override do usuário (compat)
     // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
     const auto = detectFormat(workingSrc);
-    // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
-    // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
-    // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
-    // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
-    // ===== [LIVE PRESET] — padrão global para canais ao vivo ================
-    // Empiricamente, painéis Xtream se comportam melhor em LIVE quando:
-    //   - bypassProxyForLive: pular /api/stream (proxy reescreve headers/range
-    //     e quebra o .ts ao vivo em muitos painéis).
-    //   - disableHlsConversion: NÃO converter .ts → .m3u8 (muitos painéis não
-    //     expõem variante HLS e o hls.js gasta o watchdog antes de desistir).
-    //   - preferTs: priorizar .ts sobre .m3u8.
-    // Esses três são DEFAULT TRUE para LIVE em todos os hosts; qualquer host
-    // pode desativar individualmente setando o campo como `false` via
-    // updateHostProfile(). VOD/séries/filmes seguem o caminho atual.
+    // No web desktop, manter HLS-first/proxy-first para `.ts` ao vivo:
+    // o navegador não decodifica MPEG-TS cru de forma confiável, e o preview
+    // precisa do proxy para evitar CORS/mixed-content. O preset `.ts` direto
+    // continua sendo padrão apenas no APK, onde ExoPlayer/WebView lida melhor.
     const liveHost = hostOf(workingSrc);
     const liveProfile = liveHost ? getHostProfile(liveHost) : {};
     const isLiveUrl = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const liveDisableHls = isLiveUrl && liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false;
-    const liveBypassProxy = isLiveUrl && liveProfile.bypassProxyForLive !== false;
-    const livePreferTs = isLiveUrl && liveProfile.preferTs !== false;
+    const platformCfg = getPlatformConfig();
+    const isWebPlayback = platformCfg.platform === "web";
+    const liveDisableHls = isLiveUrl && (
+      isWebPlayback
+        ? liveProfile.disableHlsConversion === true && liveProfile.preferTs !== false
+        : liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false
+    );
+    const liveBypassProxy = isLiveUrl && (
+      isWebPlayback
+        ? liveProfile.bypassProxyForLive === true
+        : liveProfile.bypassProxyForLive !== false
+    );
+    const livePreferTs = isLiveUrl && (
+      isWebPlayback
+        ? liveProfile.preferTs === true
+        : liveProfile.preferTs !== false
+    );
 
     const skipHls =
       compat.streamFormat === "ts" ||
