@@ -283,9 +283,15 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
             );
           })}
         </div>
+        {diag?.probe_matrix && diag.probe_matrix.length > 0 && (
+          <div className="mt-3 rounded border border-amber-400/40 bg-black/70 p-2 text-[10px] leading-snug text-amber-100">
+            <div className="mb-1 font-bold text-white/80">probe matrix (HEAD / GET 0-1 / GET full · 30s)</div>
+            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag.probe_matrix, null, 2)}</pre>
+          </div>
+        )}
         {diag?.attempts && diag.attempts.length > 0 && (
           <div className="mt-3 rounded bg-black/60 p-2 text-[10px] leading-snug text-sky-200/90">
-            <div className="mb-1 font-bold text-white/70">attempts ({diag.attempts.length})</div>
+            <div className="mb-1 font-bold text-white/70">attempts ({diag.attempts.length}) — com ttfbMs/durationMs/finalProtocol</div>
             <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag.attempts, null, 2)}</pre>
           </div>
         )}
