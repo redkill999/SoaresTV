@@ -6,6 +6,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { isNativeAppSync } from "@/lib/platform";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
@@ -33,6 +34,16 @@ type MovieInfo = {
   };
 };
 
+function playableDirectSource(direct?: string): string | null {
+  if (!direct || !/^https?:\/\//i.test(direct)) return null;
+  try {
+    const path = new URL(direct).pathname.toLowerCase();
+    return /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(path) ? direct : null;
+  } catch {
+    return null;
+  }
+}
+
 function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
   const { name } = Route.useSearch();
@@ -45,6 +56,7 @@ function PlayerPage() {
     setCreds(store.getCreds());
   }, []);
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
+  const [episodeFallbackSrcs, setEpisodeFallbackSrcs] = useState<string[]>([]);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
 
@@ -69,22 +81,14 @@ function PlayerPage() {
   const playEpisode = useCallback(
     (ep: Episode) => {
       if (!creds) return;
-      const directPath = (() => {
-        try {
-          return ep.direct_source ? new URL(ep.direct_source).pathname.toLowerCase() : "";
-        } catch {
-          return "";
-        }
-      })();
-      const usableDirect =
-        ep.direct_source &&
-        /^https?:\/\//i.test(ep.direct_source) &&
-        /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(directPath);
-      setEpisodeUrl(
-        usableDirect
-          ? ep.direct_source!
-          : streamUrl.episode(creds, ep.id, ep.container_extension || "mp4"),
-      );
+      const canonical = streamUrl.episode(creds, ep.id, ep.container_extension || "mp4");
+      const direct = playableDirectSource(ep.direct_source);
+      const native = isNativeAppSync();
+      // Web desktop: URL Xtream canônica primeiro (era o fluxo que funcionava);
+      // direct_source fica só como fallback porque muitos painéis retornam CDN
+      // bloqueado/HTML para navegador. APK pode continuar preferindo direto.
+      setEpisodeUrl(native && direct ? direct : canonical);
+      setEpisodeFallbackSrcs(Array.from(new Set([native && direct ? canonical : direct].filter(Boolean) as string[])));
       setActiveEpisodeId(String(ep.id));
       setActiveTitle(`${name} — ${ep.title}`);
       store.setLastEpisode(id, String(ep.id));
@@ -118,25 +122,28 @@ function PlayerPage() {
     if (type === "movie") {
       // id may include ".ext"
       const [sid, ext] = id.split(".");
-      const direct = movieQ.data?.movie_data?.direct_source;
-      if (direct && /^https?:\/\//i.test(direct)) {
-        const directPath = (() => {
-          try {
-            return new URL(direct).pathname.toLowerCase();
-          } catch {
-            return "";
-          }
-        })();
-        const looksLikePlayableFile = /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(directPath);
-        if (looksLikePlayableFile) return direct;
-      }
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
-      return streamUrl.movie(creds, movieId, movieExt);
+      const canonical = streamUrl.movie(creds, movieId, movieExt);
+      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
+      return isNativeAppSync() && direct ? direct : canonical;
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
   }, [creds, type, id, episodeUrl, movieQ.data]);
+
+  const movieFallbackSrcs = useMemo(() => {
+    if (!creds || type !== "movie") return [];
+    const [sid, ext] = id.split(".");
+    const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
+    const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
+    const canonical = streamUrl.movie(creds, movieId, movieExt);
+    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
+    const primary = isNativeAppSync() && direct ? direct : canonical;
+    return Array.from(new Set([primary === direct ? canonical : direct].filter(Boolean) as string[]));
+  }, [creds, type, id, movieQ.data]);
+
+  const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : [];
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).
@@ -270,6 +277,7 @@ function PlayerPage() {
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
+              fallbackSrcs={vodFallbackSrcs}
               initialPosition={initialPosition}
               onProgress={handleProgress}
             />

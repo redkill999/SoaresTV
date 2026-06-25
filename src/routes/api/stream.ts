@@ -328,6 +328,7 @@ async function handle(request: Request) {
           const upstreamCt = res.headers.get("content-type") || "";
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
+          const retryVodServerError = isVod && (res.status === 408 || res.status === 429 || res.status >= 500);
           // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
           // Referer ausente ou User-Agent de player. Antes aceitávamos esse
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
@@ -338,7 +339,7 @@ async function handle(request: Request) {
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
           const retryVodBadContent = isVod && res.ok && isLikelyVodBlockContentType(upstreamCt);
-          if (!retryBlocked && !retryBadRange && !retryVodCompat404 && !retryVodBadContent) {
+          if (!retryBlocked && !retryBadRange && !retryVodCompat404 && !retryVodBadContent && !retryVodServerError) {
             upstream = res;
             break attempt;
           }

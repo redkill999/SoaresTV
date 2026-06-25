@@ -170,10 +170,13 @@ export function detectFormat(url: string): DetectedFormat {
   }
 }
 
+const EMPTY_VOD_FALLBACKS: string[] = [];
+
 export function VideoPlayer({
   src,
   poster,
   kind,
+  fallbackSrcs = EMPTY_VOD_FALLBACKS,
   initialPosition,
   onProgress,
   controls = true,
@@ -181,6 +184,7 @@ export function VideoPlayer({
   src: string;
   poster?: string;
   kind?: "live" | "vod";
+  fallbackSrcs?: string[];
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
   controls?: boolean;
@@ -361,21 +365,29 @@ export function VideoPlayer({
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
     const isLive = isLiveUrl;
     const vodCandidates: string[] = [];
-    const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
-    if (vodMatch && (!hlsCandidate || isVod)) {
-      const [, base, ext, qs = ""] = vodMatch;
-      const currentExt = ext.toLowerCase();
-      // Quando o usuário força "mp4", prioriza containers progressivos.
-      const preferred = compat.streamFormat === "mp4"
-        ? ["mp4", "m4v", "mkv", currentExt]
-        : isVod
-          ? currentExt === "m3u8"
-            ? ["m3u8", "mp4", "m4v", "mkv"]
-            : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
-          : [currentExt, "mp4", "m4v", "mkv"];
-      for (const alt of preferred) {
-        const candidate = `${base}.${alt}${qs}`;
-        if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
+    const vodSourceInputs = Array.from(new Set([
+      workingSrc,
+      ...(isVod ? fallbackSrcs : []),
+    ].filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))));
+    for (const vodSource of vodSourceInputs) {
+      const vodMatch = vodSource.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
+      if (vodMatch && (!hlsCandidate || isVod)) {
+        const [, base, ext, qs = ""] = vodMatch;
+        const currentExt = ext.toLowerCase();
+        // Quando o usuário força "mp4", prioriza containers progressivos.
+        const preferred = compat.streamFormat === "mp4"
+          ? ["mp4", "m4v", "mkv", currentExt]
+          : isVod
+            ? currentExt === "m3u8"
+              ? ["m3u8", "mp4", "m4v", "mkv"]
+              : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
+            : [currentExt, "mp4", "m4v", "mkv"];
+        for (const alt of preferred) {
+          const candidate = `${base}.${alt}${qs}`;
+          if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
+        }
+      } else if (!vodCandidates.includes(vodSource)) {
+        vodCandidates.push(vodSource);
       }
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
@@ -1623,7 +1635,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode]);
+  }, [src, kind, playerMode, fallbackSrcs]);
 
   // [LIVE DIAG] Quando setError dispara em LIVE, marca falha e abre painel.
   // Cobre todos os caminhos (HLS NETWORK/MEDIA/default, esgotamento de candidatos).
