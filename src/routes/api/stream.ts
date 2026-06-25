@@ -10,10 +10,33 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode, X-Debug-Phase, X-Debug-Reason, X-Debug-Line",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
+
+type Debug502Payload = {
+  debug_phase: string;
+  debug_reason: string;
+  debug_line: number;
+  exception_message?: string | null;
+  exception_stack?: string | null;
+  upstream_url?: string | null;
+  candidate?: string | null;
+  [key: string]: unknown;
+};
+
+function debugJsonResponse(status: number, payload: Debug502Payload, headersInit: HeadersInit = CORS) {
+  const headers = new Headers(headersInit);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  if (status === 502) {
+    headers.set("X-Debug-Phase", payload.debug_phase);
+    headers.set("X-Debug-Reason", payload.debug_reason);
+    headers.set("X-Debug-Line", String(payload.debug_line));
+    console.error("[API_STREAM_502]", payload);
+  }
+  return new Response(JSON.stringify(payload, null, 2), { status, headers });
+}
 
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
   const kindPart = kind === "vod" ? "&kind=vod" : "";
@@ -804,11 +827,20 @@ async function handle(request: Request) {
     }));
 
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
+    const debugPhase = lastStatus ? `upstream-${lastStatus}` : phase;
+    const debugReason = errObj
+      ? (errObj.name === "AbortError" ? "upstream-timeout" : "fetch-exception")
+      : lastStatus >= 500
+        ? "upstream-server-error"
+        : "no-upstream-response";
     failHeaders.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify({
+    const failurePayload = {
       error: phase.startsWith("upstream-") || phase === "fetch-exception" || phase === "upstream-timeout"
         ? phase.toUpperCase().replace(/-/g, "_")
         : (usedFailureClass ? usedFailureClass.toUpperCase().replace(/-/g, "_") : "BAD_GATEWAY"),
+      debug_phase: debugPhase,
+      debug_reason: debugReason,
+      debug_line: 829,
       phase,
       upstream_status: lastStatus || null,
       upstream_url: upstreamUrl.toString(),
@@ -827,10 +859,8 @@ async function handle(request: Request) {
       exception_stack: errObj?.stack ?? null,
       attempts_total: attemptTraces.length,
       attempts: attemptTraces,
-    }, null, 2), {
-      status: clientStatus,
-      headers: failHeaders,
-    });
+    } satisfies Debug502Payload;
+    return debugJsonResponse(clientStatus, failurePayload, failHeaders);
   }
 
   const ct = upstream.headers.get("content-type") || "";
@@ -853,6 +883,27 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
   if (!upstream.ok) {
+    if (upstream.status === 502) {
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+      return debugJsonResponse(502, {
+        error: "UPSTREAM_502",
+        debug_phase: "upstream-non-ok",
+        debug_reason: "upstream-returned-502",
+        debug_line: 886,
+        phase: "upstream-502",
+        failure_class: usedFailureClass || "upstream-502",
+        exception_message: null,
+        exception_stack: null,
+        upstream_status: upstream.status,
+        upstream_url: upstreamUrl.toString(),
+        final_url: usedFinalUrl,
+        redirects: usedRedirected ? 1 : 0,
+        redirect_count: usedRedirected ? 1 : 0,
+        content_type: ct || null,
+        candidate: usedDirectCandidate || usedFinalUrl || upstreamUrl.toString(),
+        ua_last: usedUA || null,
+      }, respHeaders);
+    }
     if (isVod) {
       if (isDiagProbe) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
@@ -889,10 +940,25 @@ async function handle(request: Request) {
     // real vem vazio/HTML/404 no CDN final. Não entregue manifesto vazio como
     // 200, senão o hls.js acusa apenas manifestLoadError sem causa útil.
     if (vodContext && (!trimmed || !trimmed.includes("#EXTM3U"))) {
-      respHeaders.set("Content-Type", "text/plain; charset=utf-8");
       respHeaders.delete("content-length");
       try { await upstream.body?.cancel(); } catch { /* noop */ }
-      return new Response(trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest", { status: 502, headers: respHeaders });
+      return debugJsonResponse(502, {
+        error: trimmed ? "INVALID_VOD_HLS_MANIFEST" : "EMPTY_VOD_HLS_MANIFEST",
+        debug_phase: "vod-hls-manifest-validation",
+        debug_reason: trimmed ? "invalid-manifest" : "empty-manifest",
+        debug_line: 921,
+        phase: "vod-hls-manifest-validation",
+        failure_class: trimmed ? "invalid-vod-hls-manifest" : "empty-vod-hls-manifest",
+        exception_message: trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest",
+        exception_stack: null,
+        upstream_status: upstream.status,
+        upstream_url: upstreamUrl.toString(),
+        final_url: usedFinalUrl,
+        redirects: usedRedirected ? 1 : 0,
+        redirect_count: usedRedirected ? 1 : 0,
+        content_type: ct || null,
+        candidate: usedDirectCandidate || usedFinalUrl || upstreamUrl.toString(),
+      }, respHeaders);
     }
     const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), usedUA || forcedUA, vodContext ? "vod" : undefined);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
@@ -993,14 +1059,17 @@ async function safeHandle(request: Request): Promise<Response> {
       probe,
     });
     const headers = new Headers(CORS);
-    headers.set("Content-Type", "application/json; charset=utf-8");
     headers.set("X-Upstream-Status", "0");
     headers.set("X-Upstream-Final-Url", "");
     headers.set("X-Upstream-Failure-Class", "internal-proxy-failure");
-    return new Response(JSON.stringify({
+    return debugJsonResponse(502, {
       error: "INTERNAL_PROXY_FAILURE",
+      debug_phase: "safe-handle-catch",
+      debug_reason: "unhandled-exception",
+      debug_line: 1026,
       phase: "internal-proxy-failure",
       upstream_status: null,
+      upstream_url: null,
       final_url: null,
       redirects: 0,
       redirect_count: 0,
@@ -1015,7 +1084,7 @@ async function safeHandle(request: Request): Promise<Response> {
       exception_message: err?.message ?? null,
       exception_name: err?.name ?? null,
       exception_stack: err?.stack ?? null,
-    }, null, 2), { status: 502, headers });
+    }, headers);
   }
 }
 

@@ -7,6 +7,9 @@ import { platformLabel } from "@/lib/platform-flags";
 
 type ProxyDiag = {
   error?: string;
+  debug_phase?: string;
+  debug_reason?: string;
+  debug_line?: number | string;
   phase?: string;
   upstream_status?: number | null;
   upstream_url?: string;
@@ -95,6 +98,9 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
           setDiag({
             error: `NON_JSON_${res.status}`,
             phase: res.status >= 500 ? "internal-proxy-failure" : "fetch-exception",
+            debug_phase: res.headers.get("x-debug-phase") || (res.status >= 500 ? "non-json-502" : "non-json-response"),
+            debug_reason: res.headers.get("x-debug-reason") || "non-json-response",
+            debug_line: res.headers.get("x-debug-line") || "-",
             upstream_status: res.status,
             upstream_url: src,
             final_url: res.headers.get("x-upstream-final-url") || src,
@@ -140,6 +146,9 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
     ["http_status", httpStatus !== null ? String(httpStatus) : "-"],
     ["http_content_type", httpContentType || "-"],
     ["error", diag?.error || errorMessage || "-"],
+    ["debug_phase", diag?.debug_phase ?? "-"],
+    ["debug_reason", diag?.debug_reason ?? "-"],
+    ["debug_line", String(diag?.debug_line ?? "-")],
     ["phase", phase],
     ["failure_class", diag?.failure_class ?? "-"],
     ["exception_message", diag?.exception_message ?? "-"],
@@ -259,7 +268,7 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
         </div>
         <div className="space-y-1">
           {rows.map(([k, v]) => {
-            const highlight = k === "error" || k === "phase" || k === "failure_class" || k === "exception_message" || k === "exception_stack";
+            const highlight = k === "error" || k === "debug_phase" || k === "debug_reason" || k === "debug_line" || k === "phase" || k === "failure_class" || k === "exception_message" || k === "exception_stack";
             return (
               <div key={k} className="grid grid-cols-[150px_1fr] gap-2 border-b border-white/5 py-1">
                 <span className="text-white/50">{k}</span>
