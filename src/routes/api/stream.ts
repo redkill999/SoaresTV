@@ -840,7 +840,7 @@ async function handle(request: Request) {
         : (usedFailureClass ? usedFailureClass.toUpperCase().replace(/-/g, "_") : "BAD_GATEWAY"),
       debug_phase: debugPhase,
       debug_reason: debugReason,
-      debug_line: 830,
+      debug_line: 829,
       phase,
       upstream_status: lastStatus || null,
       upstream_url: upstreamUrl.toString(),
