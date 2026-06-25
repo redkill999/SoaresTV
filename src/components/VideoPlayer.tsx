@@ -179,6 +179,22 @@ export function detectFormat(url: string): DetectedFormat {
 
 const EMPTY_VOD_FALLBACKS: string[] = [];
 
+// VOD web preview: alguns painéis Xtream respondem /movie/... com 302 para um
+// CDN final. Se o proxy seguir esse 302 a partir do datacenter e receber 404,
+// o navegador nunca tem chance de tentar pelo IP do usuário. Guardamos, só na
+// sessão, a variante HTTPS do CDN final descoberta pelo /api/stream.
+const vodRedirectDirectCache = new Map<string, string>();
+
+function apiStreamTarget(url: string): string | null {
+  if (!url.startsWith("/api/stream")) return null;
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "http://local";
+    return new URL(url, base).searchParams.get("u");
+  } catch {
+    return null;
+  }
+}
+
 export function VideoPlayer({
   src,
   poster,
@@ -407,17 +423,19 @@ export function VideoPlayer({
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = isWebPlayback ? httpsVariantIgnoringHostProfile(url) : httpsVariant(url);
+          const cachedDirect = vodRedirectDirectCache.get(url) ?? (secure ? vodRedirectDirectCache.get(secure) : undefined) ?? null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
           // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
           let candidates: (string | null)[];
           if (forceDirect) {
-            candidates = [secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
+            candidates = [cachedDirect, secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else if (forceProxy) {
-            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
+            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, cachedDirect];
           } else {
             candidates = [
               proxiedX(url, "vod"),
               secure ? proxiedX(secure, "vod") : null,
+              cachedDirect,
               secure,
               // Se o proxy do preview falhar para VOD, ainda deixa o browser
               // tentar a URL original HTTPS diretamente. Isso não mexe em LIVE
@@ -614,6 +632,8 @@ export function VideoPlayer({
         let upstreamStatus = "";
         let upstreamCt = "";
         let upstreamFinal = "";
+        let upstreamRedirectLocation = "";
+        let upstreamDirectCandidate = "";
         let upstreamUA = "";
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
@@ -631,6 +651,8 @@ export function VideoPlayer({
             upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
             upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
             upstreamFinal = res.headers.get("X-Upstream-Final-Url") ?? "";
+            upstreamRedirectLocation = res.headers.get("X-Upstream-Redirect-Location") ?? "";
+            upstreamDirectCandidate = res.headers.get("X-Upstream-Direct-Candidate") ?? "";
             upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
@@ -663,6 +685,8 @@ export function VideoPlayer({
           contentRange,
           acceptRanges,
           urlFinalUpstream: upstreamFinal,
+          redirectLocationUpstream: upstreamRedirectLocation,
+          directCandidateUpstream: upstreamDirectCandidate,
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
@@ -678,6 +702,8 @@ export function VideoPlayer({
             contentRange,
             acceptRanges,
             finalUrl: upstreamFinal,
+            redirectLocation: upstreamRedirectLocation,
+            directCandidate: upstreamDirectCandidate,
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
             redirected: upstreamRedirected === "1",
@@ -699,6 +725,9 @@ export function VideoPlayer({
     // mantendo os demais como último recurso. Não toca em listas que funcionam.
     const maybeInject503Bypass = async () => {
       try {
+        // VOD tem tratamento próprio de redirect/CDN abaixo. Não faz sentido
+        // gastar um HEAD completo aqui (pode seguir 302→404 e atrasar fallback).
+        if (isVod) return false;
         const failedUrl = playbackCandidates[vodIdx];
         // [HTTPS SKIP] Se o candidato que falhou era https de um host cuja
         // origem é http, marcamos o host para nunca mais promover.
@@ -760,6 +789,46 @@ export function VideoPlayer({
       }
     };
 
+    const maybeInjectVodRedirectDirect = async () => {
+      if (!isVod) return false;
+      const failedUrl = playbackCandidates[vodIdx];
+      if (!failedUrl?.startsWith("/api/stream")) return false;
+      const originalTarget = apiStreamTarget(failedUrl);
+      if (!originalTarget) return false;
+
+      try {
+        const ac = new AbortController();
+        const probeTimer = setTimeout(() => ac.abort(), 7_000);
+        let res: Response;
+        try {
+          const peekUrl = `${failedUrl}${failedUrl.includes("?") ? "&" : "?"}redirect=peek`;
+          res = await fetch(peekUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
+        } finally {
+          clearTimeout(probeTimer);
+        }
+        const direct = res.headers.get("X-Upstream-Direct-Candidate") || "";
+        const redirectLocation = res.headers.get("X-Upstream-Redirect-Location") || "";
+        if (!direct || !/^https?:\/\//i.test(direct)) return false;
+
+        vodRedirectDirectCache.set(originalTarget, direct);
+        const secureOriginal = httpsVariantIgnoringHostProfile(originalTarget);
+        if (secureOriginal) vodRedirectDirectCache.set(secureOriginal, direct);
+
+        if (playbackCandidates.includes(direct)) return false;
+        playbackCandidates.splice(vodIdx + 1, 0, direct);
+        console.log("[VOD DEBUG] redirect do proxy detectado — tentando CDN final direto", {
+          originalTarget,
+          redirectLocation,
+          direct,
+          ordemAtualizada: playbackCandidates,
+        });
+        return true;
+      } catch (e) {
+        console.log("[VOD DEBUG] redirect peek falhou", { erro: (e as Error).message });
+        return false;
+      }
+    };
+
     const recordFailedAttempt = (errMsg?: string) => {
       let kind: LivePlayerKind = "unknown";
       if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
@@ -816,7 +885,10 @@ export function VideoPlayer({
       destroyTsPlayer();
       // Tenta bypass 503 antes de avançar. Se injetar diretos, eles entram
       // logo após vodIdx; ao incrementar, cairemos no primeiro direto.
-      void maybeInject503Bypass().finally(() => {
+      void (async () => {
+        await maybeInject503Bypass();
+        await maybeInjectVodRedirectDirect();
+      })().finally(() => {
         vodIdx += 1;
         if (vodIdx < playbackCandidates.length) {
           const next = playbackCandidates[vodIdx];
