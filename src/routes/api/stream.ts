@@ -581,27 +581,39 @@ async function handle(request: Request) {
       ]
     : [];
 
-  const attemptPlans: UpstreamAttempt[] = isVod
-    ? uniqueAttempts([
-        ...vodFastPath,
-        ...UA_CANDIDATES.flatMap((ua) => [
-        // Waterfall por UA: se XCIPTV funcionar sem Range/Referer, não espera
-        // todos os outros UAs falharem primeiro. Isso reduz timeout no preview.
-        { ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const },
-        { ua, rangeValue: finiteVodRangeForUpstream(effectiveVodRange), originHeaderMode: "none" as const },
-        { ua, rangeValue: null, originHeaderMode: "none" as const },
-        { ua, rangeValue: effectiveVodRange, originHeaderMode: "referer" as const },
-        { ua, rangeValue: finiteVodRangeForUpstream(effectiveVodRange), originHeaderMode: "referer" as const },
-        { ua, rangeValue: null, originHeaderMode: "referer" as const },
-        { ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const },
-        { ua, rangeValue: range, originHeaderMode: "none" as const },
-        ]),
-      ])
-    : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
-        rangeCandidates.flatMap((rangeValue) =>
-          originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
-        ),
-      ));
+  // [RESTORE VOD] GET real de filme/série usa SOMENTE o fast-path
+  // (redirect:"follow", UA de navegador, Range do cliente). Era esse o
+  // fluxo que reproduzia VOD no preview web e no APK. O waterfall pesado
+  // (14 UAs × 8 combos × manual-redirect) estourava o budget do Worker
+  // antes do client receber o primeiro byte → 502 / "fetch failed".
+  // Probe, HEAD e redirect=peek continuam com o caminho completo, pois
+  // são chamados explicitamente para diagnóstico.
+  const isPlainVodGet = isVod && !isDiagProbe && !isRedirectPeek && request.method !== "HEAD";
+  const attemptPlans: UpstreamAttempt[] = isPlainVodGet
+    ? uniqueAttempts(
+        // Ordem: navegador desktop (web) → XCIPTV (APK / painel restrito).
+        // Range é repassado do cliente sem capping; CDN responde 206 normal.
+        VOD_UAS.slice(0, 4).map((ua) => ({
+          ua,
+          rangeValue: range,
+          originHeaderMode: "none" as const,
+          redirectStrategy: "follow" as const,
+        })),
+      )
+    : isVod
+      ? uniqueAttempts([
+          ...vodFastPath,
+          ...UA_CANDIDATES.flatMap((ua) => [
+            { ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const },
+            { ua, rangeValue: range, originHeaderMode: "none" as const },
+            { ua, rangeValue: null, originHeaderMode: "none" as const },
+          ]),
+        ])
+      : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
+          rangeCandidates.flatMap((rangeValue) =>
+            originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
+          ),
+        ));
 
   if (isRedirectPeek) {
     const peekHeaders = new Headers(CORS);
