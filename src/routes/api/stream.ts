@@ -396,6 +396,10 @@ async function handle(request: Request) {
   }
 
   if (isPlaylist && upstream.ok) {
+    if (request.method === "HEAD") {
+      respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
+      return new Response(null, { status: upstream.status, headers: respHeaders });
+    }
     const text = await upstream.text();
     const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
@@ -455,7 +459,7 @@ async function handle(request: Request) {
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(upstream.body, { status, headers: respHeaders });
+  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
