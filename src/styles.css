@@ -317,6 +317,24 @@ html[data-tv-mode] [role="dialog"][data-state="open"] {
   padding-bottom: 1.5rem !important;
 }
 
+/* APK Android (TV mode): o body é transformado (scale) e o WebView
+   ocasionalmente não dispara o evento de animação CSS do Radix Dialog
+   portado para o body. Sem o evento, o DialogContent ficava preso no
+   estado inicial das classes animate-in/fade-in-0/zoom-in-95
+   (opacity:0, scale(0.95)) enquanto o overlay (sem animação crítica)
+   aparecia normal — daí a "tela escura sem conteúdo" em CONTA / APP.
+   Forçamos o estado final visível em TV-mode; desktop/mobile-web
+   continuam com animação intacta. */
+html[data-tv-mode] [role="dialog"][data-state="open"] {
+  animation: none !important;
+  opacity: 1 !important;
+}
+html[data-tv-mode] [data-radix-popper-content-wrapper] [data-state="open"],
+html[data-tv-mode] [data-state="open"][data-side] {
+  animation: none !important;
+  opacity: 1 !important;
+}
+
 
 
 
