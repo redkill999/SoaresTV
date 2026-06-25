@@ -8,18 +8,30 @@ import {
 import { Button } from "@/components/ui/button";
 import { ClipboardCopy, Check, X } from "lucide-react";
 import { copyToClipboard } from "@/lib/live-diag-store";
-import { vodDiagFormat, type VodDiagSession } from "@/lib/vod-diag-store";
+import {
+  vodDiagFormat, vodDiagGetSessions, vodDiagSubscribe, type VodDiagSession,
+} from "@/lib/vod-diag-store";
 
 export function VodDiagPanel({
   session, open, onClose,
 }: { session: VodDiagSession | null; open: boolean; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [liveSession, setLiveSession] = useState<VodDiagSession | null>(session);
 
   useEffect(() => { if (!open) setCopied(false); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const refresh = () => {
+      const id = session?.id;
+      setLiveSession(id ? vodDiagGetSessions().find((s) => s.id === id) ?? session : session);
+    };
+    refresh();
+    return vodDiagSubscribe(refresh);
+  }, [open, session]);
 
   const doCopy = async () => {
-    if (!session) return;
-    const ok = await copyToClipboard(vodDiagFormat(session));
+    if (!liveSession) return;
+    const ok = await copyToClipboard(vodDiagFormat(liveSession));
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -37,9 +49,9 @@ export function VodDiagPanel({
           </DialogDescription>
         </DialogHeader>
 
-        {session ? (
+        {liveSession ? (
           <pre className="max-h-[55dvh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] leading-relaxed text-white/85">
-            {vodDiagFormat(session)}
+            {vodDiagFormat(liveSession)}
           </pre>
         ) : (
           <div className="text-sm text-white/60">Sem dados de sessão.</div>
@@ -49,7 +61,7 @@ export function VodDiagPanel({
           <Button variant="secondary" onClick={onClose} className="gap-2">
             <X className="size-4" /> Fechar
           </Button>
-          <Button onClick={doCopy} disabled={!session} className="gap-2">
+          <Button onClick={doCopy} disabled={!liveSession} className="gap-2">
             {copied ? <><Check className="size-4" /> Copiado</> : <><ClipboardCopy className="size-4" /> Copiar diagnóstico</>}
           </Button>
         </div>
