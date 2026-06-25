@@ -45,7 +45,7 @@ function num(v: string | null): number | null {
 }
 
 async function probeOnce(url: string, ua: string, name: LiveUaName | "preferred", timeoutMs = 6000): Promise<LiveProbeResult> {
-  const proxy = `/api/stream?u=${encodeURIComponent(url)}&ua=${encodeURIComponent(ua)}&v=6`;
+  const proxy = `/api/stream?u=${encodeURIComponent(url)}&ua=${encodeURIComponent(ua)}&v=7`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
