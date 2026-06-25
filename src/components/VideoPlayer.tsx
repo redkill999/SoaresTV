@@ -31,6 +31,13 @@ import {
   type LivePlayerKind,
 } from "@/lib/live-diag-store";
 import { LiveDiagPanel } from "@/components/LiveDiagPanel";
+import {
+  vodDiagStart, vodDiagRecordAttempt, vodDiagPatchAttempt,
+  vodDiagMarkPlaying, vodDiagMarkFailed, vodDiagLatestFailedFor,
+  vodDiagAttachFinalProbe, probeVodCandidateForDiag,
+  type VodPlayerKind,
+} from "@/lib/vod-diag-store";
+import { VodDiagPanel } from "@/components/VodDiagPanel";
 import { DEBUG } from "@/lib/debug";
 import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
@@ -194,6 +201,10 @@ export function VideoPlayer({
   // [LIVE DIAG] painel visível dentro do APK quando LIVE falha.
   const [diagOpen, setDiagOpen] = useState(false);
   const diagSessionIdRef = useRef<string | null>(null);
+  // [VOD DIAG] painel temporário para filmes/séries no preview web/APK.
+  const [vodDiagOpen, setVodDiagOpen] = useState(false);
+  const vodDiagSessionIdRef = useRef<string | null>(null);
+  const vodDiagFinalizingRef = useRef(false);
 
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
@@ -319,6 +330,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
+    vodDiagFinalizingRef.current = false;
     
     setCanManualPlay(false);
 
@@ -477,6 +489,32 @@ export function VideoPlayer({
       })();
     }
 
+    if (isVod) {
+      const vodHost = hostOf(workingSrc);
+      const sourceKind = /\/series\//i.test(workingSrc)
+        ? "series"
+        : /\/movie\//i.test(workingSrc)
+          ? "movie"
+          : "vod";
+      console.log("[VOD DEBUG] sessão iniciada", {
+        sourceKind,
+        originalUrl: src,
+        workingSrc,
+        host: vodHost,
+        forcedUA: forcedUA ?? "(auto)",
+        candidates: playbackCandidates,
+      });
+      vodDiagSessionIdRef.current = vodDiagStart({
+        sourceKind,
+        originalUrl: src,
+        workingSrc,
+        host: vodHost,
+        forcedUA,
+        finalCandidates: playbackCandidates.slice(),
+      });
+      setVodDiagOpen(false);
+    }
+
     // ===== [503 BYPASS] — host já marcado nesta sessão =====================
     // Se já vimos esse host responder 503 antes, prioriza diretos.
     const srcHost = hostOf(workingSrc);
@@ -579,9 +617,14 @@ export function VideoPlayer({
         let upstreamUA = "";
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
+        let contentLength = "";
+        let contentRange = "";
+        let acceptRanges = "";
         if (isProxy) {
+          const ac = new AbortController();
+          const probeTimer = setTimeout(() => ac.abort(), 6_000);
           try {
-            const res = await fetch(currentUrl, { method: "HEAD" });
+            const res = await fetch(currentUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
             probeStatus = res.status;
             upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
             upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
@@ -589,8 +632,13 @@ export function VideoPlayer({
             upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
+            contentLength = res.headers.get("content-length") ?? "";
+            contentRange = res.headers.get("content-range") ?? "";
+            acceptRanges = res.headers.get("accept-ranges") ?? "";
           } catch (e) {
             probeStatus = `probe-fail: ${(e as Error).message}`;
+          } finally {
+            clearTimeout(probeTimer);
           }
         }
         // eslint-disable-next-line no-console
@@ -608,12 +656,29 @@ export function VideoPlayer({
           httpStatusProxy: probeStatus,
           httpStatusUpstream: upstreamStatus,
           contentTypeUpstream: upstreamCt,
+          contentLength,
+          contentRange,
+          acceptRanges,
           urlFinalUpstream: upstreamFinal,
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
           playerEstrategia: lastPlayerStrategy,
         });
+        if (isVod && vodDiagSessionIdRef.current) {
+          vodDiagAttachFinalProbe(vodDiagSessionIdRef.current, {
+            clientStatus: probeStatus,
+            upstreamStatus,
+            contentType: upstreamCt,
+            contentLength,
+            contentRange,
+            acceptRanges,
+            finalUrl: upstreamFinal,
+            userAgent: upstreamUA,
+            originHeaders: upstreamOriginHdrs === "1",
+            redirected: upstreamRedirected === "1",
+          });
+        }
         // Painel visual removido — diagnóstico fica nos logs acima.
 
       } catch {
@@ -691,21 +756,49 @@ export function VideoPlayer({
     };
 
     const recordFailedAttempt = (errMsg?: string) => {
-      if (!isLive || !diagSessionIdRef.current) return;
       let kind: LivePlayerKind = "unknown";
       if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
       else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
       else if (lastPlayerStrategy.startsWith("HTML5")) kind = "html5";
       const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
       const ve = videoRef.current?.error ?? null;
-      liveDiagRecordAttempt(diagSessionIdRef.current, {
-        player: kind,
-        url,
-        result: "fail",
-        error: errMsg ?? ve?.message ?? lastPlayerStrategy,
-        videoErrorCode: ve?.code ?? null,
-        at: Date.now(),
-      });
+      const baseError = errMsg ?? ve?.message ?? lastPlayerStrategy;
+      if (isLive && diagSessionIdRef.current) {
+        liveDiagRecordAttempt(diagSessionIdRef.current, {
+          player: kind,
+          url,
+          result: "fail",
+          error: baseError,
+          videoErrorCode: ve?.code ?? null,
+          at: Date.now(),
+        });
+      }
+      if (isVod && vodDiagSessionIdRef.current) {
+        const sessionId = vodDiagSessionIdRef.current;
+        const attemptId = vodDiagRecordAttempt(vodDiagSessionIdRef.current, {
+          player: kind as VodPlayerKind,
+          url,
+          result: "fail",
+          error: baseError,
+          videoErrorCode: ve?.code ?? null,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          currentTime: video.currentTime,
+          duration: Number.isFinite(video.duration) ? video.duration : undefined,
+          at: Date.now(),
+        });
+        void probeVodCandidateForDiag(url).then((probe) => {
+          vodDiagPatchAttempt(sessionId, attemptId, probe);
+        });
+        console.warn("[VOD DEBUG] tentativa falhou", {
+          player: kind,
+          url,
+          error: baseError,
+          videoErrorCode: ve?.code ?? null,
+          readyState: video.readyState,
+          networkState: video.networkState,
+        });
+      }
     };
 
     const tryNextVod = (reason?: string) => {
@@ -768,7 +861,20 @@ export function VideoPlayer({
             lastStrategy: lastPlayerStrategy,
             videoErrorCode: code,
           });
-          void reportPlaybackFailure(msg);
+          // Para VOD aguardamos o HEAD rápido do proxy antes de abrir o painel,
+          // senão o usuário via "Sem probe" enquanto o fetch ainda estava em
+          // andamento. LIVE mantém comportamento anterior para não mexer nos canais.
+          if (isVod) {
+            vodDiagFinalizingRef.current = true;
+            void reportPlaybackFailure(msg).finally(() => {
+              vodDiagFinalizingRef.current = false;
+              if (cancelled) return;
+              if (vodDiagSessionIdRef.current) vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
+              setVodDiagOpen(true);
+            });
+          } else {
+            void reportPlaybackFailure(msg);
+          }
           if (isLive && diagSessionIdRef.current) {
             liveDiagMarkFailed(diagSessionIdRef.current, msg);
             setDiagOpen(true);
@@ -1112,6 +1218,13 @@ export function VideoPlayer({
             else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
             const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
             liveDiagMarkPlaying(diagSessionIdRef.current, kind, url);
+          }
+          if (isVod && vodDiagSessionIdRef.current) {
+            let kind: VodPlayerKind = "html5";
+            if (lastPlayerStrategy.startsWith("HLS")) kind = "hls";
+            else if (lastPlayerStrategy.startsWith("mpegts")) kind = "mpegts";
+            const url = playbackCandidates[Math.min(vodIdx, playbackCandidates.length - 1)] ?? workingSrc;
+            vodDiagMarkPlaying(vodDiagSessionIdRef.current, kind, url);
           }
         }
 
@@ -1562,7 +1675,7 @@ export function VideoPlayer({
                 }, delay);
               } else {
                 detachStallListeners?.();
-                tryNextVod();
+                tryNextVod(`HLS NETWORK_ERROR: ${data.details ?? "unknown"}`);
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1578,7 +1691,7 @@ export function VideoPlayer({
                 hls?.recoverMediaError();
               } else {
                 detachStallListeners?.();
-                tryNextVod();
+                tryNextVod(`HLS MEDIA_ERROR: ${data.details ?? "unknown"}`);
               }
               return;
             default:
@@ -1653,6 +1766,16 @@ export function VideoPlayer({
     const id = diagSessionIdRef.current;
     if (id) liveDiagMarkFailed(id, error);
     setDiagOpen(true);
+  }, [error, kind]);
+
+  // [VOD DIAG] Quando filmes/séries falham, marca falha e abre painel.
+  useEffect(() => {
+    if (!error) return;
+    if (kind !== "vod") return;
+    if (vodDiagFinalizingRef.current) return;
+    const id = vodDiagSessionIdRef.current;
+    if (id) vodDiagMarkFailed(id, error);
+    setVodDiagOpen(true);
   }, [error, kind]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
@@ -1846,6 +1969,13 @@ export function VideoPlayer({
           onClose={() => setDiagOpen(false)}
         />
       )}
+      {kind === "vod" && (
+        <VodDiagPanel
+          session={vodDiagSessionIdRef.current ? vodDiagLatestFailedFor(src) : null}
+          open={vodDiagOpen}
+          onClose={() => setVodDiagOpen(false)}
+        />
+      )}
       {error && kind === "live" && !diagOpen && (
         <button
           type="button"
@@ -1853,6 +1983,15 @@ export function VideoPlayer({
           className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
         >
           Ver diagnóstico
+        </button>
+      )}
+      {error && kind === "vod" && !vodDiagOpen && (
+        <button
+          type="button"
+          onClick={() => setVodDiagOpen(true)}
+          className="absolute right-3 top-3 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-white/90 backdrop-blur hover:bg-white/20 border border-white/15"
+        >
+          Ver diagnóstico VOD
         </button>
       )}
 

@@ -1080,20 +1080,35 @@ import {
   liveDiagGetSessions, liveDiagSubscribe, liveDiagClear, liveDiagFormat,
   liveDiagFormatAll, copyToClipboard, type LiveDiagSession,
 } from "@/lib/live-diag-store";
+import {
+  vodDiagGetSessions, vodDiagSubscribe, vodDiagClear, vodDiagFormat,
+  vodDiagFormatAll, type VodDiagSession,
+} from "@/lib/vod-diag-store";
 
 function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [sessions, setSessions] = useState<LiveDiagSession[]>([]);
+  const [mode, setMode] = useState<"live" | "vod">("vod");
+  const [liveSessions, setLiveSessions] = useState<LiveDiagSession[]>([]);
+  const [vodSessions, setVodSessions] = useState<VodDiagSession[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setSessions(liveDiagGetSessions());
-    const off = liveDiagSubscribe(() => setSessions(liveDiagGetSessions()));
-    return off;
+    setLiveSessions(liveDiagGetSessions());
+    setVodSessions(vodDiagGetSessions());
+    const offLive = liveDiagSubscribe(() => setLiveSessions(liveDiagGetSessions()));
+    const offVod = vodDiagSubscribe(() => setVodSessions(vodDiagGetSessions()));
+    return () => { offLive(); offVod(); };
   }, [open]);
 
+  const sessions = mode === "live" ? liveSessions : vodSessions;
   const selected = sessions.find((s) => s.id === selectedId) ?? sessions[0] ?? null;
+  const selectedText = selected
+    ? mode === "live"
+      ? liveDiagFormat(selected as LiveDiagSession)
+      : vodDiagFormat(selected as VodDiagSession)
+    : "";
+  const allText = mode === "live" ? liveDiagFormatAll() : vodDiagFormatAll();
 
   const copy = async (key: string, text: string) => {
     const ok = await copyToClipboard(text);
@@ -1112,14 +1127,31 @@ function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Diagnóstico IPTV</DialogTitle>
           <DialogDescription className="text-white/60">
-            Últimas {sessions.length} sessões LIVE registradas (máximo 50). Cada entrada inclui
-            URL original/final, status HTTP, content-type, User-Agent, player utilizado e erros.
+            Logs temporários LIVE e VOD (máximo 50 por tipo). Cada entrada inclui URL original/final,
+            status HTTP, content-type, User-Agent, player utilizado e erros.
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={mode === "vod" ? "secondary" : "ghost"}
+            onClick={() => { setMode("vod"); setSelectedId(null); }}
+          >
+            VOD ({vodSessions.length})
+          </Button>
+          <Button
+            size="sm"
+            variant={mode === "live" ? "secondary" : "ghost"}
+            onClick={() => { setMode("live"); setSelectedId(null); }}
+          >
+            LIVE ({liveSessions.length})
+          </Button>
+        </div>
+
         {sessions.length === 0 ? (
           <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-center text-sm text-white/60">
-            Nenhuma sessão registrada ainda. Tente reproduzir um canal LIVE.
+            Nenhuma sessão {mode === "vod" ? "VOD" : "LIVE"} registrada ainda. Tente reproduzir {mode === "vod" ? "um filme ou série" : "um canal LIVE"}.
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-[260px_1fr]">
@@ -1159,7 +1191,7 @@ function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => copy(`one-${selected.id}`, liveDiagFormat(selected))}
+                      onClick={() => copy(`one-${selected.id}`, selectedText)}
                       className="gap-2"
                     >
                       {copiedKey === `one-${selected.id}`
@@ -1169,7 +1201,7 @@ function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => copy("all", liveDiagFormatAll())}
+                      onClick={() => copy("all", allText)}
                       className="gap-2"
                     >
                       {copiedKey === "all"
@@ -1178,7 +1210,7 @@ function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
                     </Button>
                   </div>
                   <pre className="flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] leading-relaxed text-white/85">
-                    {liveDiagFormat(selected)}
+                    {selectedText}
                   </pre>
                 </>
               )}
@@ -1190,7 +1222,12 @@ function DiagDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { liveDiagClear(); setSessions([]); setSelectedId(null); toast.success("Histórico limpo"); }}
+            onClick={() => {
+              if (mode === "live") { liveDiagClear(); setLiveSessions([]); }
+              else { vodDiagClear(); setVodSessions([]); }
+              setSelectedId(null);
+              toast.success("Histórico limpo");
+            }}
             className="text-white/60 hover:text-white"
           >
             Limpar histórico
