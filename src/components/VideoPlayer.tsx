@@ -2223,6 +2223,16 @@ export function VideoPlayer({
           Ver diagnóstico VOD
         </button>
       )}
+      {/* VOD DEBUG OVERLAY (temporário). Para remover: apagar este bloco e o
+          import de VodDebugOverlay + o arquivo src/components/VodDebugOverlay.tsx. */}
+      {error && kind === "vod" && !vodDebugDismissed && (
+        <VodDebugOverlay
+          src={src}
+          errorMessage={error}
+          kind="vod"
+          onClose={() => setVodDebugDismissed(true)}
+        />
+      )}
 
       {canManualPlay && !error && playerMode === "web" && (
         <button
