@@ -770,6 +770,7 @@ export function VideoPlayer({
         });
       }
       if (isVod && vodDiagSessionIdRef.current) {
+        const sessionId = vodDiagSessionIdRef.current;
         const attemptId = vodDiagRecordAttempt(vodDiagSessionIdRef.current, {
           player: kind as VodPlayerKind,
           url,
@@ -783,7 +784,7 @@ export function VideoPlayer({
           at: Date.now(),
         });
         void probeVodCandidateForDiag(url).then((probe) => {
-          if (vodDiagSessionIdRef.current) vodDiagPatchAttempt(vodDiagSessionIdRef.current, attemptId, probe);
+          vodDiagPatchAttempt(sessionId, attemptId, probe);
         });
         console.warn("[VOD DEBUG] tentativa falhou", {
           player: kind,
