@@ -450,7 +450,8 @@ async function handle(request: Request) {
   // (que tem caminho separado). Só ativa para VOD não-playlist no GET real.
   const vodFastPath: UpstreamAttempt[] = isVod && !isDiagProbe && !isRedirectPeek && request.method !== "HEAD"
     ? [
-        { ua: VOD_UAS[0], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const },
+        { ua: VOD_UAS[0], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const, redirectStrategy: "follow" as const },
+        { ua: VOD_UAS[1], rangeValue: range || effectiveVodRange, originHeaderMode: "none" as const, redirectStrategy: "follow" as const },
       ]
     : [];
 
