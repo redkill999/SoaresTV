@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { getPlatformConfig } from "@/lib/platform";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
@@ -816,14 +817,15 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
-        // FIX WEB-LIVE: mpegts.js com enableWorker=true faz fetch dentro de um
-        // Web Worker (WorkerGlobalScope), que NÃO resolve URLs relativas
-        // (`/api/stream?...`) — erro "Failed to parse URL". Absolutizamos
-        // contra window.location.origin antes de criar o player.
+        // Config de plataforma (APK vs Web) — fonte única em src/lib/platform.ts.
+        // Qualquer ajuste futuro de APK não pode vazar pro browser e vice-versa.
+        const platformCfg = getPlatformConfig();
         const absoluteUrl =
-          /^https?:\/\//i.test(url) || typeof window === "undefined"
-            ? url
-            : new URL(url, window.location.origin).toString();
+          platformCfg.absolutizeProxyUrl &&
+          !/^https?:\/\//i.test(url) &&
+          typeof window !== "undefined"
+            ? new URL(url, window.location.origin).toString()
+            : url;
         currentPlaybackUrl = absoluteUrl;
         lastPlayerStrategy = "mpegts.js";
         // [LIVE STABILITY] Config relaxada para H.265/HEVC FHD:
@@ -838,13 +840,10 @@ export function VideoPlayer({
           { type: "mpegts", isLive: true, url: absoluteUrl },
           {
             isLive: true,
-            // FIX WEB-LIVE: enableWorker=true criava o demux worker via Blob
-            // URL, gerando origin "null". Em vários Chromium isso faz o
-            // fetch interno cair em "Failed to fetch" mesmo para same-origin
-            // (/api/stream). Demux na main thread custa muito pouco e
-            // elimina a classe inteira de bugs do worker (URL parsing,
-            // CORS de origin null, etc.).
-            enableWorker: false,
+            // enableWorker vem do preset por plataforma:
+            //   web  → false (Blob worker = origin null = "Failed to fetch")
+            //   apk  → true  (WebView Android aceita)
+            enableWorker: platformCfg.mpegts.enableWorker,
             enableStashBuffer: true,
             stashInitialSize: 1024,           // KB inicial — dá fôlego para FHD/H.265
             liveBufferLatencyChasing: false,
