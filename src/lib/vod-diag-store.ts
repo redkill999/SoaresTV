@@ -19,6 +19,7 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  probeError?: string;
   error?: string;
 };
 
@@ -188,7 +189,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
-  if (probe.error) lines.push(`erro probe:         ${probe.error}`);
+  if (probe.probeError) lines.push(`erro probe:         ${probe.probeError}`);
 }
 
 export function vodDiagFormat(s: VodDiagSession): string {
@@ -220,7 +221,7 @@ export function vodDiagFormat(s: VodDiagSession): string {
       if (a.error) lines.push(`   erro:  ${a.error}`);
       if (a.videoErrorCode != null) lines.push(`   video error code: ${a.videoErrorCode}`);
       lines.push(`   ready/network: ${a.readyState ?? "?"}/${a.networkState ?? "?"} t=${fixed(a.currentTime)} dur=${fixed(a.duration)}`);
-      if (a.clientStatus != null || a.upstreamStatus || a.contentType || a.error) {
+      if (a.clientStatus != null || a.upstreamStatus || a.contentType || a.probeError) {
         lines.push("   HTTP:");
         const sub: string[] = [];
         fmtProbe(sub, a);
@@ -256,7 +257,7 @@ export function vodDiagFormatAll(): string {
 }
 
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
-  if (!url.startsWith("/api/stream")) return { error: "URL direta: probe HTTP omitido para evitar CORS" };
+  if (!url.startsWith("/api/stream")) return { probeError: "URL direta: probe HTTP omitido para evitar CORS" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6_000);
   try {
@@ -274,7 +275,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
     };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "probe falhou" };
+    return { probeError: e instanceof Error ? e.message : "probe falhou" };
   } finally {
     clearTimeout(t);
   }
