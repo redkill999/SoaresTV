@@ -98,7 +98,7 @@ async function unlockOrientation() {
 // natively. Most providers also expose an HLS variant at the same path with
 // `.m3u8`. We try HLS first and fall back to the original on error. Everything
 // flows through our stream proxy to dodge CORS / mixed-content.
-const STREAM_PROXY_PATH = "/api/public/stream";
+const STREAM_PROXY_PATH = "/api/stream";
 
 function isStreamProxyUrl(url: string | null | undefined): boolean {
   return !!url && (url.startsWith(STREAM_PROXY_PATH) || url.startsWith("/api/stream"));

@@ -41,7 +41,7 @@ function debugJsonResponse(status: number, payload: Debug502Payload, headersInit
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
   const kindPart = kind === "vod" ? "&kind=vod" : "";
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/public/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}${kindPart}&v=7${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -1191,7 +1191,7 @@ async function safeHandle(request: Request): Promise<Response> {
 
 
 
-export const Route = createFileRoute("/api/public/stream")({
+export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
