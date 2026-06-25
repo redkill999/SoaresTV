@@ -239,6 +239,8 @@ export function VideoPlayer({
   const diagSessionIdRef = useRef<string | null>(null);
   // [VOD DIAG] painel temporário para filmes/séries no preview web/APK.
   const [vodDiagOpen, setVodDiagOpen] = useState(false);
+  const [vodDebugDismissed, setVodDebugDismissed] = useState(false);
+  useEffect(() => { if (!error) setVodDebugDismissed(false); }, [error, src]);
   const vodDiagSessionIdRef = useRef<string | null>(null);
   const vodDiagFinalizingRef = useRef(false);
 
