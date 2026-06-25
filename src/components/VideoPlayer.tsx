@@ -842,14 +842,21 @@ export function VideoPlayer({
             lastStrategy: lastPlayerStrategy,
             videoErrorCode: code,
           });
-          void reportPlaybackFailure(msg);
+          // Para VOD aguardamos o HEAD rápido do proxy antes de abrir o painel,
+          // senão o usuário via "Sem probe" enquanto o fetch ainda estava em
+          // andamento. LIVE mantém comportamento anterior para não mexer nos canais.
+          if (isVod) {
+            void reportPlaybackFailure(msg).finally(() => {
+              if (cancelled) return;
+              if (vodDiagSessionIdRef.current) vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
+              setVodDiagOpen(true);
+            });
+          } else {
+            void reportPlaybackFailure(msg);
+          }
           if (isLive && diagSessionIdRef.current) {
             liveDiagMarkFailed(diagSessionIdRef.current, msg);
             setDiagOpen(true);
-          }
-          if (isVod && vodDiagSessionIdRef.current) {
-            vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
-            setVodDiagOpen(true);
           }
           setError(msg);
         }
