@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Failure-Class, X-Stream-Redirect-Mode",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
