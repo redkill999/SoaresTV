@@ -696,8 +696,9 @@ async function handle(request: Request) {
         attemptTraces.push(trace);
         try {
           const controller = new AbortController();
-          const timeoutMs = isDiagProbe || playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
+          const timeoutMs = isDiagProbe ? 30_000 : playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
           const timeout = setTimeout(() => controller.abort(), timeoutMs);
+          const fetchStartedAt = Date.now();
           let res: Response;
           let resolvedRedirectManually = false;
           try {
