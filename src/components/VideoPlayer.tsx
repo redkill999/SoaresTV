@@ -330,6 +330,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video || !src) return;
     setError(null);
+    vodDiagFinalizingRef.current = false;
     
     setCanManualPlay(false);
 
@@ -861,8 +862,8 @@ export function VideoPlayer({
           if (isVod) {
             vodDiagFinalizingRef.current = true;
             void reportPlaybackFailure(msg).finally(() => {
-              if (cancelled) return;
               vodDiagFinalizingRef.current = false;
+              if (cancelled) return;
               if (vodDiagSessionIdRef.current) vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
               setVodDiagOpen(true);
             });
