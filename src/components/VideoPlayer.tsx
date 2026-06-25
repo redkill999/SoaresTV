@@ -40,6 +40,7 @@ import {
   type VodPlayerKind,
 } from "@/lib/vod-diag-store";
 import { VodDiagPanel } from "@/components/VodDiagPanel";
+import { VodDebugOverlay } from "@/components/VodDebugOverlay";
 import { DEBUG } from "@/lib/debug";
 import { auditEvent } from "@/lib/audit-trace";
 export type { PlaybackStrategy } from "@/lib/host-profile";
