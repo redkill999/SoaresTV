@@ -225,6 +225,10 @@ async function handle(request: Request) {
           });
           clearTimeout(timeout);
           lastStatus = res.status;
+          usedUA = ua;
+          usedOriginHeaders = originHeaderMode !== "none";
+          usedFinalUrl = res.url || upstreamUrl.toString();
+          usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
@@ -235,10 +239,6 @@ async function handle(request: Request) {
           const retryVodCompat404 = isVod && res.status === 404;
           if (!retryBlocked && !retryBadRange && !retryVodCompat404) {
             upstream = res;
-            usedUA = ua;
-            usedOriginHeaders = originHeaderMode !== "none";
-            usedFinalUrl = res.url || upstreamUrl.toString();
-            usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
             break attempt;
           }
           try { await res.body?.cancel(); } catch { /* noop */ }
@@ -253,8 +253,9 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
     failHeaders.set("X-Upstream-Final-Url", upstreamUrl.toString());
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
+    const clientStatus = lastStatus && lastStatus < 500 ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
-      status: lastStatus === 401 || lastStatus === 403 ? lastStatus : 502,
+      status: clientStatus,
       headers: failHeaders,
     });
   }
