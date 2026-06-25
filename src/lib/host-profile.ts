@@ -56,7 +56,17 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
+  // Lista validada estável (canais, filmes e séries OK em web + APK).
+  // Mantém HTTP original e pula proxy para evitar regressões.
+  "ultrapremium.live": {
+    disableProxy: true,
+    forceHttp: true,
+    bypassProxyForLive: true,
+    disableHlsConversion: true,
+    preferTs: true,
+  },
 };
+
 
 const STORAGE_KEY = "iptv.hostProfiles.v1";
 // Chaves legadas migradas no boot.
