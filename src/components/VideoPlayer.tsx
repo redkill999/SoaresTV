@@ -1794,37 +1794,11 @@ export function VideoPlayer({
           </button>
         </div>
       )}
-      {error && (() => {
-        const isWebVodFail = kind === "vod" && getPlatformConfig().platform === "web";
-        if (!isWebVodFail) {
-          return (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive z-10">
-              {error}
-            </div>
-          );
-        }
-        return (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-player/85 px-6 backdrop-blur-sm">
-            <div className="max-w-md rounded-xl border border-white/10 bg-black/60 p-5 text-center shadow-2xl">
-              <div className="mb-2 text-3xl">📺</div>
-              <h3 className="mb-2 text-base font-semibold text-white">
-                Este filme/série não roda no preview web
-              </h3>
-              <p className="mb-3 text-sm leading-relaxed text-white/80">
-                O CDN da sua lista bloqueia conexões vindas de servidores de datacenter (como este preview).
-                A reprodução funciona normalmente no <strong>APK Android</strong>, porque a conexão sai
-                direto do seu celular para o servidor da lista.
-              </p>
-              <p className="text-xs text-white/50">
-                Canais ao vivo continuam funcionando no preview. Filmes e séries: teste no APK.
-              </p>
-              <p className="mt-3 text-[10px] uppercase tracking-wider text-white/30">
-                {error}
-              </p>
-            </div>
-          </div>
-        );
-      })()}
+      {error && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive z-10">
+          {error}
+        </div>
+      )}
       {/* Painel visual de debug removido (apenas logs internos). */}
       {kind === "live" && (
         <LiveDiagPanel
