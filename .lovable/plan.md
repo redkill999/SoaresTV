@@ -1,48 +1,47 @@
+## Recuperação cirúrgica do app (LIVE/MOVIES/SERIES)
 
-# Playback Engine 5.0 — Plano
+Estado atual: LIVE funciona. VOD (filmes/séries) falha. O proxy `src/routes/api/stream.ts` (1228 linhas) e o `VideoPlayer.tsx` (2264 linhas) acumularam camadas experimentais (probe, debug overlay, platform badge, audit, fast-path, redirect manual com matriz de UA × cookies × Referer/Origin × Range × retry). Esse acoplamento é a causa raiz das regressões.
 
-Antes de tocar em ~1250 linhas do `VideoPlayer.tsx` (hoje funcional para esma26.top e demais listas), preciso confirmar a estratégia. Muitas das regras pedidas **já estão implementadas** (ver coluna "estado atual"). Quero evitar regressão.
+Antes de executar, preciso confirmar o escopo da reversão porque uma reescrita errada do `VideoPlayer` derruba os canais que estão funcionando hoje.
 
-## Estado atual vs. pedido
+### Fase 1 — Remoção do código de diagnóstico (sem risco para LIVE)
 
-| Item | Já existe | Falta |
-|---|---|---|
-| 2. HostProfile persistente | ✅ `src/lib/host-profile.ts` (localStorage + Capacitor Preferences, migração legado) | Campos extras: `lastWorkingStrategy` (=`preferPlayer`), `useProxy` (=`!disableProxy`), `preferredUserAgent`, `lastError`, `stabilityScore` |
-| 3. Motor de decisão por perfil | ✅ parcial: consulta perfil para `disableProxy`/`forceHttp` | Ordem fixa Exo→mpegts→html5→hls hoje é "candidate URLs", não "engines" |
-| 5. 502/503/504 desativa proxy | ✅ `isProxyDeadStatus` + `rememberProxyDead` | ok |
-| 6. Nunca forçar HTTPS | ✅ `httpsVariant` respeita `forceHttp` | ok |
-| 7. Buffer ExoPlayer (15s/50s/3s/5s) | ✅ `src/lib/native-player.ts` | ok |
-| 8. Instância única | ✅ cleanup destrói hls/mpegts/nativo | ok |
-| 10. Restore no relogin | ✅ persistência sobrevive | ok |
-| 1. Arquivo central `PlaybackEngine.playStream()` | ❌ lógica vive no `useEffect` do `VideoPlayer` | criar |
-| 4. Anti-fragmentação (1 engine por vez, sem paralelo) | ⚠️ hoje é sequencial mas o código mistura HLS/mpegts/HTML5 no mesmo loop de candidatos | refatorar em "tentativas de engine" |
-| 9. Fallback Exo→mpegts→html5→hls | ⚠️ no APK Exo é tudo-ou-nada; no web a ordem é HLS-first para `.ts` ao vivo (decisão histórica, funciona melhor com Xtream) | **conflito real — ver pergunta abaixo** |
-| 11. UI fullscreen (centralização, safe-area, z-index) | ? não inspecionei ainda | revisar |
-| 12. Logs `[PLAYBACK ENGINE]` unificados | ⚠️ hoje há `[STREAM DEBUG]`, `[503 BYPASS]`, `[HOST PROFILE]` separados | unificar prefixo |
+Apagar imports/usos e arquivos:
+- `src/components/PlatformBadge.tsx` (+ remover de `__root.tsx`)
+- `src/components/VodDebugOverlay.tsx` (+ remover de `VideoPlayer.tsx`)
+- `src/components/VodDiagPanel.tsx`, `src/components/LiveDiagPanel.tsx` (+ remover da página `settings.tsx`)
+- `src/lib/vod-diag-store.ts`, `src/lib/live-diag-store.ts`, `src/lib/live-debug.ts`
+- `src/lib/vod-platform-log.ts`, `src/lib/audit-trace.ts`, `src/lib/platform-flags.ts`
+- Logs `[VOD AUDIT]`, `[VOD WEB]`, `[VOD ANDROID]`, `plog`, `probeLiveStream`, `assertPlatform`
 
-## Pontos que precisam decisão sua
+### Fase 2 — Simplificação do proxy `src/routes/api/stream.ts`
 
-1. **Ordem no web (navegador desktop):** o pedido diz "ExoPlayer → mpegts → HTML5 → HLS". ExoPlayer só existe no APK. No browser, hoje tentamos **HLS primeiro** para canais `.ts` ao vivo porque mpegts.js direto falha na maioria dos painéis Xtream (CORS/codec). Inverter para "mpegts antes de HLS" tem risco real de quebrar listas que hoje funcionam no preview web.
-   - Opção A: manter HLS-first **no web** e Exo-first **no APK**.
-   - Opção B: aplicar literalmente Exo→mpegts→HTML5→HLS em ambos (risco de regressão no preview).
+Reduzir para responsabilidade única:
+- LIVE: mantém o caminho atual que funciona (rewrite de HLS + ciclo curto de UA).
+- VOD: **apenas fast-path** — um `fetch` por UA (lista curta de 4), `redirect: "follow"`, repasse de `Range` do cliente, repasse direto de status/headers do upstream.
+- Remover: `debugJsonResponse`, `normalizeVodFailureResponse`, `redirect=peek`, `probe=1`, `finalRedirectHeaderPlans`, ciclo Referer/Origin/Cookie, `sliceReadableStream`, classificações `redirected-cdn-404-html`, headers `X-Upstream-*` e `X-Debug-*`.
+- Erros sempre como JSON `{error, status}` (nunca HTML).
 
-2. **Refactor em novo arquivo `PlaybackEngine.ts` vs. refactor in-place:** extrair toda a máquina de estado para um serviço fora do componente é uma reescrita grande. Posso fazer isso, mas o risco de quebrar a integração com `useEffect`/cleanup/`stopNative`/listeners do `<video>` é alto. Alternativa: **manter no `VideoPlayer.tsx` mas reorganizar como máquina de estados explícita** (`tryEngine('exo')` → `tryEngine('mpegts')` → …) e deixar o "engine" exportado como módulo separado para os helpers puros (decisão de ordem, montagem de URL, perfil).
+### Fase 3 — Limpeza do `VideoPlayer.tsx`
 
-3. **UI fullscreen:** você relatou problema específico, ou é preventivo? Hoje funciona ok em landscape no APK. Mexer em z-index/safe-area sem repro pode quebrar o overlay nativo.
+Manter intacto o fluxo LIVE (memória do projeto: "fazer ajuste cirúrgico"). Cortar apenas:
+- Remoção do `<VodDebugOverlay/>` e seus estados.
+- Remoção de `assertPlatform`, `plog`, `[VOD AUDIT]`, `probeLiveStream`, `vod-diag-store`, `live-diag-store`.
+- Para VOD: lista de candidatos volta a ser `[workingSrc, ...fallbackSrcs]` (já está assim após último ajuste) — sem multiplicar extensões, sem `vodRedirectDirectCache`, sem `deadBases`, sem peek.
+- `host-profile.ts`: manter (LIVE depende dele).
+- `playback-engine.ts`: manter (LIVE usa `decideEngineOrder`).
 
-4. **Campos extras do HostProfile** (`stabilityScore`, `preferredUserAgent`, `lastError`): são realmente necessários agora ou bastam os 3 atuais (`disableProxy`, `forceHttp`, `preferPlayer`)? Adicionar campos sem consumidor é overhead.
+### Fase 4 — Validação
 
-## Proposta recomendada (cirúrgica, baixo risco)
+Após cada fase rodar typecheck. Pedir ao usuário para validar 1 canal + 1 filme + 1 episódio no preview e APK.
 
-Se confirmar, faço **nessa ordem, sem reescrever o componente inteiro**:
+### Risco
 
-1. Extrair `src/lib/playback-engine.ts` com funções puras: `decideEngineOrder(host, format, isNative)`, `buildCandidateUrls(...)`, `classifyError(...)`. Sem React, sem efeitos colaterais além do `host-profile`.
-2. No `VideoPlayer.tsx`, substituir o loop de candidatos atual por chamadas a `decideEngineOrder()` + uma função `runEngine(engine, url)` por tentativa, garantindo `destroyTsPlayer()`/`hls.destroy()` entre cada uma.
-3. Unificar logs sob prefixo `[PLAYBACK ENGINE]` mantendo os antigos como apelidos por uma versão (para não perder rastreio).
-4. **Não mexer** em: design, login, listas, AppShell, `native-player.ts` (buffer já ok), `host-profile.ts` (já cobre o essencial — adiciono só `preferredUserAgent` se útil).
-5. **Não inverter** ordem HLS↔mpegts no web sem teste; manter Opção A.
-6. UI fullscreen: só toco se você confirmar um sintoma específico.
+A reescrita de `VideoPlayer.tsx` (2264 linhas) tem risco real de quebrar LIVE. Por isso a Fase 3 é **subtractiva** — só removo imports/blocos de diagnóstico, sem reescrever a lógica de seleção de player.
 
-## Pergunta
+### Pergunta antes de executar
 
-Confirma **Opção A** (preservar HLS-first no web, Exo-first no APK) e o refactor cirúrgico acima? Ou prefere **Opção B** (aplicar literalmente a ordem pedida em todos os ambientes, aceitando risco de regressão no preview web)?
+Confirma que posso:
+1. Apagar os arquivos listados na Fase 1 (não há outra dependência além de `settings.tsx` e `__root.tsx`).
+2. Reescrever `api/stream.ts` mantendo só LIVE-rewrite + VOD fast-path (sem `probe`, sem `peek`, sem `X-Upstream-*`).
+3. Remover do `VideoPlayer.tsx` apenas os blocos de diagnóstico, **sem mexer** na ordem de players, host-profile, ou recuperação de stall (que LIVE usa).
