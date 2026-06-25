@@ -10,7 +10,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
   // Expõe headers de diagnóstico (X-Upstream-*) para o player ler no client
   // e imprimir relatório completo no console quando ocorrer erro de reprodução.
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode, X-Debug-Phase, X-Debug-Reason, X-Debug-Line",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Location, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-Redirect-Location, X-Upstream-Direct-Candidate, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected, X-Upstream-Redirect-Cookie, X-Upstream-Failure-Class, X-Upstream-Dead-Media-Bases, X-Stream-Redirect-Mode, X-Debug-Phase, X-Debug-Reason, X-Debug-Line, X-Debug-Original-Status",
 };
 
 const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
@@ -36,6 +36,18 @@ function debugJsonResponse(status: number, payload: Debug502Payload, headersInit
     console.error("[API_STREAM_502]", payload);
   }
   return new Response(JSON.stringify(payload, null, 2), { status, headers });
+}
+
+function normalizeVodFailureResponse(response: Response, kind: "vod" | "live" | "unknown") {
+  // TanStack/Lovable trata respostas 5xx de server routes como runtime error
+  // fatal na preview. Para VOD, 5xx aqui significa falha do upstream/proxy e o
+  // player precisa apenas tentar o próximo candidato ou mostrar diagnóstico.
+  // Mantemos corpo + headers técnicos, mas devolvemos 424 para não derrubar a UI.
+  if (kind !== "vod" || response.status < 500) return response;
+  const headers = new Headers(response.headers);
+  headers.set("X-Debug-Original-Status", String(response.status));
+  headers.set("X-Upstream-Fallback", "1");
+  return new Response(response.body, { status: 424, statusText: "Failed Dependency", headers });
 }
 
 function proxyUrl(absolute: string, ua?: string | null, kind?: "live" | "vod") {
@@ -1185,6 +1197,7 @@ async function safeHandle(request: Request): Promise<Response> {
   }
   // Marca toda resposta que saiu deste loader — prova de que a request
   // foi efetivamente roteada para api/public/stream.ts.
+  response = normalizeVodFailureResponse(response, kind);
   try { response.headers.set("X-Api-Stream-Reached", "yes"); } catch { /* immutable */ }
   return response;
 }

@@ -41,7 +41,7 @@ type Props = {
   onClose: () => void;
 };
 
-const STREAM_PROXY_PATH = "/api/public/stream";
+const STREAM_PROXY_PATH = "/api/stream";
 
 function classifyTag(d: ProxyDiag | null, errorMessage: string): string {
   const phase = (d?.phase || "").toLowerCase();
