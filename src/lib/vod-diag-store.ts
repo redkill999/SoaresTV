@@ -21,6 +21,7 @@ export type VodHttpProbe = {
   userAgent?: string;
   originHeaders?: boolean;
   redirected?: boolean;
+  redirectCookie?: boolean;
   failureClass?: string;
   deadMediaBases?: string;
   redirectMode?: string;
@@ -200,6 +201,7 @@ function fmtProbe(lines: string[], probe?: VodHttpProbe): void {
   lines.push(`ua upstream:        ${probe.userAgent || "(vazio)"}`);
   lines.push(`origin/referer:     ${probe.originHeaders ? "sim" : "não"}`);
   lines.push(`redirecionado:      ${probe.redirected ? "sim" : "não"}`);
+  if (probe.redirectCookie) lines.push(`cookie redirect:    sim`);
   if (probe.failureClass) lines.push(`classe falha:       ${probe.failureClass}`);
   if (probe.deadMediaBases) lines.push(`bases CDN mortas:   ${probe.deadMediaBases}`);
   if (probe.redirectMode) lines.push(`modo redirect:      ${probe.redirectMode}`);
@@ -299,7 +301,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
   const probeBase = url.startsWith("/api/stream")
     ? url
     : /^https?:\/\//i.test(url)
-      ? `/api/stream?u=${encodeURIComponent(url)}&kind=vod&v=6`
+      ? `/api/stream?u=${encodeURIComponent(url)}&kind=vod&v=7`
       : null;
   if (!probeBase) return { probeError: "URL não suportada para probe VOD" };
   const ctrl = new AbortController();
@@ -327,6 +329,7 @@ export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProb
       userAgent: res.headers.get("X-Upstream-User-Agent") ?? "",
       originHeaders: (res.headers.get("X-Upstream-Origin-Headers") ?? "0") === "1",
       redirected: (res.headers.get("X-Upstream-Redirected") ?? "0") === "1",
+      redirectCookie: (res.headers.get("X-Upstream-Redirect-Cookie") ?? "0") === "1",
       failureClass: res.headers.get("X-Upstream-Failure-Class") ?? "",
       deadMediaBases: res.headers.get("X-Upstream-Dead-Media-Bases") ?? "",
       redirectMode: res.headers.get("X-Stream-Redirect-Mode") ?? "",
