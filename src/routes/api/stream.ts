@@ -370,7 +370,7 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = vodContext && res.status === 404 && (!usedRedirected || redirectedVod404Count < 8);
+          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || redirectedVod404Count < 8);
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
