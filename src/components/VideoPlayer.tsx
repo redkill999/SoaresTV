@@ -448,6 +448,12 @@ export function VideoPlayer({
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    // [VOD NATIVE BYPASS] No APK (Capacitor) o proxy /api/stream sai do
+    // datacenter Lovable, que muitos CDNs (ex: flixbr.lat) bloqueiam por ASN.
+    // O IP residencial do APK passa direto — então, no nativo, priorizamos
+    // a URL original do painel Xtream e usamos o proxy só como fallback.
+    // Web permanece igual (proxy-first por causa de CORS/mixed-content).
+    const vodNativeBypass = isVod && !isWebPlayback;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = isWebPlayback ? httpsVariantIgnoringHostProfile(url) : httpsVariant(url);
@@ -459,6 +465,15 @@ export function VideoPlayer({
             candidates = [cachedDirect, secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else if (forceProxy) {
             candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, cachedDirect];
+          } else if (vodNativeBypass) {
+            // APK: original → https direto → cache → proxy como último recurso.
+            candidates = [
+              url,
+              secure,
+              cachedDirect,
+              proxiedX(url, "vod"),
+              secure ? proxiedX(secure, "vod") : null,
+            ];
           } else {
             candidates = [
               proxiedX(url, "vod"),
