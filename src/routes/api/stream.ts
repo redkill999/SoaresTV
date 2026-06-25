@@ -853,7 +853,7 @@ async function handle(request: Request) {
           trace.error = err?.message || String(e);
           trace.errorName = err?.name || "Error";
           trace.durationMs = Date.now() - attemptStart;
-          trace.ttfbMs = trace.ttfbMs ?? (Date.now() - fetchStartedAt);
+          trace.ttfbMs = trace.ttfbMs ?? (Date.now() - attemptStart);
           if (isDiagProbe) {
             usedUA = ua;
             usedOriginHeaders = originHeaderMode !== "none";
