@@ -320,20 +320,37 @@ async function handle(request: Request) {
     : (vodContext ? Array.from(new Set(VOD_UAS)) : DEFAULT_UAS);
 
 
-  const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin") => {
+  const buildHeaders = (ua: string, rangeValue: string | null, originHeaderMode: "none" | "referer" | "origin", headerUrl: URL = upstreamUrl) => {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", playlistPath ? "application/vnd.apple.mpegurl,application/x-mpegURL,*/*;q=0.8" : isVod ? "video/*,*/*;q=0.9" : "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
     if (originHeaderMode === "referer" || originHeaderMode === "origin") {
-      h.set("Referer", `${upstreamUrl.origin}/`);
+      h.set("Referer", `${headerUrl.origin}/`);
     }
     if (originHeaderMode === "origin") {
-      h.set("Origin", upstreamUrl.origin);
+      h.set("Origin", headerUrl.origin);
     }
     if (rangeValue) h.set("Range", rangeValue);
     return h;
+  };
+
+  const classifyVodFailure = (status: number, redirected: boolean, contentType: string): string => {
+    if (vodContext && status === 404 && redirected && isLikelyVodBlockContentType(contentType)) return "redirected-cdn-404-html";
+    if (vodContext && status >= 200 && status < 300 && isLikelyVodBlockContentType(contentType)) return "vod-non-video-response";
+    if (vodContext && (status === 401 || status === 403)) return "vod-auth-block";
+    if (vodContext && status >= 500) return "vod-upstream-server-error";
+    return "";
+  };
+
+  const shouldRetryVodResponse = (res: Response, rangeValue: string | null, redirected: boolean, contentType: string, finalUrl: string): boolean => {
+    const retryBlocked = res.status === 401 || res.status === 403;
+    const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
+    const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
+    const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(finalUrl) && (!redirected || (redirectedVod404Count < 8 && redirectedVod404HtmlCount < 6));
+    const retryVodBadContent = vodContext && res.ok && isLikelyVodBlockContentType(contentType);
+    return retryBlocked || retryBadRange || retryVodCompat404 || retryVodBadContent || retryVodServerError;
   };
 
   let upstream: Response | null = null;
@@ -408,9 +425,10 @@ async function handle(request: Request) {
           peekLocation = loc;
           peekDirect = browserDirectVodCandidate(loc) || "";
           try {
+            const finalUrlForHeaders = new URL(loc);
             const finalRes = await fetch(loc, {
               method: "GET",
-              headers: buildHeaders(ua, rangeValue || "bytes=0-0", originHeaderMode),
+              headers: buildHeaders(ua, rangeValue || "bytes=0-0", originHeaderMode, finalUrlForHeaders),
               redirect: "follow",
               signal: controller.signal,
             });
@@ -468,12 +486,62 @@ async function handle(request: Request) {
           let res: Response;
           try {
             const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
-            res = await fetch(upstreamUrl.toString(), {
-              method: upstreamMethod,
-              headers: buildHeaders(ua, rangeValue, originHeaderMode),
-              redirect: "follow",
-              signal: controller.signal,
-            });
+            if (vodContext && upstreamMethod === "GET") {
+              const first = await fetch(upstreamUrl.toString(), {
+                method: "GET",
+                headers: buildHeaders(ua, rangeValue, originHeaderMode),
+                redirect: "manual",
+                signal: controller.signal,
+              });
+              const loc = resolveLocation(first.headers.get("location"), upstreamUrl);
+              if (isRedirectStatus(first.status) && loc) {
+                try { await first.body?.cancel(); } catch { /* noop */ }
+                usedRedirectLocation = loc;
+                const direct = browserDirectVodCandidate(loc);
+                const finalUrlCandidates = Array.from(new Set([loc, direct].filter(Boolean) as string[]));
+                const finalOriginModes = Array.from(new Set([originHeaderMode, "none", "referer", "origin"] as OriginHeaderMode[]));
+                let lastFinal: Response | null = null;
+                for (const finalUrl of finalUrlCandidates) {
+                  const finalUrlObj = new URL(finalUrl);
+                  for (const finalOriginMode of finalOriginModes) {
+                    const finalRes = await fetch(finalUrl, {
+                      method: "GET",
+                      headers: buildHeaders(ua, rangeValue, finalOriginMode, finalUrlObj),
+                      redirect: "follow",
+                      signal: controller.signal,
+                    });
+                    const finalCt = finalRes.headers.get("content-type") || "";
+                    if (lastFinal) {
+                      try { await lastFinal.body?.cancel(); } catch { /* noop */ }
+                    }
+                    lastFinal = finalRes;
+                    usedOriginHeaders = finalOriginMode !== "none";
+                    usedFinalUrl = finalRes.url || finalUrl;
+                    usedRedirected = true;
+                    usedDirectCandidate = browserDirectVodCandidate(usedFinalUrl) || direct || "";
+                    usedFailureClass = classifyVodFailure(finalRes.status, true, finalCt);
+                    if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
+                      redirectedVod404Count += 1;
+                      redirectedVod404HtmlCount += 1;
+                      const deadBase = mediaIdentityKey(usedFinalUrl);
+                      if (deadBase) redirectedVodDeadBases.add(deadBase);
+                    }
+                    if (!shouldRetryVodResponse(finalRes, rangeValue, true, finalCt, usedFinalUrl)) break;
+                  }
+                  if (lastFinal && !shouldRetryVodResponse(lastFinal, rangeValue, true, lastFinal.headers.get("content-type") || "", usedFinalUrl)) break;
+                }
+                res = lastFinal ?? first;
+              } else {
+                res = first;
+              }
+            } else {
+              res = await fetch(upstreamUrl.toString(), {
+                method: upstreamMethod,
+                headers: buildHeaders(ua, rangeValue, originHeaderMode),
+                redirect: "follow",
+                signal: controller.signal,
+              });
+            }
           } finally {
             clearTimeout(timeout);
           }
@@ -484,15 +552,7 @@ async function handle(request: Request) {
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
           usedDirectCandidate = vodContext && usedRedirected ? (browserDirectVodCandidate(usedFinalUrl) || "") : "";
           const upstreamCt = res.headers.get("content-type") || "";
-          if (vodContext && res.status === 404 && usedRedirected && isLikelyVodBlockContentType(upstreamCt)) {
-            usedFailureClass = "redirected-cdn-404-html";
-          } else if (vodContext && res.ok && isLikelyVodBlockContentType(upstreamCt)) {
-            usedFailureClass = "vod-non-video-response";
-          } else if (vodContext && (res.status === 401 || res.status === 403)) {
-            usedFailureClass = "vod-auth-block";
-          } else if (vodContext && res.status >= 500) {
-            usedFailureClass = "vod-upstream-server-error";
-          }
+          usedFailureClass = classifyVodFailure(res.status, usedRedirected, upstreamCt);
           if (vodContext && res.status === 404 && usedRedirected) {
             redirectedVod404Count += 1;
             if (isLikelyVodBlockContentType(upstreamCt)) {
@@ -508,20 +568,15 @@ async function handle(request: Request) {
             upstream = res;
             break attempt;
           }
-          const retryBlocked = res.status === 401 || res.status === 403;
-          const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
-          const retryVodServerError = vodContext && (res.status === 408 || res.status === 429 || res.status >= 500);
           // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
           // Referer ausente ou User-Agent de player. Antes aceitávamos esse
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = vodContext && res.status === 404 && !isPlaylistPath(usedFinalUrl) && (!usedRedirected || (redirectedVod404Count < 8 && redirectedVod404HtmlCount < 6));
           // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
           // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
           // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
-          const retryVodBadContent = vodContext && res.ok && isLikelyVodBlockContentType(upstreamCt);
-          if (!retryBlocked && !retryBadRange && !retryVodCompat404 && !retryVodBadContent && !retryVodServerError) {
+          if (!shouldRetryVodResponse(res, rangeValue, usedRedirected, upstreamCt, usedFinalUrl)) {
             upstream = res;
             break attempt;
           }
