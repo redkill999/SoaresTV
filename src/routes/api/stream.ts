@@ -827,11 +827,20 @@ async function handle(request: Request) {
     }));
 
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
+    const debugPhase = lastStatus ? `upstream-${lastStatus}` : phase;
+    const debugReason = errObj
+      ? (errObj.name === "AbortError" ? "upstream-timeout" : "fetch-exception")
+      : lastStatus >= 500
+        ? "upstream-server-error"
+        : "no-upstream-response";
     failHeaders.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify({
+    const failurePayload = {
       error: phase.startsWith("upstream-") || phase === "fetch-exception" || phase === "upstream-timeout"
         ? phase.toUpperCase().replace(/-/g, "_")
         : (usedFailureClass ? usedFailureClass.toUpperCase().replace(/-/g, "_") : "BAD_GATEWAY"),
+      debug_phase: debugPhase,
+      debug_reason: debugReason,
+      debug_line: 830,
       phase,
       upstream_status: lastStatus || null,
       upstream_url: upstreamUrl.toString(),
@@ -850,10 +859,8 @@ async function handle(request: Request) {
       exception_stack: errObj?.stack ?? null,
       attempts_total: attemptTraces.length,
       attempts: attemptTraces,
-    }, null, 2), {
-      status: clientStatus,
-      headers: failHeaders,
-    });
+    } satisfies Debug502Payload;
+    return debugJsonResponse(clientStatus, failurePayload, failHeaders);
   }
 
   const ct = upstream.headers.get("content-type") || "";
@@ -912,10 +919,25 @@ async function handle(request: Request) {
     // real vem vazio/HTML/404 no CDN final. Não entregue manifesto vazio como
     // 200, senão o hls.js acusa apenas manifestLoadError sem causa útil.
     if (vodContext && (!trimmed || !trimmed.includes("#EXTM3U"))) {
-      respHeaders.set("Content-Type", "text/plain; charset=utf-8");
       respHeaders.delete("content-length");
       try { await upstream.body?.cancel(); } catch { /* noop */ }
-      return new Response(trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest", { status: 502, headers: respHeaders });
+      return debugJsonResponse(502, {
+        error: trimmed ? "INVALID_VOD_HLS_MANIFEST" : "EMPTY_VOD_HLS_MANIFEST",
+        debug_phase: "vod-hls-manifest-validation",
+        debug_reason: trimmed ? "invalid-manifest" : "empty-manifest",
+        debug_line: 921,
+        phase: "vod-hls-manifest-validation",
+        failure_class: trimmed ? "invalid-vod-hls-manifest" : "empty-vod-hls-manifest",
+        exception_message: trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest",
+        exception_stack: null,
+        upstream_status: upstream.status,
+        upstream_url: upstreamUrl.toString(),
+        final_url: usedFinalUrl,
+        redirects: usedRedirected ? 1 : 0,
+        redirect_count: usedRedirected ? 1 : 0,
+        content_type: ct || null,
+        candidate: usedDirectCandidate || usedFinalUrl || upstreamUrl.toString(),
+      }, respHeaders);
     }
     const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), usedUA || forcedUA, vodContext ? "vod" : undefined);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
