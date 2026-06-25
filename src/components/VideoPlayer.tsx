@@ -615,6 +615,9 @@ export function VideoPlayer({
         let upstreamUA = "";
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
+        let contentLength = "";
+        let contentRange = "";
+        let acceptRanges = "";
         if (isProxy) {
           try {
             const res = await fetch(currentUrl, { method: "HEAD" });
@@ -625,6 +628,9 @@ export function VideoPlayer({
             upstreamUA = res.headers.get("X-Upstream-User-Agent") ?? "";
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
+            contentLength = res.headers.get("content-length") ?? "";
+            contentRange = res.headers.get("content-range") ?? "";
+            acceptRanges = res.headers.get("accept-ranges") ?? "";
           } catch (e) {
             probeStatus = `probe-fail: ${(e as Error).message}`;
           }
@@ -644,6 +650,9 @@ export function VideoPlayer({
           httpStatusProxy: probeStatus,
           httpStatusUpstream: upstreamStatus,
           contentTypeUpstream: upstreamCt,
+          contentLength,
+          contentRange,
+          acceptRanges,
           urlFinalUpstream: upstreamFinal,
           uaUsadoUpstream: upstreamUA,
           headersOrigemReferer: upstreamOriginHdrs === "1",
@@ -655,6 +664,9 @@ export function VideoPlayer({
             clientStatus: probeStatus,
             upstreamStatus,
             contentType: upstreamCt,
+            contentLength,
+            contentRange,
+            acceptRanges,
             finalUrl: upstreamFinal,
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
