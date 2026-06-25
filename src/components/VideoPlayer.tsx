@@ -331,21 +331,9 @@ export function VideoPlayer({
     const isLiveUrl = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const platformCfg = getPlatformConfig();
     const isWebPlayback = platformCfg.platform === "web";
-    const liveDisableHls = isLiveUrl && (
-      isWebPlayback
-        ? liveProfile.disableHlsConversion === true && liveProfile.preferTs !== false
-        : liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false
-    );
-    const liveBypassProxy = isLiveUrl && (
-      isWebPlayback
-        ? liveProfile.bypassProxyForLive === true
-        : liveProfile.bypassProxyForLive !== false
-    );
-    const livePreferTs = isLiveUrl && (
-      isWebPlayback
-        ? liveProfile.preferTs === true
-        : liveProfile.preferTs !== false
-    );
+    const liveDisableHls = isLiveUrl && !isWebPlayback && liveProfile.disableHlsConversion !== false && liveProfile.preferTs !== false;
+    const liveBypassProxy = isLiveUrl && !isWebPlayback && liveProfile.bypassProxyForLive !== false;
+    const livePreferTs = isLiveUrl && !isWebPlayback && liveProfile.preferTs !== false;
 
     const skipHls =
       compat.streamFormat === "ts" ||
