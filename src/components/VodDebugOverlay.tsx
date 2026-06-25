@@ -41,6 +41,8 @@ type Props = {
   onClose: () => void;
 };
 
+const STREAM_PROXY_PATH = "/api/public/stream";
+
 function classifyTag(d: ProxyDiag | null, errorMessage: string): string {
   const phase = (d?.phase || "").toLowerCase();
   const fc = (d?.failure_class || "").toLowerCase();
@@ -81,7 +83,7 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const probeUrl = `/api/stream?u=${encodeURIComponent(src)}&kind=vod&probe=1&v=7`;
+    const probeUrl = `${STREAM_PROXY_PATH}?u=${encodeURIComponent(src)}&kind=vod&probe=1&v=7`;
     setLoading(true);
     setProbeError(null);
     setRawText("");

@@ -805,7 +805,7 @@ export function VideoPlayer({
         // origem é http, marcamos o host para nunca mais promover.
         if (failedUrl) {
           const decoded = (() => { try { return decodeURIComponent(failedUrl.replace(/^.*?[?&]u=/, "")); } catch { return failedUrl; } })();
-          const target = failedUrl.startsWith("/api/stream") ? decoded : failedUrl;
+            const target = isStreamProxyUrl(failedUrl) ? decoded : failedUrl;
           try {
             const t = new URL(target);
             const original = new URL(workingSrc);

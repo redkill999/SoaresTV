@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // Diagnóstico temporário para preview web/APK: registra as últimas 50 sessões
 // VOD, candidatos tentados, player usado, erros do <video>/hls/mpegts e headers
-// expostos pelo /api/stream. Não altera a lógica de reprodução.
+// expostos pelo proxy de stream. Não altera a lógica de reprodução.
 // ============================================================================
 
 export type VodPlayerKind = "html5" | "mpegts" | "hls" | "native" | "unknown";
@@ -28,6 +28,12 @@ export type VodHttpProbe = {
   probeError?: string;
   error?: string;
 };
+
+const STREAM_PROXY_PATH = "/api/public/stream";
+
+function isStreamProxyUrl(url: string): boolean {
+  return url.startsWith(STREAM_PROXY_PATH) || url.startsWith("/api/stream");
+}
 
 export type VodPlayerAttempt = VodHttpProbe & {
   id: string;
@@ -298,10 +304,10 @@ export function vodDiagFormatAll(): string {
 }
 
 export async function probeVodCandidateForDiag(url: string): Promise<VodHttpProbe> {
-  const probeBase = url.startsWith("/api/stream")
+  const probeBase = isStreamProxyUrl(url)
     ? url
     : /^https?:\/\//i.test(url)
-      ? `/api/stream?u=${encodeURIComponent(url)}&kind=vod&v=7`
+      ? `${STREAM_PROXY_PATH}?u=${encodeURIComponent(url)}&kind=vod&v=7`
       : null;
   if (!probeBase) return { probeError: "URL não suportada para probe VOD" };
   const ctrl = new AbortController();
