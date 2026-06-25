@@ -43,6 +43,16 @@ const IPTV_HEADERS = {
   "Accept-Encoding": "identity",
 };
 
+// UAs alternativos tentados no caminho nativo (APK) quando o painel
+// rejeita o UA padrão com 401/403. Cobre painéis que filtram por UA.
+const NATIVE_FALLBACK_UAS = [
+  "TiviMate/5.1.0",
+  "IPTV Smarters Pro/4.0",
+  "okhttp/4.12.0",
+  "VLC/3.5.4",
+  "Mozilla/5.0 (Linux; Android 14)",
+];
+
 type NativeHttpResponse = { status: number; data: unknown };
 
 function hasWindowNativeBridge(): boolean {
@@ -104,6 +114,7 @@ export async function isNativeApp(): Promise<boolean> {
 async function nativeHttpGet(
   url: string,
   timeoutMs = 8_000,
+  uaOverride?: string,
 ): Promise<NativeHttpResponse | null> {
 
   if (typeof window === "undefined") return null;
@@ -116,9 +127,12 @@ async function nativeHttpGet(
       platform === "ios" ||
       hasWindowNativeBridge();
     if (!canUseHttp) return null;
+    const headers = uaOverride
+      ? { ...IPTV_HEADERS, "User-Agent": uaOverride }
+      : IPTV_HEADERS;
     return await CapacitorHttp.get({
       url,
-      headers: IPTV_HEADERS,
+      headers,
       connectTimeout: timeoutMs,
       readTimeout: timeoutMs,
     });
@@ -142,6 +156,7 @@ async function nativeApi<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
+  uaOverride?: string,
 ): Promise<T | null> {
   const url = new URL(`${normalizeServer(c.server)}/player_api.php`);
   url.searchParams.set("username", c.username);
@@ -151,8 +166,13 @@ async function nativeApi<T = unknown>(
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   }
 
-  const res = await nativeHttpGet(url.toString());
+  const res = await nativeHttpGet(url.toString(), 8_000, uaOverride);
   if (!res) return null;
+  if (res.status === 401 || res.status === 403) {
+    const err = new Error(`Xtream respondeu HTTP ${res.status}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   if (res.status < 200 || res.status >= 300) throw new Error(`Xtream respondeu HTTP ${res.status}`);
   return parseNativeJson(res.data) as T;
 }
@@ -165,17 +185,11 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   if (!(await canUseNativeHttp())) return null;
   const base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
-  // Se o usuário já forneceu porta explícita (ex.: http://host:8080),
-  // confiamos nela e NÃO expandimos para o waterfall de 10 candidatos.
-  // Isso evitava ~90s preso no botão "Entrando..." no APK cold-start
-  // quando o painel responde de primeira mas a heurística ainda tentava
-  // todas as portas comuns.
   let hasExplicitPort = false;
   try {
     const u = new URL(base);
     hasExplicitPort = !!u.port;
     if (!hasExplicitPort) {
-      // Sem porta explícita: expande para portas Xtream comuns.
       for (const scheme of ["http", "https"]) {
         for (const port of COMMON_XTREAM_PORTS) {
           candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
@@ -186,18 +200,52 @@ async function nativeApiWithFallbackPorts<T = unknown>(
     // keep normalized base only
   }
 
+  // UA preferido (vencedor de login anterior) primeiro, depois os fallbacks.
+  const preferred = getUAHint(c.server);
+  const uaQueue: (string | undefined)[] = [
+    preferred,
+    undefined, // IPTV_HEADERS padrão (XCIPTV/6.0)
+    ...NATIVE_FALLBACK_UAS,
+  ];
+  // Dedup preservando ordem.
+  const seen = new Set<string>();
+  const uas = uaQueue.filter((u) => {
+    const k = u ?? "__default__";
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
   let lastError: unknown = null;
   let consecutiveFailures = 0;
   for (const server of candidates) {
-    try {
-      const data = await nativeApi<T>({ ...c, server }, action, params);
-      if (data) return { data, creds: { ...c, server } };
-      consecutiveFailures = 0;
-    } catch (err) {
-      lastError = err;
-      consecutiveFailures += 1;
-      // Fail-fast: 3 falhas seguidas significam servidor offline / DNS quebrado.
-      if (consecutiveFailures >= 3) break;
+    let authBlocked = false;
+    for (const ua of uas) {
+      try {
+        const data = await nativeApi<T>({ ...c, server }, action, params, ua);
+        if (data) {
+          if (ua) setUAHint(server, ua);
+          return { data, creds: { ...c, server } };
+        }
+        consecutiveFailures = 0;
+      } catch (err) {
+        lastError = err;
+        const status = (err as { status?: number })?.status;
+        if (status === 401 || status === 403) {
+          // Tenta próximo UA no mesmo server.
+          authBlocked = true;
+          continue;
+        }
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 3) return Promise.reject(lastError);
+        break; // erro de rede/timeout: pula pro próximo server
+      }
+    }
+    // Se todos os UAs falharam por 401/403, este server provavelmente é
+    // o correto mas as credenciais foram rejeitadas — não vale a pena
+    // martelar mais portas.
+    if (authBlocked && server === base) {
+      throw lastError;
     }
   }
   if (lastError) throw lastError;
