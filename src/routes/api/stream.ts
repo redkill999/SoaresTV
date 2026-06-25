@@ -77,6 +77,17 @@ function browserDirectVodCandidate(url: string | null): string | null {
   }
 }
 
+function mediaIdentityKey(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\.[a-z0-9]{2,5}$/i, "");
+    return `${u.host.toLowerCase()}${path}`;
+  } catch {
+    return null;
+  }
+}
+
 type OriginHeaderMode = "none" | "referer" | "origin";
 type UpstreamAttempt = { ua: string; rangeValue: string | null; originHeaderMode: OriginHeaderMode };
 
