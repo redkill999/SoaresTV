@@ -532,14 +532,29 @@ export function VideoPlayer({
         : /\/movie\//i.test(workingSrc)
           ? "movie"
           : "vod";
-      console.log("[VOD DEBUG] sessão iniciada", {
-        sourceKind,
-        originalUrl: src,
-        workingSrc,
-        host: vodHost,
-        forcedUA: forcedUA ?? "(auto)",
-        candidates: playbackCandidates,
+      // ===== [VOD AUDIT] dump completo dos dados que o audit pediu =========
+      // Plataforma + direct_source vs canonical + URL original/final + ordem.
+      console.group(`[VOD AUDIT] ${sourceKind.toUpperCase()} session`);
+      console.log("plataforma:", {
+        label: platformLabel(),
+        web_desktop: PLATFORM_WEB_DESKTOP,
+        android: PLATFORM_ANDROID,
+        android_tv: PLATFORM_ANDROID_TV,
       });
+      console.log("urls:", {
+        original_src: src,
+        working_src: workingSrc,
+        canonical_xtream: src,
+        direct_source_fallbacks: fallbackSrcs,
+        host: vodHost,
+      });
+      console.log("transporte:", {
+        forcedUA: forcedUA ?? "(auto: proxy cicla)",
+        forceProxy, forceDirect,
+        platformCfg_proxy: getPlatformConfig().proxy,
+      });
+      console.log("ordem_tentativas:", playbackCandidates);
+      console.groupEnd();
       vodDiagSessionIdRef.current = vodDiagStart({
         sourceKind,
         originalUrl: src,
