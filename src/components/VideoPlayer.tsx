@@ -1675,7 +1675,7 @@ export function VideoPlayer({
                 }, delay);
               } else {
                 detachStallListeners?.();
-                tryNextVod();
+                tryNextVod(`HLS NETWORK_ERROR: ${data.details ?? "unknown"}`);
               }
               return;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1691,7 +1691,7 @@ export function VideoPlayer({
                 hls?.recoverMediaError();
               } else {
                 detachStallListeners?.();
-                tryNextVod();
+                tryNextVod(`HLS MEDIA_ERROR: ${data.details ?? "unknown"}`);
               }
               return;
             default:
