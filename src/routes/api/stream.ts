@@ -557,8 +557,6 @@ async function handle(request: Request) {
                     usedDirectCandidate = browserDirectVodCandidate(usedFinalUrl) || direct || "";
                     usedFailureClass = classifyVodFailure(finalRes.status, true, finalCt);
                     if (finalRes.status === 404 && isLikelyVodBlockContentType(finalCt)) {
-                      redirectedVod404Count += 1;
-                      redirectedVod404HtmlCount += 1;
                       const deadBase = mediaIdentityKey(usedFinalUrl);
                       if (deadBase) redirectedVodDeadBases.add(deadBase);
                     }
