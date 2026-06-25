@@ -664,6 +664,8 @@ export function VideoPlayer({
         let upstreamOriginHdrs = "";
         let upstreamRedirected = "";
         let upstreamRedirectMode = "";
+        let upstreamFailureClass = "";
+        let upstreamDeadMediaBases = "";
         let contentLength = "";
         let contentRange = "";
         let acceptRanges = "";
@@ -693,6 +695,8 @@ export function VideoPlayer({
             upstreamOriginHdrs = res.headers.get("X-Upstream-Origin-Headers") ?? "";
             upstreamRedirected = res.headers.get("X-Upstream-Redirected") ?? "";
             upstreamRedirectMode = res.headers.get("X-Stream-Redirect-Mode") ?? "";
+            upstreamFailureClass = res.headers.get("X-Upstream-Failure-Class") ?? "";
+            upstreamDeadMediaBases = res.headers.get("X-Upstream-Dead-Media-Bases") ?? "";
             contentLength = res.headers.get("content-length") ?? "";
             contentRange = res.headers.get("content-range") ?? "";
             acceptRanges = res.headers.get("accept-ranges") ?? "";
@@ -727,6 +731,8 @@ export function VideoPlayer({
           headersOrigemReferer: upstreamOriginHdrs === "1",
           redirecionado: upstreamRedirected === "1",
           modoRedirect: upstreamRedirectMode,
+          classeFalha: upstreamFailureClass,
+          basesCdnMortas: upstreamDeadMediaBases,
           playerEstrategia: lastPlayerStrategy,
         });
         if (isVod && vodDiagSessionIdRef.current) {
@@ -743,6 +749,8 @@ export function VideoPlayer({
             userAgent: upstreamUA,
             originHeaders: upstreamOriginHdrs === "1",
             redirected: upstreamRedirected === "1",
+            failureClass: upstreamFailureClass,
+            deadMediaBases: upstreamDeadMediaBases,
             redirectMode: upstreamRedirectMode,
           });
         }
