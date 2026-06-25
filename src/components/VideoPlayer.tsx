@@ -25,6 +25,7 @@ import {
 import { decideEngineOrder, plog } from "@/lib/playback-engine";
 import { PLATFORM_WEB_DESKTOP, PLATFORM_ANDROID, PLATFORM_ANDROID_TV, platformLabel } from "@/lib/platform-flags";
 import { probeLiveStream, logLiveProbeReport, liveContentKind } from "@/lib/live-debug";
+import { vlog, vwarn, vgroup, vgroupEnd, assertPlatform } from "@/lib/vod-platform-log";
 import {
   liveDiagStart, liveDiagAttachProbe, liveDiagRecordAttempt,
   liveDiagMarkPlaying, liveDiagMarkFailed, liveDiagLatestFailedFor,
@@ -532,29 +533,32 @@ export function VideoPlayer({
         : /\/movie\//i.test(workingSrc)
           ? "movie"
           : "vod";
-      // ===== [VOD AUDIT] dump completo dos dados que o audit pediu =========
-      // Plataforma + direct_source vs canonical + URL original/final + ordem.
-      console.group(`[VOD AUDIT] ${sourceKind.toUpperCase()} session`);
-      console.log("plataforma:", {
+      // ===== [VOD WEB|ANDROID] dump por plataforma ==========================
+      // Prefixo automático via vod-platform-log → qualquer regressão cruzada
+      // (log "VOD WEB" aparecendo num APK ou vice-versa) vira flag imediata.
+      assertPlatform(PLATFORM_ANDROID ? "android" : "web");
+      vgroup(`${sourceKind.toUpperCase()} session`);
+      vlog("plataforma:", {
         label: platformLabel(),
         web_desktop: PLATFORM_WEB_DESKTOP,
         android: PLATFORM_ANDROID,
         android_tv: PLATFORM_ANDROID_TV,
       });
-      console.log("urls:", {
+      vlog("urls:", {
         original_src: src,
         working_src: workingSrc,
         canonical_xtream: src,
         direct_source_fallbacks: fallbackSrcs,
         host: vodHost,
       });
-      console.log("transporte:", {
+      vlog("transporte:", {
         forcedUA: forcedUA ?? "(auto: proxy cicla)",
         forceProxy, forceDirect,
         platformCfg_proxy: getPlatformConfig().proxy,
+        engine_esperado: PLATFORM_ANDROID ? "ExoPlayer/Native" : "HTML5/HLS.js + proxy fast-path",
       });
-      console.log("ordem_tentativas:", playbackCandidates);
-      console.groupEnd();
+      vlog("ordem_tentativas:", playbackCandidates);
+      vgroupEnd();
       vodDiagSessionIdRef.current = vodDiagStart({
         sourceKind,
         originalUrl: src,
