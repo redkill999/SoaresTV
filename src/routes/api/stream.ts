@@ -464,15 +464,82 @@ async function handle(request: Request) {
     redirectStrategy?: RedirectStrategy;
     phase: "fetch" | "manual-redirect" | "final-follow";
     finalUrl?: string;
+    finalProtocol?: string;
     redirectLocation?: string;
     status?: number;
     contentType?: string;
     redirected?: boolean;
     error?: string;
     errorName?: string;
+    ttfbMs?: number;
     durationMs: number;
   };
   const attemptTraces: AttemptTrace[] = [];
+  // ===== Probe matrix (probe=1): mede HEAD vs GET 0-1 vs GET full =====
+  type ProbeMatrixRow = {
+    method: string;
+    range: string | null;
+    url: string;
+    protocol: string;
+    status: number | null;
+    contentType: string | null;
+    contentLength: string | null;
+    acceptRanges: string | null;
+    ttfbMs: number | null;
+    totalMs: number;
+    error: string | null;
+    errorName: string | null;
+    aborted: boolean;
+  };
+  const probeMatrix: ProbeMatrixRow[] = [];
+  const runProbeRow = async (method: string, url: string, rangeValue: string | null, ua: string): Promise<void> => {
+    const controller = new AbortController();
+    const timeoutMs = 30_000;
+    const startedAt = Date.now();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let ttfbMs: number | null = null;
+    let row: ProbeMatrixRow = {
+      method,
+      range: rangeValue,
+      url,
+      protocol: (() => { try { return new URL(url).protocol; } catch { return ""; } })(),
+      status: null,
+      contentType: null,
+      contentLength: null,
+      acceptRanges: null,
+      ttfbMs: null,
+      totalMs: 0,
+      error: null,
+      errorName: null,
+      aborted: false,
+    };
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: buildHeaders(ua, rangeValue, "none"),
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      ttfbMs = Date.now() - startedAt;
+      row.status = res.status;
+      row.contentType = res.headers.get("content-type");
+      row.contentLength = res.headers.get("content-length");
+      row.acceptRanges = res.headers.get("accept-ranges");
+      row.ttfbMs = ttfbMs;
+      row.protocol = (() => { try { return new URL(res.url || url).protocol; } catch { return row.protocol; } })();
+      row.url = res.url || url;
+      try { await res.body?.cancel(); } catch { /* noop */ }
+    } catch (e) {
+      const err = e as { name?: string; message?: string } | null;
+      row.error = err?.message || String(e);
+      row.errorName = err?.name || "Error";
+      row.aborted = err?.name === "AbortError";
+    } finally {
+      clearTimeout(timer);
+      row.totalMs = Date.now() - startedAt;
+      probeMatrix.push(row);
+    }
+  };
   // Atalho: se o upstream redireciona para o placeholder
   // "vod_nao_encontrado" do painel Hostinger, o asset NÃO existe. Detectar
   // isso evita queimar 50 tentativas (que estouram o timeout do Worker e o
