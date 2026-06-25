@@ -964,12 +964,68 @@ async function handle(request: Request) {
   return new Response(request.method === "HEAD" || isDiagProbe ? null : upstream.body, { status, headers: respHeaders });
 }
 
+async function safeHandle(request: Request): Promise<Response> {
+  let phase = "handler-entry";
+  let kind: "vod" | "live" | "unknown" = "unknown";
+  let probe = false;
+  let url = "";
+  try {
+    url = request.url;
+    try {
+      const u = new URL(request.url);
+      const target = u.searchParams.get("u") || "";
+      probe = u.searchParams.get("probe") === "1";
+      kind = u.searchParams.get("kind") === "vod" ? "vod" : (target && isVodPath(new URL(target).pathname) ? "vod" : "live");
+    } catch { /* noop */ }
+    phase = "handle";
+    return await handle(request);
+  } catch (e) {
+    const err = e as { name?: string; message?: string; stack?: string } | null;
+    // Log obrigatório — esta é a falha INTERNA do proxy (não respondeu nada
+    // de upstream). Sem isso o browser só vê 502 HTML genérico do worker.
+    console.error("[API_STREAM_FATAL]", {
+      phase,
+      url,
+      error: err?.message,
+      stack: err?.stack,
+      name: err?.name,
+      kind,
+      probe,
+    });
+    const headers = new Headers(CORS);
+    headers.set("Content-Type", "application/json; charset=utf-8");
+    headers.set("X-Upstream-Status", "0");
+    headers.set("X-Upstream-Final-Url", "");
+    headers.set("X-Upstream-Failure-Class", "internal-proxy-failure");
+    return new Response(JSON.stringify({
+      error: "INTERNAL_PROXY_FAILURE",
+      phase: "internal-proxy-failure",
+      upstream_status: null,
+      final_url: null,
+      redirects: 0,
+      redirect_count: 0,
+      content_type: null,
+      candidate: null,
+      failure_class: "internal-proxy-failure",
+      handler_phase: phase,
+      request_url: url,
+      kind,
+      probe,
+      exception: err ? { name: err.name, message: err.message } : null,
+      exception_message: err?.message ?? null,
+      exception_name: err?.name ?? null,
+      exception_stack: err?.stack ?? null,
+    }, null, 2), { status: 502, headers });
+  }
+}
+
 export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
-      GET: async ({ request }) => handle(request),
-      HEAD: async ({ request }) => handle(request),
+      GET: async ({ request }) => safeHandle(request),
+      HEAD: async ({ request }) => safeHandle(request),
     },
   },
 });
+
