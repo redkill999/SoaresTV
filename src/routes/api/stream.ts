@@ -974,6 +974,13 @@ async function handle(request: Request) {
   respHeaders.set("X-Upstream-Redirect-Cookie", usedRedirectCookie ? "1" : "0");
   respHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
   if (redirectedVodDeadBases.size) respHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
+  if (probeMatrix.length) {
+    try { respHeaders.set("X-Probe-Matrix", JSON.stringify(probeMatrix)); } catch { /* noop */ }
+    const last = attemptTraces.at(-1);
+    if (last?.ttfbMs != null) respHeaders.set("X-Probe-TTFB-Ms", String(last.ttfbMs));
+    if (last?.durationMs != null) respHeaders.set("X-Probe-Total-Ms", String(last.durationMs));
+    if (last?.finalProtocol) respHeaders.set("X-Probe-Final-Protocol", last.finalProtocol);
+  }
   if (!upstream.ok) {
     if (upstream.status === 502) {
       try { await upstream.body?.cancel(); } catch { /* noop */ }
