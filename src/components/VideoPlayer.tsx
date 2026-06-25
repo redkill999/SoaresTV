@@ -997,13 +997,6 @@ export function VideoPlayer({
     const tryNextVod = (reason?: string) => {
       clearWatchdog();
       recordFailedAttempt(reason);
-      if (isVod) {
-        const failedTarget = playableTargetForCandidate(playbackCandidates[vodIdx]);
-        const failedBase = mediaBaseKey(failedTarget);
-        if (failedBase && vodRedirectSourceBaseByDirectBase.has(failedBase)) {
-          pruneDeadVodRedirectFamily(failedBase, reason || "URL direta do CDN final falhou no player");
-        }
-      }
       if (hls) {
         hls.destroy();
         hls = null;
