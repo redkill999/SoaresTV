@@ -204,6 +204,7 @@ export function VideoPlayer({
   // [VOD DIAG] painel temporário para filmes/séries no preview web/APK.
   const [vodDiagOpen, setVodDiagOpen] = useState(false);
   const vodDiagSessionIdRef = useRef<string | null>(null);
+  const vodDiagFinalizingRef = useRef(false);
 
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
@@ -858,8 +859,10 @@ export function VideoPlayer({
           // senão o usuário via "Sem probe" enquanto o fetch ainda estava em
           // andamento. LIVE mantém comportamento anterior para não mexer nos canais.
           if (isVod) {
+            vodDiagFinalizingRef.current = true;
             void reportPlaybackFailure(msg).finally(() => {
               if (cancelled) return;
+              vodDiagFinalizingRef.current = false;
               if (vodDiagSessionIdRef.current) vodDiagMarkFailed(vodDiagSessionIdRef.current, msg);
               setVodDiagOpen(true);
             });
@@ -1763,6 +1766,7 @@ export function VideoPlayer({
   useEffect(() => {
     if (!error) return;
     if (kind !== "vod") return;
+    if (vodDiagFinalizingRef.current) return;
     const id = vodDiagSessionIdRef.current;
     if (id) vodDiagMarkFailed(id, error);
     setVodDiagOpen(true);
