@@ -1189,47 +1189,7 @@ async function safeHandle(request: Request): Promise<Response> {
   return response;
 }
 
-    const err = e as { name?: string; message?: string; stack?: string } | null;
-    // Log obrigatório — esta é a falha INTERNA do proxy (não respondeu nada
-    // de upstream). Sem isso o browser só vê 502 HTML genérico do worker.
-    console.error("[API_STREAM_FATAL]", {
-      phase,
-      url,
-      error: err?.message,
-      stack: err?.stack,
-      name: err?.name,
-      kind,
-      probe,
-    });
-    const headers = new Headers(CORS);
-    headers.set("X-Upstream-Status", "0");
-    headers.set("X-Upstream-Final-Url", "");
-    headers.set("X-Upstream-Failure-Class", "internal-proxy-failure");
-    return debugJsonResponse(502, {
-      error: "INTERNAL_PROXY_FAILURE",
-      debug_phase: "safe-handle-catch",
-      debug_reason: "unhandled-exception",
-      debug_line: 1026,
-      phase: "internal-proxy-failure",
-      upstream_status: null,
-      upstream_url: null,
-      final_url: null,
-      redirects: 0,
-      redirect_count: 0,
-      content_type: null,
-      candidate: null,
-      failure_class: "internal-proxy-failure",
-      handler_phase: phase,
-      request_url: url,
-      kind,
-      probe,
-      exception: err ? { name: err.name, message: err.message } : null,
-      exception_message: err?.message ?? null,
-      exception_name: err?.name ?? null,
-      exception_stack: err?.stack ?? null,
-    }, headers);
-  }
-}
+
 
 export const Route = createFileRoute("/api/stream")({
   server: {
