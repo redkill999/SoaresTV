@@ -84,12 +84,11 @@ function PlayerPage() {
       if (!creds) return;
       const canonical = streamUrl.episode(creds, ep.id, ep.container_extension || "mp4");
       const direct = playableDirectSource(ep.direct_source);
-      const native = isNativeAppSync();
-      // Web desktop: URL Xtream canônica primeiro (era o fluxo que funcionava);
-      // direct_source fica só como fallback porque muitos painéis retornam CDN
-      // bloqueado/HTML para navegador. APK pode continuar preferindo direto.
-      setEpisodeUrl(native && direct ? direct : canonical);
-      setEpisodeFallbackSrcs(Array.from(new Set([native && direct ? canonical : direct].filter(Boolean) as string[])));
+      // VOD que funcionava no preview usava `direct_source` quando o painel
+      // fornece uma URL de arquivo real. Mantemos a canônica Xtream como
+      // fallback, mas não deixamos ela atrasar/bloquear o caminho direto.
+      setEpisodeUrl(direct ?? canonical);
+      setEpisodeFallbackSrcs(Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[])));
       setActiveEpisodeId(String(ep.id));
       setActiveTitle(`${name} — ${ep.title}`);
       store.setLastEpisode(id, String(ep.id));
@@ -127,7 +126,7 @@ function PlayerPage() {
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
       const canonical = streamUrl.movie(creds, movieId, movieExt);
       const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
-      return isNativeAppSync() && direct ? direct : canonical;
+      return direct ?? canonical;
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
@@ -140,8 +139,7 @@ function PlayerPage() {
     const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
     const canonical = streamUrl.movie(creds, movieId, movieExt);
     const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
-    const primary = isNativeAppSync() && direct ? direct : canonical;
-    return Array.from(new Set([primary === direct ? canonical : direct].filter(Boolean) as string[]));
+    return Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[]));
   }, [creds, type, id, movieQ.data]);
 
   const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : EMPTY_FALLBACK_SRCS;
