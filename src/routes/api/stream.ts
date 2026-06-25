@@ -448,7 +448,7 @@ async function handle(request: Request) {
       try { await upstream.body?.cancel(); } catch { /* noop */ }
       return new Response(trimmed ? "invalid VOD HLS manifest" : "empty VOD HLS manifest", { status: 502, headers: respHeaders });
     }
-    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA, vodContext ? "vod" : undefined);
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), usedUA || forcedUA, vodContext ? "vod" : undefined);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
     respHeaders.delete("content-length");
     return new Response(isDiagProbe ? null : rewritten, { status: upstream.status, headers: respHeaders });
