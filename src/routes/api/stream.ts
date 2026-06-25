@@ -40,6 +40,25 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
+function isLikelyVodBlockContentType(contentType: string): boolean {
+  return /text\/html|application\/json|application\/xml|text\/xml/i.test(contentType);
+}
+
+type OriginHeaderMode = "none" | "referer" | "origin";
+type UpstreamAttempt = { ua: string; rangeValue: string | null; originHeaderMode: OriginHeaderMode };
+
+function uniqueAttempts(attempts: UpstreamAttempt[]): UpstreamAttempt[] {
+  const seen = new Set<string>();
+  const out: UpstreamAttempt[] = [];
+  for (const attempt of attempts) {
+    const key = `${attempt.ua}\n${attempt.rangeValue ?? ""}\n${attempt.originHeaderMode}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(attempt);
+  }
+  return out;
+}
+
 function parseByteRange(range: string | null): { start: number; end?: number } | null {
   const match = /^bytes=(\d+)-(\d*)$/i.exec(range?.trim() ?? "");
   if (!match) return null;
@@ -208,13 +227,27 @@ async function handle(request: Request) {
     : playlistPath
       ? [range]
       : Array.from(new Set([range, "bytes=0-", null]));
-  const originHeaderModes: Array<"none" | "referer" | "origin"> = isVod
+  const originHeaderModes: OriginHeaderMode[] = isVod
     ? ["none", "referer", "origin"]
     : ["none", "origin"];
-  let vod404CompatAttempts = 0;
-  attempt: for (const ua of UA_CANDIDATES) {
-    for (const rangeValue of rangeCandidates) {
-      for (const originHeaderMode of originHeaderModes) {
+  const attemptPlans: UpstreamAttempt[] = isVod
+    ? uniqueAttempts([
+        // VOD web: primeiro testa TODOS os UAs com a combinação mais comum.
+        // Antes, 404 falso em UA desktop consumia o limite e nunca chegava em
+        // XCIPTV/TiviMate/Smarters, quebrando filmes/séries no preview.
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "none" as const })),
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: null, originHeaderMode: "none" as const })),
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "referer" as const })),
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: null, originHeaderMode: "referer" as const })),
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: effectiveVodRange, originHeaderMode: "origin" as const })),
+        ...UA_CANDIDATES.map((ua) => ({ ua, rangeValue: range, originHeaderMode: "none" as const })),
+      ])
+    : uniqueAttempts(UA_CANDIDATES.flatMap((ua) =>
+        rangeCandidates.flatMap((rangeValue) =>
+          originHeaderModes.map((originHeaderMode) => ({ ua, rangeValue, originHeaderMode })),
+        ),
+      ));
+  attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -230,6 +263,7 @@ async function handle(request: Request) {
           usedOriginHeaders = originHeaderMode !== "none";
           usedFinalUrl = res.url || upstreamUrl.toString();
           usedRedirected = !!res.redirected || usedFinalUrl !== upstreamUrl.toString();
+          const upstreamCt = res.headers.get("content-type") || "";
           const retryBlocked = res.status === 401 || res.status === 403;
           const retryBadRange = isVod && !!rangeValue && (res.status === 400 || res.status === 416);
           // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
@@ -237,8 +271,12 @@ async function handle(request: Request) {
           // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
           // vira tentativa de compatibilidade: testa sem Range, com Referer e
           // com UA de navegador desktop antes de concluir que é inexistente.
-          const retryVodCompat404 = isVod && res.status === 404 && vod404CompatAttempts++ < 12;
-          if (!retryBlocked && !retryBadRange && !retryVodCompat404) {
+          const retryVodCompat404 = isVod && res.status === 404;
+          // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
+          // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
+          // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
+          const retryVodBadContent = isVod && res.ok && isLikelyVodBlockContentType(upstreamCt);
+          if (!retryBlocked && !retryBadRange && !retryVodCompat404 && !retryVodBadContent) {
             upstream = res;
             break attempt;
           }
@@ -246,15 +284,13 @@ async function handle(request: Request) {
         } catch (e) {
           lastError = e;
         }
-      }
-    }
   }
   if (!upstream) {
     const failHeaders = new Headers(CORS);
     failHeaders.set("X-Upstream-Status", String(lastStatus || 0));
     failHeaders.set("X-Upstream-Final-Url", usedFinalUrl || upstreamUrl.toString());
     failHeaders.set("X-Upstream-User-Agent", usedUA || (forcedUA ?? ""));
-    const clientStatus = lastStatus && lastStatus < 500 ? lastStatus : 502;
+    const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
     return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
       status: clientStatus,
       headers: failHeaders,
