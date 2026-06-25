@@ -1829,7 +1829,7 @@ export function VideoPlayer({
         <button
           type="button"
           onClick={() => videoRef.current?.play().then(() => setCanManualPlay(false)).catch(() => undefined)}
-          className="absolute inset-0 m-auto h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-glow flex items-center justify-center text-2xl"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-glow flex items-center justify-center text-2xl z-10"
           aria-label="Reproduzir"
         >
           ▶
