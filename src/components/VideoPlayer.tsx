@@ -962,6 +962,17 @@ export function VideoPlayer({
         });
         void probeVodCandidateForDiag(url).then((probe) => {
           vodDiagPatchAttempt(sessionId, attemptId, probe);
+          const status = Number(probe.upstreamStatus || probe.clientStatus || 0);
+          const directBase = mediaBaseKey(probe.directCandidate) ?? mediaBaseKey(probe.finalUrl);
+          const currentBase = mediaBaseKey(playableTargetForCandidate(url));
+          const deadBases = (probe.deadMediaBases ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+          const isRedirectedCdn404 = status === 404 && probe.redirected && (
+            probe.failureClass === "redirected-cdn-404-html" || /text\/html/i.test(probe.contentType ?? "")
+          );
+          if (isRedirectedCdn404) {
+            pruneDeadVodRedirectFamily(directBase ?? currentBase, `probe VOD: CDN final 404 (${probe.failureClass || probe.contentType || "sem classe"})`);
+          }
+          for (const dead of deadBases) pruneDeadVodRedirectFamily(dead, "probe VOD: X-Upstream-Dead-Media-Bases");
         });
         console.warn("[VOD DEBUG] tentativa falhou", {
           player: kind,
