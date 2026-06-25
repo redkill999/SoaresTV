@@ -622,9 +622,10 @@ export function VideoPlayer({
         let acceptRanges = "";
         if (isProxy) {
           const ac = new AbortController();
-          const probeTimer = setTimeout(() => ac.abort(), 6_000);
+          const probeTimer = setTimeout(() => ac.abort(), 10_000);
           try {
-            const res = await fetch(currentUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
+            const probeUrl = `${currentUrl}${currentUrl.includes("?") ? "&" : "?"}probe=1`;
+            const res = await fetch(probeUrl, { method: "HEAD", cache: "no-store", signal: ac.signal });
             probeStatus = res.status;
             upstreamStatus = res.headers.get("X-Upstream-Status") ?? "";
             upstreamCt = res.headers.get("X-Upstream-Content-Type") ?? "";
