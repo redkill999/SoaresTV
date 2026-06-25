@@ -21,7 +21,10 @@ type ProxyDiag = {
   dead_media_bases?: string[] | null;
   ua_last?: string | null;
   exception_message?: string | null;
+  exception_name?: string | null;
   exception_stack?: string | null;
+  handler_phase?: string | null;
+  request_url?: string | null;
   attempts_total?: number;
   attempts?: unknown[];
 };
@@ -37,6 +40,7 @@ function classifyTag(d: ProxyDiag | null, errorMessage: string): string {
   const phase = (d?.phase || "").toLowerCase();
   const fc = (d?.failure_class || "").toLowerCase();
   const status = d?.upstream_status ?? 0;
+  if (phase === "internal-proxy-failure" || fc === "internal-proxy-failure") return "INTERNAL PROXY";
   if (phase === "upstream-timeout") return "TIMEOUT";
   if (phase === "fetch-exception") return "FETCH EXCEPTION";
   if (status === 403) return "403";
@@ -52,6 +56,7 @@ function classifyTag(d: ProxyDiag | null, errorMessage: string): string {
 
 function phaseLabel(d: ProxyDiag | null): string {
   const p = d?.phase || "PLAYER";
+  if (p === "internal-proxy-failure") return "PROXY (INTERNAL FAILURE)";
   if (p === "fetch-exception") return "PROXY (FETCH)";
   if (p === "upstream-timeout") return "PROXY (TIMEOUT)";
   if (p.startsWith("upstream-")) return `PROXY (${p.replace("upstream-", "")})`;
@@ -61,33 +66,43 @@ function phaseLabel(d: ProxyDiag | null): string {
 
 export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
   const [diag, setDiag] = useState<ProxyDiag | null>(null);
+  const [rawText, setRawText] = useState<string>("");
+  const [httpStatus, setHttpStatus] = useState<number | null>(null);
+  const [httpContentType, setHttpContentType] = useState<string>("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const probeUrl = `/api/stream?u=${encodeURIComponent(src)}&kind=vod&probe=1&v=7`;
     setLoading(true);
     setProbeError(null);
+    setRawText("");
+    setHttpStatus(null);
+    setHttpContentType("");
     fetch(probeUrl, { method: "GET" })
       .then(async (res) => {
         const text = await res.text();
         if (cancelled) return;
+        setHttpStatus(res.status);
+        setHttpContentType(res.headers.get("content-type") || "");
+        setRawText(text);
         try {
           setDiag(JSON.parse(text) as ProxyDiag);
         } catch {
           setDiag({
             error: `NON_JSON_${res.status}`,
-            phase: res.status >= 500 ? "upstream-timeout" : "fetch-exception",
+            phase: res.status >= 500 ? "internal-proxy-failure" : "fetch-exception",
             upstream_status: res.status,
             upstream_url: src,
             final_url: res.headers.get("x-upstream-final-url") || src,
-            content_type: res.headers.get("x-upstream-content-type"),
+            content_type: res.headers.get("x-upstream-content-type") || res.headers.get("content-type"),
             redirect_count: Number(res.headers.get("x-upstream-redirected") === "1" ? 1 : 0),
             failure_class: res.headers.get("x-upstream-failure-class"),
             ua_last: res.headers.get("x-upstream-user-agent"),
-            exception_message: text.slice(0, 400) || null,
+            exception_message: text.slice(0, 800) || `HTTP ${res.status} non-JSON response`,
             exception_stack: null,
           });
         }
@@ -122,32 +137,42 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
     ["Platform", platform],
     ["candidate", candidate || "-"],
     ["kind", kind],
+    ["http_status", httpStatus !== null ? String(httpStatus) : "-"],
+    ["http_content_type", httpContentType || "-"],
+    ["error", diag?.error || errorMessage || "-"],
     ["phase", phase],
+    ["failure_class", diag?.failure_class ?? "-"],
+    ["exception_message", diag?.exception_message ?? "-"],
+    ["exception_name", diag?.exception_name ?? "-"],
+    ["exception_stack", diag?.exception_stack ?? "-"],
+    ["handler_phase", diag?.handler_phase ?? "-"],
+    ["request_url", diag?.request_url ?? "-"],
     ["upstream_url", diag?.upstream_url ?? src],
     ["final_url", diag?.final_url ?? "-"],
     ["upstream_status", String(diag?.upstream_status ?? "-")],
     ["content_type", diag?.content_type ?? "-"],
     ["redirect_count", String(redirectCount)],
+    ["redirect_location", diag?.redirect_location ?? "-"],
+    ["direct_candidate", diag?.direct_candidate ?? "-"],
+    ["ua_last", diag?.ua_last ?? "-"],
+    ["attempts_total", String(diag?.attempts_total ?? "-")],
+    ["dead_media_bases", diag?.dead_media_bases?.join(", ") ?? "-"],
     ["probe", loading ? "loading…" : probeError ? `error: ${probeError}` : "ok"],
-    ["error", errorMessage || diag?.error || "-"],
-    ["exception_message", diag?.exception_message ?? "-"],
-    ["exception_stack", diag?.exception_stack ? diag.exception_stack.slice(0, 600) : "-"],
+    ["player_error", errorMessage || "-"],
   ];
+
+  const fullJsonText = rawText || JSON.stringify(diag, null, 2);
 
   const debugText = [
     "## VOD DEBUG",
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    `failure_class: ${diag?.failure_class ?? "-"}`,
-    `redirect_location: ${diag?.redirect_location ?? "-"}`,
-    `direct_candidate: ${diag?.direct_candidate ?? "-"}`,
-    `ua_last: ${diag?.ua_last ?? "-"}`,
-    `attempts_total: ${diag?.attempts_total ?? "-"}`,
-    `dead_media_bases: ${diag?.dead_media_bases?.join(", ") ?? "-"}`,
+    "attempts:",
+    JSON.stringify(diag?.attempts ?? [], null, 2),
     "",
-    "RAW JSON:",
-    JSON.stringify(diag, null, 2),
+    "RAW JSON (resposta exata do /api/stream):",
+    fullJsonText,
   ].join("\n");
 
   const handleCopy = () => {
@@ -170,8 +195,28 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
     window.setTimeout(() => setCopied(false), 1500);
   };
 
+  const handleExportJson = () => {
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = fullJsonText;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* noop */ }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(fullJsonText).catch(fallback);
+    } else {
+      fallback();
+    }
+    setShowRaw(true);
+  };
+
   const tagColor =
-    tag === "404" || tag.includes("PLACEHOLDER") ? "bg-amber-500 text-black"
+    tag === "INTERNAL PROXY" ? "bg-red-700 text-white"
+    : tag === "404" || tag.includes("PLACEHOLDER") ? "bg-amber-500 text-black"
     : tag === "403" ? "bg-orange-500 text-black"
     : tag === "TIMEOUT" ? "bg-yellow-400 text-black"
     : tag === "DNS ERROR" || tag === "FETCH EXCEPTION" ? "bg-red-600 text-white"
@@ -182,18 +227,25 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 p-3">
       <div className="max-h-full w-full max-w-2xl overflow-auto rounded-lg border border-white/20 bg-zinc-950/95 p-4 font-mono text-[11px] text-white shadow-2xl">
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold tracking-wider">VOD DEBUG</span>
             <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${tagColor}`}>{tag}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleCopy}
               className="rounded border border-white/30 bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/20"
             >
               {copied ? "COPIADO ✓" : "COPIAR DEBUG"}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportJson}
+              className="rounded border border-emerald-400/50 bg-emerald-500/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-100 hover:bg-emerald-500/30"
+            >
+              EXPORTAR JSON COMPLETO
             </button>
             <button
               type="button"
@@ -206,15 +258,39 @@ export function VodDebugOverlay({ src, errorMessage, kind, onClose }: Props) {
           </div>
         </div>
         <div className="space-y-1">
-          {rows.map(([k, v]) => (
-            <div key={k} className="grid grid-cols-[140px_1fr] gap-2 border-b border-white/5 py-1">
-              <span className="text-white/50">{k}</span>
-              <span className="break-all text-white/95 whitespace-pre-wrap">{v}</span>
-            </div>
-          ))}
+          {rows.map(([k, v]) => {
+            const highlight = k === "error" || k === "phase" || k === "failure_class" || k === "exception_message" || k === "exception_stack";
+            return (
+              <div key={k} className="grid grid-cols-[150px_1fr] gap-2 border-b border-white/5 py-1">
+                <span className="text-white/50">{k}</span>
+                <span className={`break-all whitespace-pre-wrap ${highlight ? "text-amber-200" : "text-white/95"}`}>{v}</span>
+              </div>
+            );
+          })}
         </div>
+        {diag?.attempts && diag.attempts.length > 0 && (
+          <div className="mt-3 rounded bg-black/60 p-2 text-[10px] leading-snug text-sky-200/90">
+            <div className="mb-1 font-bold text-white/70">attempts ({diag.attempts.length})</div>
+            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag.attempts, null, 2)}</pre>
+          </div>
+        )}
+        {showRaw && (
+          <div className="mt-3 rounded border border-emerald-400/40 bg-black/80 p-2 text-[10px] leading-snug text-emerald-100">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="font-bold text-white/70">RAW RESPONSE (HTTP {httpStatus ?? "?"} · {httpContentType || "?"})</span>
+              <button
+                type="button"
+                onClick={() => setShowRaw(false)}
+                className="rounded border border-white/30 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider hover:bg-white/20"
+              >
+                OCULTAR
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap break-all">{fullJsonText || "(vazio)"}</pre>
+          </div>
+        )}
         <div className="mt-3 rounded bg-black/60 p-2 text-[10px] leading-snug text-emerald-200/90">
-          <div className="mb-1 font-bold text-white/70">RAW JSON</div>
+          <div className="mb-1 font-bold text-white/70">parsed JSON</div>
           <pre className="whitespace-pre-wrap break-all">{JSON.stringify(diag, null, 2)}</pre>
         </div>
       </div>
