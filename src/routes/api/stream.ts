@@ -432,6 +432,30 @@ async function handle(request: Request) {
   let redirectedVod404Count = 0;
   let redirectedVod404HtmlCount = 0;
   const redirectedVodDeadBases = new Set<string>();
+  // Trilha completa de tentativas — chave para diagnosticar 502/timeout no client.
+  type AttemptTrace = {
+    n: number;
+    ua: string;
+    range: string | null;
+    originHeaderMode: OriginHeaderMode;
+    redirectStrategy?: RedirectStrategy;
+    phase: "fetch" | "manual-redirect" | "final-follow";
+    finalUrl?: string;
+    redirectLocation?: string;
+    status?: number;
+    contentType?: string;
+    redirected?: boolean;
+    error?: string;
+    errorName?: string;
+    durationMs: number;
+  };
+  const attemptTraces: AttemptTrace[] = [];
+  // Atalho: se o upstream redireciona para o placeholder
+  // "vod_nao_encontrado" do painel Hostinger, o asset NÃO existe. Detectar
+  // isso evita queimar 50 tentativas (que estouram o timeout do Worker e o
+  // browser vê 502 em vez do 404 real).
+  const isPlaceholderNotFoundUrl = (u: string | null | undefined): boolean =>
+    !!u && /vod_nao_encontrado|nao_encontrado|not_found/i.test(u);
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, finiteVodRangeForUpstream(effectiveVodRange), range, "bytes=0-", null]))
     : playlistPath
@@ -569,23 +593,25 @@ async function handle(request: Request) {
   }
 
   attempt: for (const { ua, rangeValue, originHeaderMode, redirectStrategy } of attemptPlans) {
+        const attemptStart = Date.now();
+        const trace: AttemptTrace = {
+          n: attemptTraces.length + 1,
+          ua,
+          range: rangeValue,
+          originHeaderMode,
+          redirectStrategy,
+          phase: "fetch",
+          durationMs: 0,
+        };
+        attemptTraces.push(trace);
         try {
           const controller = new AbortController();
-          // VOD pode demorar para o CDN entregar o primeiro byte no preview;
-          // porém probes/manifestos de VOD precisam falhar rápido para não
-          // deixar o <video>/hls.js preso em CDNs que retornam HEAD 200 vazio
-          // e GET 404 (caso suportejetflix.site → flixbr.lat).
-          // Fast-path web (redirectStrategy="follow") usa timeout menor para
-          // não segurar 20s antes de cair no waterfall pesado.
           const timeoutMs = isDiagProbe || playlistPath ? 7_000 : redirectStrategy === "follow" ? 12_000 : 20_000;
           const timeout = setTimeout(() => controller.abort(), timeoutMs);
           let res: Response;
           let resolvedRedirectManually = false;
           try {
             const upstreamMethod = (request.method === "HEAD" || isDiagProbe) && vodContext ? "GET" : request.method === "HEAD" ? "HEAD" : "GET";
-            // FAST PATH WEB VOD: simples `redirect: follow`, sem cookie/header dance.
-            // Restaura o comportamento histórico onde o proxy era um pipe fino.
-            // Só falha se o upstream der erro real — aí cai no waterfall manual.
             if (vodContext && upstreamMethod === "GET" && redirectStrategy === "follow") {
               res = await fetch(upstreamUrl.toString(), {
                 method: "GET",
@@ -593,6 +619,21 @@ async function handle(request: Request) {
                 redirect: "follow",
                 signal: controller.signal,
               });
+              trace.finalUrl = res.url || upstreamUrl.toString();
+              if (isPlaceholderNotFoundUrl(trace.finalUrl)) {
+                trace.phase = "final-follow";
+                trace.status = 404;
+                trace.contentType = res.headers.get("content-type") || "";
+                trace.redirected = true;
+                lastStatus = 404;
+                usedUA = ua;
+                usedFinalUrl = trace.finalUrl!;
+                usedRedirected = true;
+                usedFailureClass = "vod-placeholder-not-found";
+                trace.durationMs = Date.now() - attemptStart;
+                try { await res.body?.cancel(); } catch { /* noop */ }
+                break attempt;
+              }
             } else if (vodContext && upstreamMethod === "GET") {
               const first = await fetch(upstreamUrl.toString(), {
                 method: "GET",
@@ -601,6 +642,22 @@ async function handle(request: Request) {
                 signal: controller.signal,
               });
               const loc = resolveLocation(first.headers.get("location"), upstreamUrl);
+              trace.phase = "manual-redirect";
+              trace.redirectLocation = loc ?? undefined;
+              if (isRedirectStatus(first.status) && loc && isPlaceholderNotFoundUrl(loc)) {
+                trace.status = 404;
+                trace.contentType = first.headers.get("content-type") || "";
+                trace.redirected = true;
+                lastStatus = 404;
+                usedUA = ua;
+                usedFinalUrl = loc;
+                usedRedirectLocation = loc;
+                usedRedirected = true;
+                usedFailureClass = "vod-placeholder-not-found";
+                trace.durationMs = Date.now() - attemptStart;
+                try { await first.body?.cancel(); } catch { /* noop */ }
+                break attempt;
+              }
               if (isRedirectStatus(first.status) && loc) {
                 resolvedRedirectManually = true;
                 try { await first.body?.cancel(); } catch { /* noop */ }
@@ -662,6 +719,17 @@ async function handle(request: Request) {
           }
           const upstreamCt = res.headers.get("content-type") || "";
           usedFailureClass = classifyVodFailure(res.status, usedRedirected, upstreamCt);
+          trace.status = res.status;
+          trace.contentType = upstreamCt;
+          trace.finalUrl = usedFinalUrl;
+          trace.redirected = usedRedirected;
+          trace.durationMs = Date.now() - attemptStart;
+          if (vodContext && usedRedirected && isPlaceholderNotFoundUrl(usedFinalUrl)) {
+            usedFailureClass = "vod-placeholder-not-found";
+            lastStatus = 404;
+            try { await res.body?.cancel(); } catch { /* noop */ }
+            break attempt;
+          }
           if (vodContext && res.status === 404 && usedRedirected) {
             redirectedVod404Count += 1;
             if (isLikelyVodBlockContentType(upstreamCt)) {
@@ -670,21 +738,10 @@ async function handle(request: Request) {
               if (deadBase) redirectedVodDeadBases.add(deadBase);
             }
           }
-          // Probe diagnóstico: não varre dezenas de combinações. A primeira
-          // resposta real já é a informação que precisamos exibir no painel
-          // (status, URL final, UA e headers), e evita "signal aborted" vazio.
           if (isDiagProbe) {
             upstream = res;
             break attempt;
           }
-          // Alguns CDNs IPTV de VOD retornam 404 falso quando recebem Range,
-          // Referer ausente ou User-Agent de player. Antes aceitávamos esse
-          // primeiro 404 e o filme/série morria no preview web. Para VOD, 404
-          // vira tentativa de compatibilidade: testa sem Range, com Referer e
-          // com UA de navegador desktop antes de concluir que é inexistente.
-          // Alguns CDNs retornam 200 com página HTML/JSON de bloqueio em vez
-          // de vídeo. Se aceitarmos esse 200, o <video> falha com code=4 e não
-          // tentamos o próximo UA. Para VOD, HTML/JSON/XML nunca é mídia válida.
           if (!shouldRetryVodResponse(res, rangeValue, usedRedirected, upstreamCt, usedFinalUrl)) {
             upstream = res;
             break attempt;
@@ -692,10 +749,14 @@ async function handle(request: Request) {
           try { await res.body?.cancel(); } catch { /* noop */ }
         } catch (e) {
           lastError = e;
+          const err = e as { name?: string; message?: string } | null;
+          trace.error = err?.message || String(e);
+          trace.errorName = err?.name || "Error";
+          trace.durationMs = Date.now() - attemptStart;
           if (isDiagProbe) {
             usedUA = ua;
             usedOriginHeaders = originHeaderMode !== "none";
-            usedFailureClass = (e as { name?: string } | null)?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
+            usedFailureClass = err?.name === "AbortError" ? "probe-timeout" : "probe-network-error";
             break attempt;
           }
         }
@@ -712,8 +773,58 @@ async function handle(request: Request) {
     failHeaders.set("X-Upstream-Redirect-Cookie", usedRedirectCookie ? "1" : "0");
     failHeaders.set("X-Upstream-Failure-Class", usedFailureClass);
     if (redirectedVodDeadBases.size) failHeaders.set("X-Upstream-Dead-Media-Bases", Array.from(redirectedVodDeadBases).join(","));
+
+    const errObj = lastError as { name?: string; message?: string; stack?: string } | null;
+    const phase: string = usedFailureClass
+      || (errObj?.name === "AbortError" ? "upstream-timeout"
+        : errObj ? "fetch-exception"
+        : lastStatus ? `upstream-${lastStatus}`
+        : "no-attempt-succeeded");
+
+    // Log obrigatório antes de qualquer falha — única forma de diagnosticar
+    // sem Logcat / sem reproduzir no preview.
+    console.error("[VOD PROXY FAIL]", JSON.stringify({
+      phase,
+      original_url: target,
+      upstream_url: upstreamUrl.toString(),
+      final_url: usedFinalUrl,
+      last_status: lastStatus,
+      redirect_location: usedRedirectLocation,
+      direct_candidate: usedDirectCandidate,
+      content_type_final: attemptTraces.at(-1)?.contentType ?? null,
+      redirect_count: attemptTraces.filter((a) => a.redirected).length,
+      failure_class: usedFailureClass,
+      ua_last: usedUA,
+      origin_headers_last: usedOriginHeaders,
+      attempts_total: attemptTraces.length,
+      exception_message: errObj?.message ?? null,
+      exception_name: errObj?.name ?? null,
+      exception_stack: errObj?.stack ?? null,
+      attempts: attemptTraces,
+    }));
+
     const clientStatus = lastStatus && lastStatus < 500 && (lastStatus < 200 || lastStatus >= 300) ? lastStatus : 502;
-    return new Response(`upstream fetch failed${lastStatus ? ` HTTP ${lastStatus}` : ""}: ${lastError instanceof Error ? lastError.message : "err"}`, {
+    failHeaders.set("Content-Type", "application/json; charset=utf-8");
+    return new Response(JSON.stringify({
+      error: phase.startsWith("upstream-") || phase === "fetch-exception" || phase === "upstream-timeout"
+        ? phase.toUpperCase().replace(/-/g, "_")
+        : (usedFailureClass ? usedFailureClass.toUpperCase().replace(/-/g, "_") : "BAD_GATEWAY"),
+      phase,
+      upstream_status: lastStatus || null,
+      upstream_url: upstreamUrl.toString(),
+      final_url: usedFinalUrl,
+      content_type: attemptTraces.at(-1)?.contentType ?? null,
+      redirects: attemptTraces.filter((a) => a.redirected).length,
+      redirect_location: usedRedirectLocation || null,
+      direct_candidate: usedDirectCandidate || null,
+      candidate: usedDirectCandidate || usedFinalUrl,
+      failure_class: usedFailureClass || null,
+      dead_media_bases: redirectedVodDeadBases.size ? Array.from(redirectedVodDeadBases) : null,
+      ua_last: usedUA || null,
+      exception: errObj ? { name: errObj.name, message: errObj.message } : null,
+      attempts_total: attemptTraces.length,
+      attempts: attemptTraces,
+    }, null, 2), {
       status: clientStatus,
       headers: failHeaders,
     });
