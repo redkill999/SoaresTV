@@ -868,7 +868,7 @@ export function VideoPlayer({
         if (failureClass === "redirected-cdn-404-html" || deadBases.length) {
           for (const dead of deadBases) deadVodRedirectBases.add(dead);
           if (directBase) deadVodRedirectBases.add(directBase);
-          console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo tentativa direta uma vez e removendo variações equivalentes", {
+          console.warn("[VOD DEBUG] redirect peek confirmou CDN final 404/HTML; mantendo fallbacks Xtream e evitando apenas o CDN final repetido", {
             originalTarget,
             direct,
             failureClass,
@@ -902,7 +902,6 @@ export function VideoPlayer({
       if (!isVod || !deadBase) return 0;
       deadVodRedirectBases.add(deadBase);
       const sourceBase = vodRedirectSourceBaseByDirectBase.get(deadBase) ?? null;
-      if (sourceBase) deadVodRedirectBases.add(sourceBase);
 
       const shouldDrop = (candidate: string): boolean => {
         const target = playableTargetForCandidate(candidate);
@@ -912,9 +911,9 @@ export function VideoPlayer({
         const cachedBase = mediaBaseKey(cachedDirect);
         const mappedSource = base ? vodRedirectSourceBaseByDirectBase.get(base) : null;
         return !!(
-          (base && (base === deadBase || base === sourceBase || deadVodRedirectBases.has(base))) ||
+          (base && (base === deadBase || deadVodRedirectBases.has(base))) ||
           (cachedBase && (cachedBase === deadBase || deadVodRedirectBases.has(cachedBase))) ||
-          (mappedSource && (mappedSource === sourceBase || mappedSource === deadBase || deadVodRedirectBases.has(mappedSource)))
+          (mappedSource && (mappedSource === deadBase || deadVodRedirectBases.has(mappedSource)))
         );
       };
 
