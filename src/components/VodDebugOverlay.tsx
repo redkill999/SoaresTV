@@ -29,7 +29,9 @@ type ProxyDiag = {
   handler_phase?: string | null;
   request_url?: string | null;
   attempts_total?: number;
-  attempts?: unknown[];
+  attempts?: Array<Record<string, unknown>>;
+  probe_matrix?: Array<Record<string, unknown>> | null;
+  timings_ms?: { last_attempt_ttfb?: number | null; last_attempt_total?: number | null; timeout_budget?: number | null } | null;
 };
 
 type Props = {
