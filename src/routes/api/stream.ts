@@ -13,6 +13,8 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected",
 };
 
+const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
+
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
   return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
@@ -87,12 +89,15 @@ function parseContentRange(value: string | null): { start: number; end: number; 
 
 function vodRangeForUpstream(requestedRange: string | null, head = false): string {
   if (head) return "bytes=0-0";
-  const parsed = parseByteRange(requestedRange);
-  // VOD precisa se comportar como servidor de arquivo progressivo. Antes o
-  // proxy capava toda Range em blocos de 16MB; alguns navegadores/players do
-  // preview interpretavam isso como fim prematuro do arquivo e abortavam filmes.
-  // Agora repassamos a Range exata do browser. Sem Range, pedimos open-ended.
-  return parsed ? requestedRange!.trim() : "bytes=0-";
+  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
+  // VOD no preview web precisa responder como servidor progressivo com Range
+  // FINITA. Muitos CDNs Xtream engasgam/bloqueiam `bytes=0-` aberto quando a
+  // requisição vem do proxy; o fluxo antigo que funcionava entregava blocos.
+  const cappedEnd = Math.min(
+    parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1,
+    parsed.start + VOD_CHUNK_SIZE - 1,
+  );
+  return `bytes=${parsed.start}-${cappedEnd}`;
 }
 
 function finiteVodRangeForUpstream(rangeValue: string | null): string | null {
@@ -254,12 +259,13 @@ async function handle(request: Request) {
     "VLC/3.0.20 LibVLC/3.0.20",
   ];
   const VOD_UAS = [
-    // Para VOD Xtream, players IPTV costumam ser aceitos com mais frequência
-    // que UA desktop; desktop fica como fallback, não como primeira tentativa.
-    ...DEFAULT_UAS,
+    // No preview web desktop, alguns CDNs liberam VOD para UA de navegador e
+    // bloqueiam UAs IPTV vindos de datacenter. Mantém o fluxo web antigo:
+    // desktop primeiro, IPTV como fallback.
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+    ...DEFAULT_UAS,
   ];
   const forcedUA = url.searchParams.get("ua");
   const UA_CANDIDATES = forcedUA
@@ -321,7 +327,9 @@ async function handle(request: Request) {
   attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), isVod ? 8_000 : 20_000);
+          // VOD pode demorar para o CDN entregar o primeiro byte no preview;
+          // 8s fazia o proxy abortar filmes/séries que antes abriam.
+          const timeout = setTimeout(() => controller.abort(), 20_000);
           let res: Response;
           try {
             res = await fetch(upstreamUrl.toString(), {

@@ -35,11 +35,17 @@ type MovieInfo = {
   };
 };
 
-function playableDirectSource(direct?: string): string | null {
+function playableDirectSource(direct?: string, native = false): string | null {
   if (!direct || !/^https?:\/\//i.test(direct)) return null;
   try {
     const path = new URL(direct).pathname.toLowerCase();
-    return /\.(m3u8|mp4|m4v|mov|webm|mkv|avi|ts)(\?|$)/i.test(path) ? direct : null;
+    // No preview web, só aceite direct_source que o navegador costuma tocar
+    // direto. Containers como .ts/.mkv/.avi exigem MSE/CORS e, quando usados
+    // como primários, quebravam VOD que antes caía na URL Xtream canônica.
+    // No APK, ExoPlayer continua podendo usar esses formatos diretamente.
+    const webPlayable = /\.(m3u8|mp4|m4v|mov|webm)(\?|$)/i.test(path);
+    const nativePlayable = /\.(mkv|avi|ts)(\?|$)/i.test(path);
+    return webPlayable || (native && nativePlayable) ? direct : null;
   } catch {
     return null;
   }
@@ -83,13 +89,12 @@ function PlayerPage() {
     (ep: Episode) => {
       if (!creds) return;
       const canonical = streamUrl.episode(creds, ep.id, ep.container_extension || "mp4");
-      const direct = playableDirectSource(ep.direct_source);
-      const native = isNativeAppSync();
-      // Web desktop: URL Xtream canônica primeiro (era o fluxo que funcionava);
-      // direct_source fica só como fallback porque muitos painéis retornam CDN
-      // bloqueado/HTML para navegador. APK pode continuar preferindo direto.
-      setEpisodeUrl(native && direct ? direct : canonical);
-      setEpisodeFallbackSrcs(Array.from(new Set([native && direct ? canonical : direct].filter(Boolean) as string[])));
+      const direct = playableDirectSource(ep.direct_source, isNativeAppSync());
+      // VOD que funcionava no preview usava `direct_source` quando o painel
+      // fornece uma URL de arquivo real. Mantemos a canônica Xtream como
+      // fallback, mas não deixamos ela atrasar/bloquear o caminho direto.
+      setEpisodeUrl(direct ?? canonical);
+      setEpisodeFallbackSrcs(Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[])));
       setActiveEpisodeId(String(ep.id));
       setActiveTitle(`${name} — ${ep.title}`);
       store.setLastEpisode(id, String(ep.id));
@@ -126,8 +131,8 @@ function PlayerPage() {
       const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
       const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
       const canonical = streamUrl.movie(creds, movieId, movieExt);
-      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
-      return isNativeAppSync() && direct ? direct : canonical;
+      const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
+      return direct ?? canonical;
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
@@ -139,9 +144,8 @@ function PlayerPage() {
     const movieId = movieQ.data?.movie_data?.stream_id ?? sid;
     const movieExt = movieQ.data?.movie_data?.container_extension || ext || "mp4";
     const canonical = streamUrl.movie(creds, movieId, movieExt);
-    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source);
-    const primary = isNativeAppSync() && direct ? direct : canonical;
-    return Array.from(new Set([primary === direct ? canonical : direct].filter(Boolean) as string[]));
+    const direct = playableDirectSource(movieQ.data?.movie_data?.direct_source, isNativeAppSync());
+    return Array.from(new Set([direct ? canonical : null].filter(Boolean) as string[]));
   }, [creds, type, id, movieQ.data]);
 
   const vodFallbackSrcs = type === "movie" ? movieFallbackSrcs : type === "series" ? episodeFallbackSrcs : EMPTY_FALLBACK_SRCS;

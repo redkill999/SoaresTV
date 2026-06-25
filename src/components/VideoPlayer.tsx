@@ -403,7 +403,15 @@ export function VideoPlayer({
           } else if (forceProxy) {
             candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else {
-            candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null, secure];
+            candidates = [
+              proxiedX(url, "vod"),
+              secure ? proxiedX(secure, "vod") : null,
+              secure,
+              // Se o proxy do preview falhar para VOD, ainda deixa o browser
+              // tentar a URL original HTTPS diretamente. Isso não mexe em LIVE
+              // nem no APK, e evita prender filmes/séries em um único caminho.
+              /^https:\/\//i.test(url) ? url : null,
+            ];
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
