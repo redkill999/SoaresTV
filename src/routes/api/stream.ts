@@ -13,8 +13,6 @@ const CORS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Upstream-Status, X-Upstream-Content-Type, X-Upstream-Final-Url, X-Upstream-User-Agent, X-Upstream-Origin-Headers, X-Upstream-Redirected",
 };
 
-const VOD_CHUNK_SIZE = 16 * 1024 * 1024;
-
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
   return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
@@ -89,9 +87,12 @@ function parseContentRange(value: string | null): { start: number; end: number; 
 
 function vodRangeForUpstream(requestedRange: string | null, head = false): string {
   if (head) return "bytes=0-0";
-  const parsed = parseByteRange(requestedRange) ?? { start: 0 };
-  const cappedEnd = Math.min(parsed.end ?? parsed.start + VOD_CHUNK_SIZE - 1, parsed.start + VOD_CHUNK_SIZE - 1);
-  return `bytes=${parsed.start}-${cappedEnd}`;
+  const parsed = parseByteRange(requestedRange);
+  // VOD precisa se comportar como servidor de arquivo progressivo. Antes o
+  // proxy capava toda Range em blocos de 16MB; alguns navegadores/players do
+  // preview interpretavam isso como fim prematuro do arquivo e abortavam filmes.
+  // Agora repassamos a Range exata do browser. Sem Range, pedimos open-ended.
+  return parsed ? requestedRange!.trim() : "bytes=0-";
 }
 
 function numericHeader(headers: Headers, name: string): number | undefined {
@@ -114,6 +115,63 @@ function normalizeVodRangeResponseHeaders(headers: Headers, effectiveRange: stri
   headers.set("Content-Length", String(bodyLength));
   headers.set("Content-Range", `bytes ${start}-${end}/${total ?? "*"}`);
   headers.set("Accept-Ranges", "bytes");
+}
+
+function sliceReadableStream(
+  body: ReadableStream<Uint8Array> | null,
+  skipBytes: number,
+  takeBytes: number,
+): ReadableStream<Uint8Array> | null {
+  if (!body) return null;
+  const reader = body.getReader();
+  let skip = Math.max(0, skipBytes);
+  let remaining = Math.max(0, takeBytes);
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        while (remaining > 0) {
+          const { done, value } = await reader.read();
+          if (done || !value) {
+            controller.close();
+            return;
+          }
+
+          let chunk = value;
+          if (skip > 0) {
+            if (chunk.byteLength <= skip) {
+              skip -= chunk.byteLength;
+              continue;
+            }
+            chunk = chunk.slice(skip);
+            skip = 0;
+          }
+
+          if (chunk.byteLength > remaining) {
+            controller.enqueue(chunk.slice(0, remaining));
+            remaining = 0;
+            try { await reader.cancel(); } catch { /* noop */ }
+            controller.close();
+            return;
+          }
+
+          controller.enqueue(chunk);
+          remaining -= chunk.byteLength;
+          if (remaining === 0) {
+            try { await reader.cancel(); } catch { /* noop */ }
+            controller.close();
+          }
+          return;
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
 }
 
 function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
@@ -250,14 +308,18 @@ async function handle(request: Request) {
   attempt: for (const { ua, rangeValue, originHeaderMode } of attemptPlans) {
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 20_000);
-          const res = await fetch(upstreamUrl.toString(), {
-            method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
-            headers: buildHeaders(ua, rangeValue, originHeaderMode),
-            redirect: "follow",
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
+          const timeout = setTimeout(() => controller.abort(), isVod ? 8_000 : 20_000);
+          let res: Response;
+          try {
+            res = await fetch(upstreamUrl.toString(), {
+              method: request.method === "HEAD" && !isVod ? "HEAD" : "GET",
+              headers: buildHeaders(ua, rangeValue, originHeaderMode),
+              redirect: "follow",
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeout);
+          }
           lastStatus = res.status;
           usedUA = ua;
           usedOriginHeaders = originHeaderMode !== "none";
@@ -334,6 +396,10 @@ async function handle(request: Request) {
   }
 
   if (isPlaylist && upstream.ok) {
+    if (request.method === "HEAD") {
+      respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
+      return new Response(null, { status: upstream.status, headers: respHeaders });
+    }
     const text = await upstream.text();
     const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
@@ -358,6 +424,24 @@ async function handle(request: Request) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
     return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
   }
+  if (isVod && status === 200 && requestedRange) {
+    const parsed = parseByteRange(requestedRange);
+    const total = numericHeader(upstream.headers, "content-length");
+    if (parsed && total !== undefined && parsed.start < total) {
+      const start = parsed.start;
+      const end = Math.min(parsed.end ?? total - 1, total - 1);
+      const len = end - start + 1;
+      respHeaders.set("Content-Length", String(len));
+      respHeaders.set("Content-Range", `bytes ${start}-${end}/${total}`);
+      respHeaders.set("Accept-Ranges", "bytes");
+      const body = request.method === "HEAD"
+        ? null
+        : start === 0 && len === total
+          ? upstream.body
+          : sliceReadableStream(upstream.body, start, len);
+      return new Response(body, { status: 206, headers: respHeaders });
+    }
+  }
   // FIX WEB-LIVE: NÃO converter 200→206 em LIVE .ts. mpegts.js no navegador
   // desktop fetcha o stream esperando entrega contínua (Transfer-Encoding:
   // chunked / open-ended). Se forçarmos 206 + Content-Range finito, ele
@@ -375,7 +459,7 @@ async function handle(request: Request) {
       respHeaders.set("Content-Range", `bytes 0-${total - 1}/${total}`);
     }
   }
-  return new Response(upstream.body, { status, headers: respHeaders });
+  return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/stream")({
