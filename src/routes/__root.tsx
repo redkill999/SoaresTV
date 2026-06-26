@@ -14,6 +14,8 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
 import { syncLangFromStorage } from "../lib/i18n";
 import { FloatingMiniPlayer } from "../components/FloatingMiniPlayer";
+import { GlobalSearch } from "../components/GlobalSearch";
+import { useGlobalSearch } from "../hooks/use-global-search";
 
 
 function NotFoundComponent() {
