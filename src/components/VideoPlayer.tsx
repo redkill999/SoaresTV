@@ -78,6 +78,10 @@ function proxied(url: string, kind?: "live" | "vod"): string {
 function maskIptvUrl(url: string): string {
   try {
     const parsed = new URL(url);
+    const proxiedTarget = parsed.searchParams.get("u");
+    if (proxiedTarget) {
+      parsed.searchParams.set("u", maskIptvUrl(proxiedTarget));
+    }
     parsed.username = "";
     parsed.password = "";
     parsed.pathname = parsed.pathname.replace(
@@ -116,7 +120,7 @@ async function probeNativeLiveStream(
     }
 
     onLine(`ETAPA 4.0 probe GET parcial url=${maskIptvUrl(url)}`);
-    for (const [label, ua] of uaList) {
+    for (const [idx, [label, ua]] of uaList.entries()) {
       if (isCancelled()) return;
       try {
         const started = Date.now();
@@ -143,7 +147,7 @@ async function probeNativeLiveStream(
         const headers = res.headers ?? {};
         const contentType = headers["content-type"] ?? headers["Content-Type"] ?? "-";
         const contentLength = headers["content-length"] ?? headers["Content-Length"] ?? "-";
-        onLine(`ETAPA 4.${uaList.indexOf([label, ua] as never) + 1} probe UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}`);
+        onLine(`ETAPA 4.${idx + 1} probe UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}`);
         if (res.status && res.status >= 200 && res.status < 400) return;
       } catch (err) {
         if (isCancelled()) return;
