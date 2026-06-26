@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
 import { syncLangFromStorage } from "../lib/i18n";
+import { FloatingMiniPlayer } from "../components/FloatingMiniPlayer";
 
 
 function NotFoundComponent() {
@@ -291,6 +292,7 @@ function RootComponent() {
       <ThemeProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
+        <FloatingMiniPlayer />
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Heart } from "lucide-react";
 import { memo, useState } from "react";
-import { store, type FavItem } from "@/lib/storage";
+import { store, miniPlayerStore, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
@@ -30,6 +30,9 @@ export const XciptvTile = memo(function XciptvTile({
       to="/player/$type/$id"
       params={{ type, id }}
       search={{ name }}
+      onClick={() => {
+        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image });
+      }}
       className="group block focus:outline-none"
     >
       <div className="xciptv-tile rounded-sm overflow-hidden aspect-square relative group-hover:xciptv-tile-active group-focus-visible:xciptv-tile-active">
