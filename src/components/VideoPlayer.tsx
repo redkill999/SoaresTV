@@ -658,11 +658,24 @@ export function VideoPlayer({
         video.pause();
         video.removeAttribute("src");
         video.load();
+        // mpegts.js exige URL absoluta no FetchStreamLoader (com worker,
+        // URLs relativas falham com NetworkError/Exception imediato no web).
+        const absUrl = (() => {
+          try {
+            return typeof window !== "undefined"
+              ? new URL(url, window.location.origin).toString()
+              : url;
+          } catch {
+            return url;
+          }
+        })();
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive: true, url },
+          { type: "mpegts", isLive: true, url: absUrl },
           {
             isLive: true,
-            enableWorker: true,
+            // Worker desativado: causa NetworkError em alguns navegadores quando
+            // a URL é proxiada e Range é negociado de forma imprevisível.
+            enableWorker: false,
             enableStashBuffer: false,
             liveBufferLatencyChasing: true,
             liveBufferLatencyMaxLatency: 6,
