@@ -226,15 +226,31 @@ function FooterBtn({
 
 function AlarmInline({ current, onPick, onClose }: { current: number; onPick: (m: number) => void; onClose: () => void }) {
   const opts = [0, 15, 30, 60, 90, 120];
+  // FIX (a11y): Esc fecha o modal — antes só fechava por clique fora.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1220] p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-sm font-semibold tracking-[0.2em] mb-1">SLEEP TIMER</h3>
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1220] p-5"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sleep-timer-title"
+      >
+        <h3 id="sleep-timer-title" className="text-sm font-semibold tracking-[0.2em] mb-1">SLEEP TIMER</h3>
         <p className="text-xs text-white/60 mb-4">Desliga o app após o tempo escolhido.</p>
         <div className="grid grid-cols-3 gap-2">
           {opts.map((m) => (
             <button key={m} onClick={() => onPick(m)}
-              className={`rounded-lg border py-2 text-sm transition ${current === m ? "bg-red-500/20 border-red-400" : "border-white/10 bg-white/5 hover:bg-white/10"}`}>
+              className={`rounded-lg border py-2 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1FB6FF] ${current === m ? "bg-red-500/20 border-red-400" : "border-white/10 bg-white/5 hover:bg-white/10"}`}>
               {m === 0 ? "Off" : `${m} min`}
             </button>
           ))}
@@ -245,12 +261,28 @@ function AlarmInline({ current, onPick, onClose }: { current: number; onPick: (m
 }
 
 function SimpleInline({ title, body, onClose }: { title: string; body: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1220] p-5" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1220] p-5"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <h3 className="text-sm font-semibold tracking-[0.2em] mb-2">{title}</h3>
         <p className="text-sm text-white/80">{body}</p>
       </div>
     </div>
   );
 }
+
