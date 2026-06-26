@@ -289,11 +289,17 @@ export function VideoPlayer({
         nativeLiveWatchdogRef.current = setTimeout(() => {
           if (cancelled || !nativeOpenedRef.current || nativeLivePlayedRef.current) return;
           pushDbg("ETAPA 9 native watchdog: sem evento PLAY; fechando ExoPlayer para mostrar diagnóstico");
-          void stopNative().catch(() => undefined);
+          // FIX E: stopNative() é fire-and-forget — closeFullscreen() pode travar
+          // no Android (ExoPlayer em loading state). Disparamos setPlayerMode/setError
+          // imediatamente para o React atualizar o DOM; o timer de segurança de 4 s
+          // garante que a segunda chamada de stopNative() tente novamente caso o
+          // overlay nativo não tenha fechado na primeira tentativa.
           nativeOpenedRef.current = false;
           setPlayerMode("web");
           setError("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
-        }, 18_000);
+          void stopNative().catch(() => undefined);
+          setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
+        }, 12_000);
       }
       if (cancelled) {
         if (ok) void stopNative();
@@ -465,7 +471,7 @@ export function VideoPlayer({
         else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
           watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
         }
-      }, 18_000);
+      }, 12_000);
     };
 
     const bufferedAhead = () => {

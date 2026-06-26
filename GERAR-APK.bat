@@ -128,6 +128,9 @@ echo.
 echo  [3/5] Sincronizando Capacitor (bunx cap sync android)...
 call bunx cap sync android >> "%LOG_FILE%" 2>&1 || goto :fail
 
+echo  [3a/5] Aplicando patch do ExoPlayer para IPTV .TS...
+call node scripts/patch-video-player.mjs >> "%LOG_FILE%" 2>&1 || goto :fail
+
 REM ---------- 5b. Gerar icones (celular + TV banner) a partir de resources/ ----------
 echo.
 echo  [3b/5] Gerando icones do APK (a partir da pasta resources\)...
