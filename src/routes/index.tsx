@@ -112,13 +112,19 @@ function LoginPage() {
         const playlistProbeUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
           username,
         )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+        let m3uTimedOut = false;
         try {
-          entries = await loadM3U(playlistProbeUrl, username, password);
-        } catch {
+          entries = await withTimeout(
+            loadM3U(playlistProbeUrl, username, password),
+            native ? 12_000 : 30_000,
+            "Tempo esgotado ao tentar carregar a lista M3U.",
+          );
+        } catch (m3uErr) {
+          m3uTimedOut = isTimeoutError(m3uErr);
           entries = [];
         }
 
-        if (!entries.length && (/dashboard|painel/i.test(server) || /não parece ser o DNS Xtream|player_api\.php\/get\.php/i.test(loginErr instanceof Error ? loginErr.message : ""))) {
+        if (!entries.length && !m3uTimedOut && (/dashboard|painel/i.test(server) || /não parece ser o DNS Xtream|player_api\.php\/get\.php/i.test(loginErr instanceof Error ? loginErr.message : ""))) {
           try {
             const discovered = await discoverPanelServer(creds);
             normalizedServer = discovered.server;
@@ -130,6 +136,9 @@ function LoginPage() {
         } else {
           if (!native && /HTTP 50[1234]|datacenter|rejeitou o acesso/i.test(loginErr instanceof Error ? loginErr.message : "")) {
             throw new Error("Esse servidor bloqueou a conexão da versão web antes de autenticar. Não salvei nada para não bagunçar as listas que já funcionam.");
+          }
+          if (native && m3uTimedOut) {
+            throw new Error("Tempo esgotado ao conectar. Verifique se o DNS/porta do servidor IPTV está correto.");
           }
           if (!entries.length) throw loginErr;
         }
@@ -462,5 +471,19 @@ function LoginPage() {
       </div>
     </div>
   );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise.finally(() => { if (timer) clearTimeout(timer); }),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && /tempo esgotado|timeout|abort/i.test(err.message);
 }
 
