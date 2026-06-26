@@ -659,6 +659,7 @@ export function VideoPlayer({
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
+          if (data.fatal) pushDbg(`hls FATAL type=${data.type} details=${data.details} http=${(data as { response?: { code?: number } }).response?.code ?? "-"} url=${(data as { url?: string }).url ?? "-"}`);
           if (!data.fatal) {
             if (isLive && (
               data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
