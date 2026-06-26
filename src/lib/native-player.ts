@@ -38,6 +38,19 @@ const PLAYER_ID = "fullscreen";
 let exitHandle: { remove: () => void } | null = null;
 let debugHandles: Array<{ remove: () => void }> = [];
 
+async function closeFullscreen(mod: CVPModule): Promise<void> {
+  const player = mod as unknown as {
+    exitPlayer?: () => Promise<unknown>;
+    stopAllPlayers?: () => Promise<unknown>;
+  };
+
+  // IMPORTANTE: no Android, stopAllPlayers() apenas chama fsFragment.pause()
+  // e NÃO remove o FrameLayout fullscreen. Para devolver a tela à WebView
+  // precisamos chamar exitPlayer(), que dispara playerExit() e remove o overlay.
+  try { await player.exitPlayer?.(); } catch { /* ignore */ }
+  try { await player.stopAllPlayers?.(); } catch { /* ignore */ }
+}
+
 
 export async function isNativePlayerAvailable(): Promise<boolean> {
   const mod = await loadPlugin();
@@ -56,8 +69,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
 
 
   try {
-    // Tenta encerrar player anterior se ainda estiver aberto
-    try { await mod.stopAllPlayers(); } catch { /* ignore */ }
+    // Tenta encerrar player anterior se ainda estiver aberto. Usar exitPlayer
+    // antes de stopAllPlayers evita deixar o overlay fullscreen preso por cima
+    // da WebView quando um LIVE nunca sai do loading.
+    await closeFullscreen(mod);
 
     const headers: Record<string, string> = {};
     if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
@@ -124,7 +139,23 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     }
 
     const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
-    const res = await initFn(args);
+    let initSettled = false;
+    const initTimeout = new Promise<false>((resolve) => {
+      setTimeout(() => {
+        if (initSettled) return;
+        opts.onEvent?.("initPlayer:timeout", "initPlayer não respondeu em 8s; fechando overlay nativo");
+        void closeFullscreen(mod);
+        resolve(false);
+      }, 8_000);
+    });
+    const res = await Promise.race([
+      initFn(args).then((value) => {
+        initSettled = true;
+        return value;
+      }),
+      initTimeout,
+    ]);
+    if (res === false) return false;
     const ok = (res as { result?: boolean })?.result !== false;
     if (!ok) {
       opts.onEvent?.("initPlayer:false", res);
@@ -152,5 +183,5 @@ export async function stopNative(): Promise<void> {
   if (!mod) return;
   exitHandle?.remove();
   exitHandle = null;
-  try { await mod.stopAllPlayers(); } catch { /* ignore */ }
+  await closeFullscreen(mod);
 }
