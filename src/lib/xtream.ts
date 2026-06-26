@@ -142,10 +142,9 @@ async function nativeHttpGet(
   }
 }
 
-// Portas Xtream mais comuns. Antes eram 12 portas × 2 schemes = 24 candidatas
-// (até ~240s no pior caso). Reduzido para 5 portas × 2 schemes = 10. Cobre
-// >95% dos painéis sem castigar painéis lentos com waterfall enorme.
-const COMMON_XTREAM_PORTS = ["", "80", "8080", "8880", "25461"] as const;
+// Portas Xtream mais comuns. No APK não podemos desistir cedo demais: alguns
+// painéis retornam 403 no host raiz e só respondem na porta real da lista.
+const COMMON_XTREAM_PORTS = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"] as const;
 
 function parseNativeJson(data: unknown) {
   if (typeof data === "string") return JSON.parse(data);
@@ -207,7 +206,6 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   const uas: (string | undefined)[] = preferred ? [preferred, undefined] : [undefined];
 
   let lastError: unknown = null;
-  let consecutiveFailures = 0;
   for (const server of candidates) {
     let authBlocked = false;
     for (const ua of uas) {
@@ -217,7 +215,6 @@ async function nativeApiWithFallbackPorts<T = unknown>(
           if (ua) setUAHint(server, ua);
           return { data, creds: { ...c, server } };
         }
-        consecutiveFailures = 0;
       } catch (err) {
         lastError = err;
         const status = (err as { status?: number })?.status;
@@ -226,9 +223,7 @@ async function nativeApiWithFallbackPorts<T = unknown>(
           authBlocked = true;
           continue;
         }
-        consecutiveFailures += 1;
-        if (consecutiveFailures >= 3) return Promise.reject(lastError);
-        break; // erro de rede/timeout: pula pro próximo server
+        break; // erro de rede/timeout: pula pro próximo server, mas continua testando portas
       }
     }
     // Se todos os UAs falharam por 401/403 em um server com porta explícita,
@@ -495,21 +490,18 @@ async function nativeLoadM3U(
 
   let lastStatus = 0;
   let lastError: unknown = null;
-  let consecutiveFailures = 0;
   for (const target of candidates) {
     try {
       const res = await nativeHttpGet(target, 30_000);
       if (!res) return null;
       lastStatus = res.status;
-      if (res.status < 200 || res.status >= 300) { consecutiveFailures = 0; continue; }
+      if (res.status < 200 || res.status >= 300) continue;
       const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
       const entries = parseM3U(text);
       if (entries.length) return entries;
-      consecutiveFailures = 0;
     } catch (err) {
       lastError = err;
-      consecutiveFailures += 1;
-      if (consecutiveFailures >= 3) break;
+      continue;
     }
   }
   if (lastStatus) throw new Error(`M3U respondeu HTTP ${lastStatus}`);
