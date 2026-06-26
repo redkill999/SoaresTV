@@ -6,6 +6,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import {
   api,
   getFullEpg,
+  timeshiftUrl,
   type EpgListing,
   type LiveCategory,
   type LiveStream,
@@ -14,7 +15,7 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import { toast } from "sonner";
-import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
+import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, History, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
   head: () => ({ meta: [{ title: "Guia EPG — SoaresTV" }] }),
@@ -241,7 +242,7 @@ function GuidePage() {
                     navigate({
                       to: "/player/$type/$id",
                       params: { type: "live", id: String(s.stream_id) },
-                      search: { name: s.name },
+                      search: { name: s.name, src: "" },
                     })
                   }
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
@@ -278,6 +279,8 @@ function GuidePage() {
                   const epg = epgQueries[idx]?.data ?? [];
                   const loading = epgQueries[idx]?.isLoading;
                   const isActive = activeStreamId === String(s.stream_id);
+                  const hasCatchup =
+                    Number(s.tv_archive) === 1 || Number(s.tv_archive_duration) > 0;
                   return (
                     <div
                       key={s.stream_id}
@@ -296,6 +299,20 @@ function GuidePage() {
                           windowEnd={windowEnd}
                           now={now}
                           hasAlert={hasAlert(Number(p.start_timestamp))}
+                          hasCatchup={hasCatchup}
+                          onPlayCatchup={() => {
+                            if (!creds) return;
+                            const start = Number(p.start_timestamp);
+                            const stop = Number(p.stop_timestamp);
+                            if (!Number.isFinite(start) || !Number.isFinite(stop)) return;
+                            const durationMin = Math.max(1, Math.ceil((stop - start) / 60));
+                            const url = timeshiftUrl(creds, s.stream_id, start, durationMin);
+                            navigate({
+                              to: "/player/$type/$id",
+                              params: { type: "live", id: String(s.stream_id) },
+                              search: { name: `${s.name} — ${p.title}`, src: url },
+                            });
+                          }}
                           onToggleAlert={() => {
                             const ts = Number(p.start_timestamp);
                             if (!Number.isFinite(ts)) return;
@@ -315,7 +332,7 @@ function GuidePage() {
                             navigate({
                               to: "/player/$type/$id",
                               params: { type: "live", id: String(s.stream_id) },
-                              search: { name: s.name },
+                              search: { name: s.name, src: "" },
                             })
                           }
                         />
@@ -369,6 +386,8 @@ function ProgramBlock({
   windowEnd,
   now,
   hasAlert,
+  hasCatchup,
+  onPlayCatchup,
   onToggleAlert,
   onOpen,
 }: {
@@ -378,6 +397,8 @@ function ProgramBlock({
   windowEnd: number;
   now: number;
   hasAlert: boolean;
+  hasCatchup: boolean;
+  onPlayCatchup: () => void;
   onToggleAlert: () => void;
   onOpen: () => void;
 }) {
@@ -392,8 +413,8 @@ function ProgramBlock({
   const width = (clampedStop - clampedStart) * PX_PER_SEC;
   const isNow = now >= start && now < stop;
   const isPast = stop <= now;
-
   const isUpcoming = start > now;
+  const showCatchup = hasCatchup && isPast;
 
   return (
     <div
@@ -413,7 +434,7 @@ function ProgramBlock({
           : isPast
             ? "bg-white/[0.03] border border-white/5 text-muted-foreground/70"
             : "bg-white/[0.07] border border-white/10 text-foreground/90 hover:bg-white/[0.12]"
-      }`}
+      } ${showCatchup ? "border-l-2 border-l-amber-500" : ""}`}
       style={{ left, width: Math.max(width, 2) }}
     >
       {isNow && (
@@ -436,7 +457,21 @@ function ProgramBlock({
           {hasAlert ? <BellRing className="size-3.5" /> : <Bell className="size-3.5" />}
         </button>
       )}
-      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""} ${isUpcoming ? "pr-6" : ""}`}>{p.title}</div>
+      {showCatchup && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlayCatchup();
+          }}
+          aria-label="Reproduzir reprise"
+          title="Reproduzir reprise"
+          className="absolute top-1 right-1 z-10 size-5 rounded-full grid place-items-center bg-amber-600/90 hover:bg-amber-500 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+        >
+          <History className="size-3.5" />
+        </button>
+      )}
+      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""} ${isUpcoming || showCatchup ? "pr-6" : ""}`}>{p.title}</div>
       <div className="text-[10px] opacity-80">
         {fmtHour(start)}–{fmtHour(stop)}
       </div>

@@ -15,7 +15,10 @@ const isPlayerType = (t: string): t is PlayerType =>
   (VALID_TYPES as readonly string[]).includes(t);
 
 export const Route = createFileRoute("/player/$type/$id")({
-  validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    name: (s.name as string) ?? "",
+    src: (s.src as string) ?? "",
+  }),
   head: ({ params }) => ({ meta: [{ title: `Player — ${params.id}` }] }),
   component: PlayerPage,
 });
@@ -36,7 +39,7 @@ type MovieInfo = {
 
 function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
-  const { name } = Route.useSearch();
+  const { name, src: customSrc } = Route.useSearch();
   const navigate = useNavigate();
 
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
@@ -113,7 +116,9 @@ function PlayerPage() {
     },
   });
 
+  const isCatchup = !!customSrc;
   const url = useMemo(() => {
+    if (customSrc) return customSrc;
     if (!creds) return "";
     if (type === "live") return streamUrl.live(creds, id);
     if (type === "movie") {
@@ -137,7 +142,7 @@ function PlayerPage() {
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
-  }, [creds, type, id, episodeUrl, movieQ.data]);
+  }, [creds, type, id, episodeUrl, movieQ.data, customSrc]);
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).
@@ -288,6 +293,14 @@ function PlayerPage() {
             <span className="hidden sm:inline">Voltar</span>
           </Button>
         </div>
+
+        {isCatchup && (
+          <div className="pointer-events-none absolute right-3 top-3 z-30 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg">
+            Reprise
+          </div>
+        )}
+
+
 
           {/* Título/tipo e botões extras ficam ocultos durante a reprodução. */}
         {type === "series" && (
