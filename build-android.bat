@@ -109,8 +109,11 @@ if errorlevel 1 (
   goto :fail
 )
 echo       Aplicando patch capacitor-video-player (suporte .ts / buffer / erros)...
-call node scripts/patch-video-player.mjs 2>&1 | powershell -NoProfile -ExecutionPolicy Bypass -Command "$input | Tee-Object -FilePath '%LOG_FILE%' -Append"
-if errorlevel 1 (
+call node scripts/patch-video-player.mjs > "%TEMP%\soarestv-patch-video-player.log" 2>&1
+set "PATCH_RC=!errorlevel!"
+type "%TEMP%\soarestv-patch-video-player.log"
+type "%TEMP%\soarestv-patch-video-player.log" >> "%LOG_FILE%"
+if not "!PATCH_RC!"=="0" (
   echo [ERRO] Patch capacitor-video-player falhou. APK NAO contem suporte .ts/watchdog/erros.
   goto :fail
 )
@@ -133,8 +136,11 @@ if exist "android-template\styles.xml" (
 )
 call :fix_styles_xml || goto :fail
 call npx cap sync android >> "%LOG_FILE%" 2>&1
-call node scripts/patch-video-player.mjs 2>&1 | powershell -NoProfile -ExecutionPolicy Bypass -Command "$input | Tee-Object -FilePath '%LOG_FILE%' -Append"
-if errorlevel 1 (
+call node scripts/patch-video-player.mjs > "%TEMP%\soarestv-patch-video-player.log" 2>&1
+set "PATCH_RC=!errorlevel!"
+type "%TEMP%\soarestv-patch-video-player.log"
+type "%TEMP%\soarestv-patch-video-player.log" >> "%LOG_FILE%"
+if not "!PATCH_RC!"=="0" (
   echo [ERRO] Patch capacitor-video-player falhou depois do segundo cap sync.
   goto :fail
 )
