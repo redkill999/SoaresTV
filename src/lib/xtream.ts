@@ -396,6 +396,19 @@ export const streamUrl = {
     `${normalizeServer(c.server)}/series/${c.username}/${c.password}/${id}.${ext}`,
 };
 
+export function timeshiftUrl(
+  creds: XtreamCreds,
+  streamId: string | number,
+  startTimestamp: number,
+  durationMinutes: number,
+): string {
+  const d = new Date(startTimestamp * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const start = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}:${pad(d.getHours())}-${pad(d.getMinutes())}`;
+  const base = normalizeServer(creds.server);
+  return `${base}/streaming/timeshift.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}&stream=${streamId}&start=${start}&duration=${durationMinutes}`;
+}
+
 // --- M3U parser ---
 export type M3UEntry = {
   id: string;
