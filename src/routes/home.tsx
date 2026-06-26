@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import homeBg from "@/assets/home-bg.png.asset.json";
 
 const APP_VERSION = "1.0.0";
