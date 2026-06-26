@@ -1024,7 +1024,8 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => { ctrl.abort(); window.removeEventListener("keydown", onKey); };
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 50);
+    return () => { ctrl.abort(); window.removeEventListener("keydown", onKey); clearTimeout(t); };
   }, [open, onClose]);
 
   if (!open) return null;
