@@ -188,19 +188,32 @@ export function VideoPlayer({
         : isLiveSrc && srcHostProfile.forceNativeForLive
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
+    pushDbg(`ETAPA 3.1 native UA=${ua}`);
     return playNative({
       url: src,
       userAgent: ua,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
+      onEvent: (name, data) => {
+        try {
+          const payload = typeof data === "string" ? data : JSON.stringify(data);
+          pushDbg(`NATIVE ${name} ${payload?.slice(0, 200) ?? ""}`);
+        } catch {
+          pushDbg(`NATIVE ${name}`);
+        }
+        // Se o ExoPlayer emitir erro explícito, mostra overlay com diag.
+        if (name === "jeepCapVideoPlayerError" || name === "initPlayer:false" || name === "exception") {
+          setError("Não foi possível reproduzir este canal (ExoPlayer).");
+        }
+      },
       onExit: (pos) => {
+        pushDbg(`NATIVE exit pos=${pos}`);
         if (kind !== "live" && pos > 0) {
-          // Duração real não vem do plugin; salvamos posição com duração
-          // best-effort para o store de "Continuar assistindo".
           onProgressRef.current?.(pos, Math.max(pos + 1, pos));
         }
       },
     });
-  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg]);
+
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
 
@@ -912,18 +925,35 @@ export function VideoPlayer({
         className={videoClass}
         hidden={playerMode === "native"}
       />
-      {playerMode === "native" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-player text-foreground">
-          <p className="text-sm opacity-80">Reproduzindo no player nativo (ExoPlayer)</p>
-          <button
-            type="button"
-            onClick={() => { void openNative(); }}
-            className="rounded-full bg-primary px-5 py-2 text-sm text-primary-foreground shadow-glow"
-          >
-            ▶ Abrir player
-          </button>
+      {playerMode === "native" && !error && (
+        <div className="absolute inset-0 flex flex-col bg-player text-foreground">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+            <span className="text-xs opacity-80">Player nativo (ExoPlayer) — diagnóstico</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  try { void navigator.clipboard?.writeText(dbgLines.join("\n")); } catch { /* noop */ }
+                }}
+                className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => { void openNative(); }}
+                className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground"
+              >
+                ▶ Abrir
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[10px] leading-tight whitespace-pre-wrap">
+            {dbgLines.length === 0 ? "(sem logs)" : dbgLines.join("\n")}
+          </div>
         </div>
       )}
+
       {error && (
         <div className="absolute inset-0 flex flex-col bg-black/90 text-white">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
