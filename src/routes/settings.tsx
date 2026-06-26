@@ -652,6 +652,7 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const platform = typeof navigator !== "undefined" ? navigator.platform : "";
   const lang = typeof navigator !== "undefined" ? navigator.language : "";
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -661,7 +662,8 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 50);
+    return () => { window.removeEventListener("keydown", onKey); clearTimeout(t); };
   }, [open, onClose]);
   if (!open) return null;
   return (
@@ -674,8 +676,9 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          ref={closeBtnRef}
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-label="Fechar"
         >
           ✕
