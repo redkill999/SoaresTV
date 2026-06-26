@@ -294,6 +294,14 @@ function PlayerPage() {
           </Button>
         </div>
 
+        {isCatchup && (
+          <div className="pointer-events-none absolute right-3 top-3 z-30 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg">
+            Reprise
+          </div>
+        )}
+
+
+
           {/* Título/tipo e botões extras ficam ocultos durante a reprodução. */}
         {type === "series" && (
           <details
