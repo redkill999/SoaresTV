@@ -296,6 +296,12 @@ export function VideoPlayer({
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
+    // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
+    // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
+    // proxy só como último recurso pra não regredir contexto web.
+    const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -311,7 +317,9 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : directCandidates.map((url) => proxiedX(url, kind));
+      : liveBypassProxy
+        ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
+        : directCandidates.map((url) => proxiedX(url, kind));
 
 
     let hls: Hls | null = null;
