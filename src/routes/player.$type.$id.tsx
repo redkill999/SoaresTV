@@ -260,8 +260,10 @@ function PlayerPage() {
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
-              initialPosition={initialPosition}
+              mediaId={type !== "live" ? id : undefined}
+              mediaKind={type === "movie" || type === "series" ? type : undefined}
               onProgress={handleProgress}
+              onReady={onPlayerReady}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
