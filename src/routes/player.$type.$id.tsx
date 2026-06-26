@@ -156,18 +156,47 @@ function PlayerPage() {
     });
   }, [url, type, id, creds]);
 
-  // Posição salva para "continue assistindo" (apenas VOD/série).
-  const initialPosition = useMemo(() => {
-    if (!type || type === "live") return 0;
-    return store.getHistoryItem(type, id)?.position ?? 0;
-  }, [type, id]);
-
+  // "Continuar de onde parou?" — em vez de seekar automaticamente, mostramos
+  // um toast 1.5s após o vídeo poder tocar. Usuário escolhe.
   const handleProgress = useCallback(
     (positionSec: number, durationSec: number) => {
       if (!type || type === "live") return;
       store.updateProgress(type, id, positionSec, durationSec);
     },
     [type, id],
+  );
+
+  const resumeToastShownRef = useRef<string | null>(null);
+  useEffect(() => { resumeToastShownRef.current = null; }, [type, id, url]);
+  const onPlayerReady = useCallback(
+    (handle: VideoPlayerHandle) => {
+      if (!type || type === "live" || !url) return;
+      const key = `${type}:${id}:${url}`;
+      if (resumeToastShownRef.current === key) return;
+      const item = store.getHistoryItem(type, id);
+      if (!item || !item.position || !item.duration) return;
+      if (item.position <= 30) return;
+      if (item.position >= item.duration - 30) return;
+      resumeToastShownRef.current = key;
+      const position = item.position;
+      const mins = Math.floor(position / 60);
+      const secs = Math.floor(position % 60).toString().padStart(2, "0");
+      window.setTimeout(() => {
+        toast("Continuar de onde parou?", {
+          description: `Você parou em ${mins}:${secs}.`,
+          duration: 6000,
+          action: {
+            label: "Continuar",
+            onClick: () => handle.seekTo(position),
+          },
+          cancel: {
+            label: "Do início",
+            onClick: () => { /* no-op: começa do zero */ },
+          },
+        });
+      }, 1500);
+    },
+    [type, id, url],
   );
 
   const leavingRef = useRef(false);
