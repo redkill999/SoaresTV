@@ -26,6 +26,7 @@ export function FloatingMiniPlayer() {
   const hidden =
     HIDDEN_EXACT.has(pathname) ||
     HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  if (hidden) return null;
 
   return (
     <div
