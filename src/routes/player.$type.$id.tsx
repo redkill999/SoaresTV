@@ -229,10 +229,12 @@ function PlayerPage() {
           {url ? (
             <VideoPlayer
               src={url}
+              title={activeTitle}
               kind={type === "live" ? "live" : "vod"}
               initialPosition={initialPosition}
               onProgress={handleProgress}
             />
+
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">
               {type === "series" ? "Carregando episódio…" : "Carregando…"}

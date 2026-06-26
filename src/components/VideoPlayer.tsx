@@ -228,15 +228,18 @@ export function VideoPlayer({
   src,
   poster,
   kind,
+  title,
   initialPosition,
   onProgress,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
+  title?: string;
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
 }) {
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
@@ -615,7 +618,20 @@ export function VideoPlayer({
       destroyTsPlayer();
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); playDirect(); }
-      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia."); }
+      else {
+        pushDbg(`ETAPA 10 FIM sem candidatos restantes`);
+        // Canais 4K/UHD da maioria dos provedores IPTV usam HEVC (H.265) dentro
+        // do .ts. mpegts.js não decoda HEVC e navegadores desktop também não
+        // aceitam HEVC via MSE — só rodam no APK (ExoPlayer hardware). Quando
+        // o nome do canal sugere 4K/UHD/HEVC, mostramos uma mensagem honesta.
+        const looks4k = /\b(4k|uhd|hevc|h\.?265)\b/i.test(`${title ?? ""} ${src}`);
+        if (isLive && looks4k) {
+          setError("Canal 4K/UHD (HEVC) não é suportado pelo navegador desktop. Abra pelo APK Android para usar o decoder de hardware do ExoPlayer.");
+        } else {
+          setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
+        }
+      }
+
     };
 
     const armVodWatchdog = () => {
