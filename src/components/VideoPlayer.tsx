@@ -1135,7 +1135,12 @@ export function VideoPlayer({
     const onEnded = () => {
       stopTicking();
       const dur = video.duration;
-      if (Number.isFinite(dur) && dur > 0) onProgressRef.current?.(dur, dur);
+      if (Number.isFinite(dur) && dur > 0) {
+        onProgressRef.current?.(dur, dur);
+        if (mediaId && mediaKind) {
+          try { store.updateProgress(mediaKind, mediaId, dur, dur); } catch { /* noop */ }
+        }
+      }
     };
 
     video.addEventListener("loadedmetadata", onLoadedMeta);
