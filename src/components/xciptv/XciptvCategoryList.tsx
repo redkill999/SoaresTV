@@ -1,10 +1,12 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Search, Star, Clock, ListFilter } from "lucide-react";
 
 export type XciptvCat = { id: string; name: string; count?: number };
 
-// FIX (audit TV): memo evita re-render desta lista quando o pai re-renderiza
-// por outro motivo (toggle de favorito, etc.). 'specials' agora memoizado.
+// FIX (audit perf): Row agora é memoizado e recebe (id, onSelect) estáveis.
+// Antes, digitar na busca recriava closures `onClick={() => onChange(id)}` para
+// cada categoria, forçando re-render de toda a lista. Agora só o input e as
+// linhas cujo `active` mudou re-renderizam.
 export const XciptvCategoryList = memo(function XciptvCategoryList({
 
   categories,
@@ -36,6 +38,10 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
     { id: "all", label: "TODAS", count: totalCount, icon: <ListFilter className="size-3.5" /> },
   ], [favCount, recentCount, totalCount]);
 
+  // Handler estável por id — `onChange` pode mudar de identidade entre renders
+  // do pai, então capturamos em ref-like callback.
+  const handleSelect = useCallback((id: string) => onChange(id), [onChange]);
+
 
   return (
     <aside className="w-full sm:h-full sm:w-56 lg:w-64 shrink-0 flex flex-col max-h-[34dvh] sm:max-h-none min-h-0">
@@ -53,14 +59,14 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
 
       <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1 [-webkit-overflow-scrolling:touch]">
         {specials.map((s) => (
-          <Row key={s.id} active={value === s.id} onClick={() => onChange(s.id)} label={s.label} count={s.count} icon={s.icon} />
+          <Row key={s.id} id={s.id} active={value === s.id} onSelect={handleSelect} label={s.label} count={s.count} icon={s.icon} />
         ))}
         <li className="my-1 border-t border-white/10" />
         {loading && Array.from({ length: 10 }).map((_, i) => (
           <li key={i} className="px-3 py-1.5"><div className="h-3 w-2/3 animate-pulse rounded bg-white/[0.08]" /></li>
         ))}
         {!loading && list.map((c) => (
-          <Row key={c.id} active={value === c.id} onClick={() => onChange(c.id)} label={c.name} count={c.count} />
+          <Row key={c.id} id={c.id} active={value === c.id} onSelect={handleSelect} label={c.name} count={c.count} />
         ))}
       </ul>
     </aside>
@@ -69,11 +75,11 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
 
 
 
-function Row({ active, onClick, label, count, icon }: { active?: boolean; onClick: () => void; label: string; count?: number; icon?: React.ReactNode }) {
+const Row = memo(function Row({ id, active, onSelect, label, count, icon }: { id: string; active?: boolean; onSelect: (id: string) => void; label: string; count?: number; icon?: React.ReactNode }) {
   return (
     <li>
       <button
-        onClick={onClick}
+        onClick={() => onSelect(id)}
         className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] font-semibold uppercase tracking-wider transition-colors ${
           active
             ? "text-[#1FB6FF] bg-white/[0.04]"
@@ -90,4 +96,5 @@ function Row({ active, onClick, label, count, icon }: { active?: boolean; onClic
       </button>
     </li>
   );
-}
+});
+
