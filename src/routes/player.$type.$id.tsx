@@ -116,7 +116,9 @@ function PlayerPage() {
     },
   });
 
+  const isCatchup = !!customSrc;
   const url = useMemo(() => {
+    if (customSrc) return customSrc;
     if (!creds) return "";
     if (type === "live") return streamUrl.live(creds, id);
     if (type === "movie") {
