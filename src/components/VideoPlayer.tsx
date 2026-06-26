@@ -1342,6 +1342,17 @@ export function VideoPlayer({
           ▶
         </button>
       )}
+      {pipSupported && playerMode === "web" && !error && (
+        <button
+          type="button"
+          onClick={() => { void togglePip(); }}
+          aria-label={pipActive ? "Sair do Picture-in-Picture" : "Picture-in-Picture"}
+          title="Picture-in-Picture"
+          className={`absolute bottom-3 right-3 z-20 size-10 rounded-full bg-black/60 backdrop-blur grid place-items-center hover:bg-black/80 transition-opacity ${controlsVisible || pipActive ? "opacity-100" : "opacity-0 pointer-events-none"} ${pipActive ? "text-primary" : "text-white"}`}
+        >
+          {pipActive ? <PictureInPicture className="size-5" /> : <PictureInPicture2 className="size-5" />}
+        </button>
+      )}
     </div>
   );
 }
