@@ -339,8 +339,6 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
     setInfo(null);
     setError(null);
     if (!creds) { setLoading(false); return; }
-    // NÃO persistir setCreds aqui — se a lista atual expirou, o usuário
-    // deve continuar vendo as info dela até fazer logout/troca manual.
     setLoading(true);
 
     (async () => {
@@ -356,6 +354,21 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
     return () => { alive = false; };
   }, [open]);
 
+  // Fecha com Esc / Back
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "GoBack" || e.keyCode === 27) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
   const isTrial = (() => {
     const v = info?.is_trial;
     if (v === undefined || v === null) return null;
@@ -364,14 +377,33 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const statusRaw = (info?.status || "").toString().toUpperCase();
   const isActive = statusRaw === "ACTIVE" || statusRaw === "ATIVO";
 
+  // Modal renderizado INLINE (sem Radix Portal) — evita problemas de
+  // portal/animação no APK TV-mode (body scaled via transform). Cobre o
+  // próprio .home-wrapper pai com position:absolute.
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md overflow-hidden border-2 border-white/25 bg-[#1a2540] p-0 text-white shadow-[0_20px_60px_-10px_rgba(0,0,0,0.9)]">
-        <DialogHeader className="px-6 pt-6">
-          <DialogTitle className="text-base font-semibold tracking-[0.2em] text-white">CONTA</DialogTitle>
-          <DialogDescription className="text-white/70">Informações da sua assinatura.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 px-6 pb-6 pt-2 text-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Conta"
+      className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-[min(28rem,calc(100%-2rem))] max-h-[calc(100%-2rem)] overflow-y-auto rounded-lg border-2 border-white/25 bg-[#1a2540] text-white shadow-[0_20px_60px_-10px_rgba(0,0,0,0.9)]">
+        <div className="flex items-start justify-between px-6 pt-6">
+          <div>
+            <h2 className="text-base font-semibold tracking-[0.2em] text-white">CONTA</h2>
+            <p className="text-sm text-white/70 mt-1">Informações da sua assinatura.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="ml-3 -mt-1 -mr-1 rounded-md p-2 text-white/70 hover:text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="space-y-3 px-6 pb-6 pt-3 text-sm">
           {!hasCreds && <p className="text-white/80">Nenhuma lista Xtream encontrada. Faça login com DNS/usuário/senha para ver os detalhes da conta.</p>}
           {hasCreds && loading && <p className="text-white/80">Carregando…</p>}
           {hasCreds && !loading && info && (
@@ -388,8 +420,8 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
             <p className="text-white/80">{error ?? "Não foi possível obter informações."}</p>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
