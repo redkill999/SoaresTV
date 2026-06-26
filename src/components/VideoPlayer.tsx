@@ -202,7 +202,12 @@ export function VideoPlayer({
         }
         // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que
         // estava cobrindo o WebView) e mostra o painel de diagnóstico em tela.
-        if (name === "jeepCapVideoPlayerError" || name === "initPlayer:false" || name === "exception") {
+        if (
+          name === "jeepCapVideoPlayerError" ||
+          name === "initPlayer:false" ||
+          name === "exception" ||
+          /error|fail/i.test(name)
+        ) {
           pushDbg(`ETAPA 9 native error -> fechando overlay nativo para exibir diag`);
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
