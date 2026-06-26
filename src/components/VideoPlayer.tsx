@@ -139,6 +139,18 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
+  // [DEBUG TEMP] Coleta de etapas do pipeline de reprodução, exibido em overlay
+  // quando ocorre erro. Limpo no início de cada nova fonte (src).
+  const dbgRef = useRef<string[]>([]);
+  const [dbgLines, setDbgLines] = useState<string[]>([]);
+  const pushDbg = useCallback((line: string) => {
+    const stamp = new Date().toISOString().slice(11, 23);
+    const entry = `[${stamp}] ${line}`;
+    dbgRef.current = [...dbgRef.current, entry].slice(-40);
+    setDbgLines(dbgRef.current);
+    // eslint-disable-next-line no-console
+    console.log("[STREAM DEBUG]", entry);
+  }, []);
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
