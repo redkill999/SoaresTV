@@ -6,6 +6,7 @@ import { store, type XtreamCreds } from "@/lib/storage";
 import {
   api,
   getFullEpg,
+  timeshiftUrl,
   type EpgListing,
   type LiveCategory,
   type LiveStream,
@@ -14,7 +15,7 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import { toast } from "sonner";
-import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
+import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, History, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
   head: () => ({ meta: [{ title: "Guia EPG — SoaresTV" }] }),
