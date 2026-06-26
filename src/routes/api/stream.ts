@@ -197,7 +197,10 @@ async function handle(request: Request) {
     ? Array.from(new Set([effectiveVodRange, range, null]))
     : playlistPath
       ? [range]
-      : Array.from(new Set([range, "bytes=0-", null]));
+      : isLive
+        // LIVE: NUNCA mandar Range — gera 403 em painéis Xtream para .ts ao vivo.
+        ? [null]
+        : Array.from(new Set([range, "bytes=0-", null]));
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
       for (const includeOriginHeaders of [false, true]) {
