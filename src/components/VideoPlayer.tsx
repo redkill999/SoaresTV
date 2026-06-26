@@ -155,6 +155,8 @@ export function VideoPlayer({
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
   const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
+  const nativeLiveWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeLivePlayedRef = useRef(false);
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -181,6 +183,11 @@ export function VideoPlayer({
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
     if (!native) return false;
+    nativeLivePlayedRef.current = false;
+    if (nativeLiveWatchdogRef.current) {
+      clearTimeout(nativeLiveWatchdogRef.current);
+      nativeLiveWatchdogRef.current = null;
+    }
     const compat = getCompatForUrl(src);
     const ua =
       compat.userAgent && compat.userAgent !== "auto"
@@ -200,6 +207,13 @@ export function VideoPlayer({
         } catch {
           pushDbg(`NATIVE ${name}`);
         }
+        if (name === "jeepCapVideoPlayerPlay" || /\bplay/i.test(name)) {
+          nativeLivePlayedRef.current = true;
+          if (nativeLiveWatchdogRef.current) {
+            clearTimeout(nativeLiveWatchdogRef.current);
+            nativeLiveWatchdogRef.current = null;
+          }
+        }
         // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que
         // estava cobrindo o WebView) e mostra o painel de diagnóstico em tela.
         if (
@@ -209,6 +223,10 @@ export function VideoPlayer({
           /error|fail/i.test(name)
         ) {
           pushDbg(`ETAPA 9 native error -> fechando overlay nativo para exibir diag`);
+          if (nativeLiveWatchdogRef.current) {
+            clearTimeout(nativeLiveWatchdogRef.current);
+            nativeLiveWatchdogRef.current = null;
+          }
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
@@ -217,6 +235,10 @@ export function VideoPlayer({
       },
       onExit: (pos) => {
         pushDbg(`NATIVE exit pos=${pos}`);
+        if (nativeLiveWatchdogRef.current) {
+          clearTimeout(nativeLiveWatchdogRef.current);
+          nativeLiveWatchdogRef.current = null;
+        }
         if (kind !== "live" && pos > 0) {
           onProgressRef.current?.(pos, Math.max(pos + 1, pos));
         }
@@ -256,6 +278,16 @@ export function VideoPlayer({
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
+      if (ok && isLiveSrc) {
+        nativeLiveWatchdogRef.current = setTimeout(() => {
+          if (cancelled || !nativeOpenedRef.current || nativeLivePlayedRef.current) return;
+          pushDbg("ETAPA 9 native watchdog: sem evento PLAY; fechando ExoPlayer para mostrar diagnóstico");
+          void stopNative().catch(() => undefined);
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          setError("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+        }, 18_000);
+      }
       if (cancelled) {
         if (ok) void stopNative();
         return;
@@ -268,6 +300,10 @@ export function VideoPlayer({
       if (nativeOpenedRef.current) {
         void stopNative();
         nativeOpenedRef.current = false;
+      }
+      if (nativeLiveWatchdogRef.current) {
+        clearTimeout(nativeLiveWatchdogRef.current);
+        nativeLiveWatchdogRef.current = null;
       }
     };
   }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg]);
