@@ -147,8 +147,8 @@ function HomePage() {
         return;
       }
       if (!document.pictureInPictureEnabled && v) {
-        toast("Picture-in-Picture não suportado neste dispositivo");
-        return;
+        toast("Picture-in-Picture não suportado — abrindo Ao Vivo");
+        // não retorna: cai no h.to abaixo para abrir /live
       }
       // Sem canal ativo → navegação padrão
     }
