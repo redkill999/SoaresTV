@@ -977,6 +977,7 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [result, setResult] = useState<{ mbps: number; ms: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   const run = async (signal?: AbortSignal) => {
     setRunning(true); setError(null); setResult(null);
