@@ -10,6 +10,8 @@ export type LiveStream = {
   stream_icon: string;
   category_id: string;
   epg_channel_id?: string;
+  tv_archive?: number;
+  tv_archive_duration?: number | string;
 };
 export type VodStream = {
   num: number;
