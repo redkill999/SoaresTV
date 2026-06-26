@@ -113,8 +113,13 @@ function LoginPage() {
           username,
         )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
         try {
-          entries = await loadM3U(playlistProbeUrl, username, password);
-        } catch {
+          entries = await withTimeout(
+            loadM3U(playlistProbeUrl, username, password),
+            native ? 18_000 : 30_000,
+            "Tempo esgotado ao tentar carregar a lista M3U.",
+          );
+        } catch (m3uErr) {
+          if (native && isTimeoutError(m3uErr)) throw loginErr;
           entries = [];
         }
 
@@ -462,5 +467,19 @@ function LoginPage() {
       </div>
     </div>
   );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    promise.finally(() => { if (timer) clearTimeout(timer); }),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && /tempo esgotado|timeout|abort/i.test(err.message);
 }
 
