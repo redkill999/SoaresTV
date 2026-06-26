@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Heart } from "lucide-react";
 import { memo, useState } from "react";
-import { store, type FavItem } from "@/lib/storage";
+import { store, miniPlayerStore, type FavItem } from "@/lib/storage";
 import { useIsFavorite } from "@/hooks/use-favorites";
 import channelFallback from "@/assets/channel-fallback.png.asset.json";
 
