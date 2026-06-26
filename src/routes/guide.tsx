@@ -386,6 +386,8 @@ function ProgramBlock({
   windowEnd,
   now,
   hasAlert,
+  hasCatchup,
+  onPlayCatchup,
   onToggleAlert,
   onOpen,
 }: {
@@ -395,6 +397,8 @@ function ProgramBlock({
   windowEnd: number;
   now: number;
   hasAlert: boolean;
+  hasCatchup: boolean;
+  onPlayCatchup: () => void;
   onToggleAlert: () => void;
   onOpen: () => void;
 }) {
@@ -409,8 +413,8 @@ function ProgramBlock({
   const width = (clampedStop - clampedStart) * PX_PER_SEC;
   const isNow = now >= start && now < stop;
   const isPast = stop <= now;
-
   const isUpcoming = start > now;
+  const showCatchup = hasCatchup && isPast;
 
   return (
     <div
@@ -430,7 +434,7 @@ function ProgramBlock({
           : isPast
             ? "bg-white/[0.03] border border-white/5 text-muted-foreground/70"
             : "bg-white/[0.07] border border-white/10 text-foreground/90 hover:bg-white/[0.12]"
-      }`}
+      } ${showCatchup ? "border-l-2 border-l-amber-500" : ""}`}
       style={{ left, width: Math.max(width, 2) }}
     >
       {isNow && (
@@ -453,7 +457,21 @@ function ProgramBlock({
           {hasAlert ? <BellRing className="size-3.5" /> : <Bell className="size-3.5" />}
         </button>
       )}
-      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""} ${isUpcoming ? "pr-6" : ""}`}>{p.title}</div>
+      {showCatchup && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlayCatchup();
+          }}
+          aria-label="Reproduzir reprise"
+          title="Reproduzir reprise"
+          className="absolute top-1 right-1 z-10 size-5 rounded-full grid place-items-center bg-amber-600/90 hover:bg-amber-500 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+        >
+          <History className="size-3.5" />
+        </button>
+      )}
+      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""} ${isUpcoming || showCatchup ? "pr-6" : ""}`}>{p.title}</div>
       <div className="text-[10px] opacity-80">
         {fmtHour(start)}–{fmtHour(stop)}
       </div>
