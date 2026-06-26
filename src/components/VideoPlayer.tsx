@@ -72,9 +72,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  const kindParam =
-    kind === "vod" ? "&kind=vod" : kind === "live" ? "&kind=live" : "";
-  return `/api/stream?u=${encodeURIComponent(url)}${kindParam}&v=6`;
+  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
 }
 
 function maskIptvUrl(url: string): string {
@@ -228,18 +226,15 @@ export function VideoPlayer({
   src,
   poster,
   kind,
-  title,
   initialPosition,
   onProgress,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
-  title?: string;
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
 }) {
-
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
@@ -425,11 +420,17 @@ export function VideoPlayer({
         setPlayerMode("web");
         return;
       }
-      // Abrir o ExoPlayer direto. O modo "hold pré-diagnóstico" só era útil
-      // durante a investigação ativa — em uso normal ele segurava a reprodução
-      // por ~20s rodando probe de 5 User-Agents e ainda exigia tap manual em
-      // "Abrir ExoPlayer", o que causava o atraso percebido de >1 min.
-
+      if (!manualNativeStartRef.current) {
+        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (${kind ?? "auto"}): não abrir overlay nativo automaticamente`);
+        setPlayerMode("web");
+        setHoldNativeDebug(true);
+        const label = isLiveSrc ? "canal LIVE" : kind === "vod" ? "filme/episódio" : "stream";
+        showStreamDiagnostic(`Diagnóstico ${label} ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
+        void probeNativeLiveStream(src, (line) => {
+          if (!cancelled) pushDbg(line);
+        }, () => cancelled);
+        return;
+      }
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
@@ -612,22 +613,7 @@ export function VideoPlayer({
       destroyTsPlayer();
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); playDirect(); }
-      else {
-        pushDbg(`ETAPA 10 FIM sem candidatos restantes`);
-        // Canais 4K/UHD da maioria dos provedores IPTV usam HEVC (H.265) dentro
-        // do .ts. mpegts.js não decoda HEVC e navegadores desktop também não
-        // aceitam HEVC via MSE — só rodam no APK (ExoPlayer hardware). Quando
-        // o nome do canal sugere 4K/UHD/HEVC, mostramos uma mensagem honesta.
-        // Detecta apenas pelo TÍTULO do canal — usar a URL gera falsos positivos
-        // (paths/IDs podem conter "uhd"/"4k" sem que o stream seja HEVC real).
-        const looks4k = !!title && /(^|[^a-z0-9])(4k|uhd|hevc|h\.?265)([^a-z0-9]|$)/i.test(title);
-        if (isLive && looks4k) {
-          setError("Canal 4K/UHD (HEVC) não é suportado pelo navegador desktop. Abra pelo APK Android para usar o decoder de hardware do ExoPlayer.");
-        } else {
-          setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
-        }
-      }
-
+      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia."); }
     };
 
     const armVodWatchdog = () => {
