@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { PremiumChrome } from "@/components/PremiumChrome";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ParentalGate } from "@/components/ParentalGate";
 import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
@@ -114,6 +114,9 @@ function LivePage() {
 
   const parental = store.getParental();
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
+  // FIX (audit perf): handler estável evita re-render do XciptvCategoryList memoizado.
+  const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
+
 
   return (
     <PremiumChrome>
@@ -126,7 +129,7 @@ function LivePage() {
           <XciptvCategoryList
             categories={sidebarCats}
             value={cat}
-            onChange={(v) => { setCat(v); setUnlocked(false); }}
+            onChange={handleCatChange}
             loading={!creds || (categoriesQ.isLoading && !categoriesQ.data)}
             favCount={favIds.size}
             recentCount={recentIds.length}
