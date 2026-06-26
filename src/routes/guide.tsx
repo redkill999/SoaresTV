@@ -226,7 +226,9 @@ function GuidePage() {
           <div className="flex flex-1 min-h-0 overflow-y-auto">
             {/* Channel column */}
             <div className="shrink-0 border-r border-white/10 bg-black/20" style={{ width: CHANNEL_COL }}>
-              {visibleChannels.map((s) => (
+              {visibleChannels.map((s) => {
+                const isActive = activeStreamId === String(s.stream_id);
+                return (
                 <button
                   key={s.stream_id}
                   type="button"
@@ -239,7 +241,9 @@ function GuidePage() {
                       search: { name: s.name },
                     })
                   }
-                  className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/5 transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/10"
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
+                    isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-white/5"
+                  }`}
                   style={{ height: ROW_HEIGHT }}
                 >
                   {s.stream_icon ? (
@@ -260,7 +264,8 @@ function GuidePage() {
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">#{s.num}</div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             {/* Programs grid */}
