@@ -184,6 +184,9 @@ function HomePage() {
             {h.key === "alarm" && alarmMin > 0 && (
               <span className="absolute right-2 top-2 size-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
             )}
+            {h.key === "epg" && alerts.length > 0 && (
+              <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
+            )}
           </button>
         ))}
       </div>
