@@ -80,6 +80,26 @@ function SeriesPage() {
   const history = useHistory();
   const favIds = useMemo(() => new Set(favs.filter((f) => f.type === "series").map((f) => f.id)), [favs]);
   const recentIds = useMemo(() => history.filter((h) => h.type === "series").map((h) => h.id), [history]);
+  const progressMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of history) {
+      if (h.type !== "series") continue;
+      if (!h.position || !h.duration) continue;
+      const p = h.position / h.duration;
+      if (p > 0) m.set(h.id, p);
+    }
+    return m;
+  }, [history]);
+  const continueWatching = useMemo(() => {
+    return (history as HistItem[])
+      .filter((h) => h.type === "series" && h.position && h.duration)
+      .filter((h) => {
+        const p = (h.position ?? 0) / (h.duration ?? 1);
+        return p >= 0.05 && p <= 0.95;
+      })
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 10);
+  }, [history]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
