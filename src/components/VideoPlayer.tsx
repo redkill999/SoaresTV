@@ -424,8 +424,7 @@ export function VideoPlayer({
         pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (${kind ?? "auto"}): não abrir overlay nativo automaticamente`);
         setPlayerMode("web");
         setHoldNativeDebug(true);
-        const label =
-          kind === "movie" ? "filme" : kind === "series" ? "episódio" : isLiveSrc ? "canal LIVE" : "stream";
+        const label = isLiveSrc ? "canal LIVE" : kind === "vod" ? "filme/episódio" : "stream";
         showStreamDiagnostic(`Diagnóstico ${label} ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
         void probeNativeLiveStream(src, (line) => {
           if (!cancelled) pushDbg(line);
