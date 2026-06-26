@@ -625,21 +625,44 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const platform = typeof navigator !== "undefined" ? navigator.platform : "";
   const lang = typeof navigator !== "undefined" ? navigator.language : "";
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "GoBack" || e.key === "Backspace") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Sobre o APP</DialogTitle>
-          <DialogDescription>SoaresTV — IPTV Player</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 text-sm">
+    <div
+      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-[min(28rem,92%)] rounded-lg border border-white/10 bg-[#0b0f17] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          aria-label="Fechar"
+        >
+          ✕
+        </button>
+        <h2 className="text-lg font-semibold text-white">Sobre o APP</h2>
+        <p className="mb-4 text-sm text-white/60">SoaresTV — IPTV Player</p>
+        <div className="space-y-3 text-sm text-white">
           <Row label="Versão" value="1.0.0" />
           <Row label="Plataforma" value={platform || "—"} />
           <Row label="Idioma do sistema" value={lang || "—"} />
           <Row label="User Agent" value={ua || "—"} mono />
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
