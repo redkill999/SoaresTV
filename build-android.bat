@@ -108,8 +108,11 @@ if errorlevel 1 (
   echo [ERRO] Falha em cap sync.
   goto :fail
 )
+echo       Aplicando patch capacitor-video-player (suporte .ts / buffer / erros)...
+call node scripts/patch-video-player.mjs >> "%LOG_FILE%" 2>&1
 echo       OK
 echo.
+
 
 echo [7/7] Aplicando customizacoes nativas fullscreen / splash...
 if exist "android-template\MainActivity.java" (
