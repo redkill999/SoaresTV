@@ -223,18 +223,32 @@ export function detectFormat(url: string): DetectedFormat {
   }
 }
 
+export type VideoPlayerHandle = {
+  /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
+  seekTo: (seconds: number) => void;
+};
+
 export function VideoPlayer({
   src,
   poster,
   kind,
   initialPosition,
   onProgress,
+  mediaId,
+  mediaKind,
+  onReady,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
+  /** Quando informados, o player salva progresso direto em store.updateProgress
+   *  (em paralelo a onProgress, se houver). Ignorado para kind="live". */
+  mediaId?: string;
+  mediaKind?: "movie" | "series";
+  /** Chamado uma vez no primeiro `canplay`, com handle para seekTo. */
+  onReady?: (handle: VideoPlayerHandle) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
