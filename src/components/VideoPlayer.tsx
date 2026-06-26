@@ -420,17 +420,21 @@ export function VideoPlayer({
         setPlayerMode("web");
         return;
       }
-      if (!manualNativeStartRef.current) {
-        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (${kind ?? "auto"}): não abrir overlay nativo automaticamente`);
+      // Gate de diagnóstico pré-ExoPlayer aplica-se SOMENTE a canais LIVE
+      // (caso histórico em que o overlay nativo travava sem feedback). Para
+      // VOD (filme/série) o ExoPlayer é aberto diretamente — o gate adicionava
+      // ~probe + clique manual e atrasava a reprodução sem benefício real.
+      if (isLiveSrc && !manualNativeStartRef.current) {
+        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (LIVE): não abrir overlay nativo automaticamente`);
         setPlayerMode("web");
         setHoldNativeDebug(true);
-        const label = isLiveSrc ? "canal LIVE" : kind === "vod" ? "filme/episódio" : "stream";
-        showStreamDiagnostic(`Diagnóstico ${label} ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
+        showStreamDiagnostic(`Diagnóstico canal LIVE ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
         void probeNativeLiveStream(src, (line) => {
           if (!cancelled) pushDbg(line);
         }, () => cancelled);
         return;
       }
+
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
