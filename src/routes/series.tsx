@@ -144,6 +144,27 @@ function SeriesPage() {
           totalCount={listQ.data?.length ?? 0}
         />
         <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
+          {continueWatching.length > 0 && (
+            <section className="mb-4">
+              <h2 className="text-xs uppercase tracking-widest text-white/70 mb-2 px-0.5">
+                Continue assistindo
+              </h2>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {continueWatching.map((h) => (
+                  <div key={h.id} className="shrink-0 w-28">
+                    <MediaCard
+                      type="series"
+                      id={h.id}
+                      name={h.name}
+                      image={h.logo}
+                      aspect="poster"
+                      progress={(h.position ?? 0) / (h.duration ?? 1)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {!creds || (listQ.isLoading && filtered.length === 0) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (
@@ -156,7 +177,7 @@ function SeriesPage() {
               Nenhuma série encontrada.
             </div>
           ) : (
-            <SeriesGrid filtered={filtered} />
+            <SeriesGrid filtered={filtered} progressMap={progressMap} />
           )}
         </div>
       </div>
@@ -165,20 +186,24 @@ function SeriesPage() {
   );
 }
 
-function SeriesGrid({ filtered }: { filtered: Series[] }) {
+function SeriesGrid({ filtered, progressMap }: { filtered: Series[]; progressMap: Map<string, number> }) {
   const { visible, sentinelRef, hasMore } = useProgressive(filtered);
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((s) => (
-          <XciptvTile
-            key={s.series_id}
-            type="series"
-            id={String(s.series_id)}
-            name={s.name}
-            image={s.cover}
-          />
-        ))}
+        {visible.map((s) => {
+          const id = String(s.series_id);
+          return (
+            <XciptvTile
+              key={s.series_id}
+              type="series"
+              id={id}
+              name={s.name}
+              image={s.cover}
+              progress={progressMap.get(id)}
+            />
+          );
+        })}
       </div>
       {hasMore && <div ref={sentinelRef} className="h-8" />}
     </>
