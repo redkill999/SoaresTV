@@ -10,7 +10,7 @@ import {
   xtreamCredsFromUrl,
   type LiveStream,
   type VodStream,
-  type SeriesItem,
+  type Series,
 } from "@/lib/xtream";
 import { withPersist, loadPersisted } from "@/lib/query-persist";
 import { filterBySearch } from "@/lib/search-index";
