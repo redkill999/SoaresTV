@@ -99,16 +99,35 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
     const res = await initFn(args);
     const ok = (res as { result?: boolean })?.result !== false;
-    if (!ok) return false;
+    const listenable = mod as unknown as {
+      addListener: (
+        ev: string,
+        handler: (data: unknown) => void,
+      ) => Promise<{ remove: () => void }> | { remove: () => void };
+    };
+    if (opts.onEvent) {
+      const evCb = opts.onEvent;
+      const events = [
+        "jeepCapVideoPlayerReady",
+        "jeepCapVideoPlayerPlay",
+        "jeepCapVideoPlayerPause",
+        "jeepCapVideoPlayerEnded",
+        "jeepCapVideoPlayerError",
+      ];
+      for (const ev of events) {
+        try {
+          const h = await listenable.addListener(ev, (data: unknown) => evCb(ev, data));
+          debugHandles.push(h);
+        } catch { /* ignore */ }
+      }
+    }
+    if (!ok) {
+      opts.onEvent?.("initPlayer:false", res);
+      return false;
+    }
 
     if (opts.onExit) {
       const cb = opts.onExit;
-      const listenable = mod as unknown as {
-        addListener: (
-          ev: string,
-          handler: (data: unknown) => void,
-        ) => Promise<{ remove: () => void }> | { remove: () => void };
-      };
       const h = await listenable.addListener("jeepCapVideoPlayerExit", (data: unknown) => {
         const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
         cb(Number.isFinite(pos) ? pos : 0);
@@ -116,10 +135,12 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       exitHandle = h;
     }
     return true;
-  } catch {
+  } catch (err) {
+    opts.onEvent?.("exception", String((err as Error)?.message ?? err));
     return false;
   }
 }
+
 
 export async function stopNative(): Promise<void> {
   const mod = await loadPlugin();
