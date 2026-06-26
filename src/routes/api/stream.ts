@@ -249,6 +249,13 @@ async function handle(request: Request) {
     const v = upstream.headers.get(h);
     if (v) respHeaders.set(h, v);
   }
+  if (isLive) {
+    // Live TS é stream contínuo: nunca anunciar tamanho/range fixo, senão
+    // mpegts.js trata como arquivo e estoura NetworkError ao chegar no fim.
+    respHeaders.delete("content-length");
+    respHeaders.delete("content-range");
+    respHeaders.delete("accept-ranges");
+  }
 
   if (isPlaylist && upstream.ok) {
     const text = await upstream.text();
