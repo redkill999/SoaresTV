@@ -80,6 +80,27 @@ function MoviesPage() {
   const history = useHistory();
   const favIds = useMemo(() => new Set(favs.filter((f) => f.type === "movie").map((f) => f.id)), [favs]);
   const recentIds = useMemo(() => history.filter((h) => h.type === "movie").map((h) => h.id), [history]);
+  const progressMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of history) {
+      if (h.type !== "movie") continue;
+      if (!h.position || !h.duration) continue;
+      const p = h.position / h.duration;
+      if (p > 0) m.set(h.id, p);
+    }
+    return m;
+  }, [history]);
+  const continueWatching = useMemo(() => {
+    const items = (history as HistItem[])
+      .filter((h) => h.type === "movie" && h.position && h.duration)
+      .filter((h) => {
+        const p = (h.position ?? 0) / (h.duration ?? 1);
+        return p >= 0.05 && p <= 0.95;
+      })
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 10);
+    return items;
+  }, [history]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
