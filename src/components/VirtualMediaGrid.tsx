@@ -76,12 +76,21 @@ export function VirtualMediaGrid<T>({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    // Scroll handler throttled via rAF — antes lia getBoundingClientRect
+    // a cada evento scroll (forced reflow em TV boxes lentos). offsetTop
+    // só muda se algo acima do grid mudar de altura, então rAF é o teto certo.
+    let rafId = 0;
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => { rafId = 0; measure(); });
+    };
     window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure);
+      window.removeEventListener("scroll", onScroll);
+      if (rafId) cancelAnimationFrame(rafId);
     };
   }, [cols]);
 
