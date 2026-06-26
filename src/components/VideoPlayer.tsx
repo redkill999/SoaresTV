@@ -436,7 +436,8 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, () => {
+        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
+          pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
           if (!cancelled) tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
