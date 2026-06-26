@@ -218,7 +218,56 @@ patchFile(fragmentPath, [
     if (styledPlayerView != null) styledPlayerView.setSystemUiVisibility(`,
     ),
   },
+  {
+    name: "9) styledPlayerView.setFitsSystemWindows(false) + consome insets",
+    required: true,
+    mustContainAfter: "JEEP_FIT_INSETS_OFF",
+    apply: (s) => s.replace(
+      "    styledPlayerView = view.findViewById(R.id.videoViewId);",
+      `    styledPlayerView = view.findViewById(R.id.videoViewId);
+    // JEEP_FIT_INSETS_OFF: o exo_playback_control_view tem
+    // android:fitsSystemWindows="true", o que adiciona padding das system bars
+    // mesmo em modo imersivo e desalinha pause/barra de progresso. Forçamos
+    // fitsSystemWindows=false e consumimos os insets para zerar o padding.
+    try {
+      styledPlayerView.setFitsSystemWindows(false);
+      styledPlayerView.setPadding(0, 0, 0, 0);
+      androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(styledPlayerView, (v, insets) -> {
+        v.setPadding(0, 0, 0, 0);
+        return androidx.core.view.WindowInsetsCompat.CONSUMED;
+      });
+      View controller = styledPlayerView.findViewById(com.google.android.exoplayer2.ui.R.id.exo_controller);
+      if (controller != null) {
+        controller.setFitsSystemWindows(false);
+        controller.setPadding(0, 0, 0, 0);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(controller, (v, insets) -> {
+          v.setPadding(0, 0, 0, 0);
+          return androidx.core.view.WindowInsetsCompat.CONSUMED;
+        });
+      }
+    } catch (Exception ignored) {}`,
+    ),
+  },
 ]);
+
+// Patch XML do controle: remove android:fitsSystemWindows="true" do controlador
+// para os botões/barra ocuparem a tela inteira em landscape (sem padding de
+// status/nav bar).
+const controlXmlPath = join(
+  root,
+  "node_modules/capacitor-video-player/android/src/main/res/layout/exo_playback_control_view.xml",
+);
+if (existsSync(controlXmlPath)) {
+  let xml = readFileSync(controlXmlPath, "utf8");
+  const before = xml;
+  xml = xml.replace(/\n\s*android:fitsSystemWindows="true"\s*\n/g, "\n");
+  if (xml !== before) {
+    writeFileSync(controlXmlPath, xml);
+    console.log("[patch-video-player] XML controles: fitsSystemWindows removido");
+  } else {
+    console.log("[patch-video-player] XML controles: já removido ou padrão não bateu");
+  }
+}
 
 patchFile(pluginPath, [
   {
