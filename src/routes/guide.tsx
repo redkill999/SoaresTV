@@ -372,7 +372,7 @@ function ProgramBlock({
       type="button"
       onClick={onOpen}
       title={`${p.title}\n${fmtHour(start)} – ${fmtHour(stop)}${p.description ? "\n\n" + p.description : ""}`}
-      className={`absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary relative ${
         isNow
           ? "bg-primary/30 border border-primary text-foreground hover:bg-primary/40"
           : isPast
@@ -381,10 +381,21 @@ function ProgramBlock({
       }`}
       style={{ left, width: Math.max(width, 2) }}
     >
-      <div className="font-semibold truncate">{p.title}</div>
+      {isNow && (
+        <span className="absolute top-0 left-0 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-br rounded-tl-md leading-none z-10">
+          AO VIVO
+        </span>
+      )}
+      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""}`}>{p.title}</div>
       <div className="text-[10px] opacity-80">
         {fmtHour(start)}–{fmtHour(stop)}
       </div>
+      {isNow && (
+        <div
+          className="absolute bottom-0 left-0 h-1 bg-primary"
+          style={{ width: `${((now - start) / (stop - start)) * 100}%` }}
+        />
+      )}
     </button>
   );
 }
