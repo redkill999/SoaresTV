@@ -188,20 +188,24 @@ function MoviesPage() {
   );
 }
 
-function MovieGrid({ filtered }: { filtered: VodStream[] }) {
+function MovieGrid({ filtered, progressMap }: { filtered: VodStream[]; progressMap: Map<string, number> }) {
   const { visible, sentinelRef, hasMore } = useProgressive(filtered);
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((m) => (
-          <XciptvTile
-            key={m.stream_id}
-            type="movie"
-            id={`${m.stream_id}.${m.container_extension || "mp4"}`}
-            name={m.name}
-            image={m.stream_icon}
-          />
-        ))}
+        {visible.map((m) => {
+          const id = `${m.stream_id}.${m.container_extension || "mp4"}`;
+          return (
+            <XciptvTile
+              key={m.stream_id}
+              type="movie"
+              id={id}
+              name={m.name}
+              image={m.stream_icon}
+              progress={progressMap.get(id)}
+            />
+          );
+        })}
       </div>
       {hasMore && <div ref={sentinelRef} className="h-8" />}
     </>
