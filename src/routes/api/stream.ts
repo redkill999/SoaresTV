@@ -190,8 +190,8 @@ async function handle(request: Request) {
   let lastStatus = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, range, null]))
-    : playlistPath
-      ? [range]
+    : playlistPath || isLive
+      ? [null]
       : Array.from(new Set([range, "bytes=0-", null]));
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
