@@ -228,15 +228,18 @@ export function VideoPlayer({
   src,
   poster,
   kind,
+  title,
   initialPosition,
   onProgress,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
+  title?: string;
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
 }) {
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
