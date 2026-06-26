@@ -242,7 +242,7 @@ function GuidePage() {
                     navigate({
                       to: "/player/$type/$id",
                       params: { type: "live", id: String(s.stream_id) },
-                      search: { name: s.name },
+                      search: { name: s.name, src: "" },
                     })
                   }
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
