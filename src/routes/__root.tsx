@@ -222,6 +222,9 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = router.state.location.pathname;
+  const { open: gsOpen, setOpen: setGsOpen } = useGlobalSearch();
+  const showGlobalSearch = !["/", "/loading", "/home"].includes(pathname);
 
 
 
