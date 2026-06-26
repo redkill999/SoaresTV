@@ -51,6 +51,9 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
   // Limpa listener anterior (cada playNative cria um novo)
   exitHandle?.remove();
   exitHandle = null;
+  debugHandles.forEach((h) => { try { h.remove(); } catch { /* ignore */ } });
+  debugHandles = [];
+
 
   try {
     // Tenta encerrar player anterior se ainda estiver aberto
