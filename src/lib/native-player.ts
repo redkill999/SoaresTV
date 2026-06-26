@@ -16,7 +16,10 @@ export type NativePlayOptions = {
   startAtSec?: number;
   /** Callback ao fechar o overlay (Back ou botão sair). */
   onExit?: (positionSec: number) => void;
+  /** [DEBUG TEMP] Recebe todos os eventos do plugin (ready/play/ended/erro). */
+  onEvent?: (name: string, data: unknown) => void;
 };
+
 
 type CVPModule = typeof import("capacitor-video-player").CapacitorVideoPlayer;
 
