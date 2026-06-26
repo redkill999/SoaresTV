@@ -40,6 +40,7 @@ function GuidePage() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const { state: miniPlayer } = useMiniPlayer();
   const activeStreamId = miniPlayer?.streamId ?? null;
+  const { addAlert, removeAlert, hasAlert } = useEpgAlerts();
 
   useEffect(() => setCreds(store.getCreds()), []);
   useEffect(() => {
