@@ -114,6 +114,9 @@ function LivePage() {
 
   const parental = store.getParental();
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
+  // FIX (audit perf): handler estável evita re-render do XciptvCategoryList memoizado.
+  const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
+
 
   return (
     <PremiumChrome>
