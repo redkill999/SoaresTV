@@ -248,6 +248,48 @@ patchFile(fragmentPath, [
     } catch (Exception ignored) {}`,
     ),
   },
+  {
+    name: "10) ExoPlayer abre direto em FILL fullscreen",
+    required: true,
+    mustContainAfter: "JEEP_DEFAULT_RESIZE_FILL",
+    apply: (s) => s.replace(
+      "    styledPlayerView.setShowPreviousButton(false);\n    styledPlayerView.setShowNextButton(false);\n    styledPlayerView.setShowFastForwardButton(false);\n    styledPlayerView.setShowRewindButton(false);",
+      `    styledPlayerView.setShowPreviousButton(false);
+    styledPlayerView.setShowNextButton(false);
+    styledPlayerView.setShowFastForwardButton(false);
+    styledPlayerView.setShowRewindButton(false);
+    // JEEP_DEFAULT_RESIZE_FILL: o player estava iniciando em FIT e só ficava
+    // alinhado com a tela inteira depois do botão expandir. Forçamos o mesmo
+    // modo do primeiro clique já na abertura do ExoPlayer.
+    try {
+      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+      resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
+    } catch (Exception ignored) {}`,
+    ),
+  },
+  {
+    name: "11) adjustAspectRatio sempre mantém FILL em landscape/TV",
+    required: true,
+    mustContainAfter: "JEEP_KEEP_LANDSCAPE_FILL",
+    apply: (s) => s.replace(
+      `  private void adjustAspectRatio() {
+    if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+    } else if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+    }
+  }`,
+      `  private void adjustAspectRatio() {
+    // JEEP_KEEP_LANDSCAPE_FILL: APK/TV é landscape fixo. Nunca voltar para FIT
+    // automaticamente, porque FIT é exatamente o estado desalinhado que só era
+    // corrigido ao tocar no botão expandir.
+    if (styledPlayerView == null) return;
+    styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+    resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
+    if (resizeBtn != null) resizeBtn.setImageResource(R.drawable.ic_zoom);
+  }`,
+    ),
+  },
 ]);
 
 // Patch XML do controle: remove android:fitsSystemWindows="true" do controlador
@@ -268,6 +310,25 @@ if (existsSync(controlXmlPath)) {
     console.log("[patch-video-player] XML controles: fitsSystemWindows removido");
   } else {
     console.log("[patch-video-player] XML controles: já removido ou padrão não bateu");
+  }
+}
+
+// Patch XML da tela fullscreen: remove fitsSystemWindows também do fragmento
+// externo/progress bar. Se sobrar em qualquer camada, Android pode reservar
+// padding de status/navigation bar até o usuário tocar no resize.
+const fragmentXmlPath = join(
+  root,
+  "node_modules/capacitor-video-player/android/src/main/res/layout/fragment_fs_exoplayer.xml",
+);
+if (existsSync(fragmentXmlPath)) {
+  let xml = readFileSync(fragmentXmlPath, "utf8");
+  const before = xml;
+  xml = xml.replace(/\s+android:fitsSystemWindows="true"(?=\s|>)/g, "");
+  if (xml !== before) {
+    writeFileSync(fragmentXmlPath, xml);
+    console.log("[patch-video-player] XML fullscreen: fitsSystemWindows removido");
+  } else {
+    console.log("[patch-video-player] XML fullscreen: já removido ou padrão não bateu");
   }
 }
 
@@ -294,6 +355,8 @@ assertContains(fragmentPath, [
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
   ["fullscreen insets aplicados", "JEEP_FULLSCREEN_INSETS"],
   ["fitsSystemWindows desligado", "JEEP_FIT_INSETS_OFF"],
+  ["resize FILL padrão na abertura", "JEEP_DEFAULT_RESIZE_FILL"],
+  ["landscape mantém FILL", "JEEP_KEEP_LANDSCAPE_FILL"],
 ]);
 
 assertContains(pluginPath, [
