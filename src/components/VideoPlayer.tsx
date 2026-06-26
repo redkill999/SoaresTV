@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { isNativeApp } from "@/lib/xtream";
+import { getHostProfile, hostOf } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
@@ -295,6 +296,12 @@ export function VideoPlayer({
     }
     if (!vodCandidates.length) vodCandidates.push(workingSrc);
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
+    // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
+    // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
+    // proxy só como último recurso pra não regredir contexto web.
+    const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -310,7 +317,9 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : directCandidates.map((url) => proxiedX(url, kind));
+      : liveBypassProxy
+        ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
+        : directCandidates.map((url) => proxiedX(url, kind));
 
 
     let hls: Hls | null = null;
@@ -699,7 +708,7 @@ export function VideoPlayer({
       hlsProxied = hlsCandidate
         ? forceProxy
           ? proxiedX(hlsCandidate, kind)
-          : forceDirect
+          : forceDirect || (isLive && liveBypassProxy)
             ? hlsCandidate
             : proxiedX(hlsCandidate, kind)
         : null;
