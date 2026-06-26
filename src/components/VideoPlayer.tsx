@@ -925,8 +925,24 @@ export function VideoPlayer({
         </div>
       )}
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
-          {error}
+        <div className="absolute inset-0 flex flex-col bg-black/90 text-white">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+            <span className="text-sm font-semibold text-destructive">{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  void navigator.clipboard?.writeText(dbgLines.join("\n"));
+                } catch { /* noop */ }
+              }}
+              className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+            >
+              Copiar
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[10px] leading-tight whitespace-pre-wrap">
+            {dbgLines.length === 0 ? "(sem logs)" : dbgLines.join("\n")}
+          </div>
         </div>
       )}
       {canManualPlay && !error && playerMode === "web" && (
