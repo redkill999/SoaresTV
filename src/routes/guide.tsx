@@ -393,12 +393,21 @@ function ProgramBlock({
   const isNow = now >= start && now < stop;
   const isPast = stop <= now;
 
+  const isUpcoming = start > now;
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
       title={`${p.title}\n${fmtHour(start)} – ${fmtHour(stop)}${p.description ? "\n\n" + p.description : ""}`}
-      className={`absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary relative ${
+      className={`group absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer ${
         isNow
           ? "bg-primary/30 border border-primary text-foreground hover:bg-primary/40"
           : isPast
@@ -412,7 +421,22 @@ function ProgramBlock({
           AO VIVO
         </span>
       )}
-      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""}`}>{p.title}</div>
+      {isUpcoming && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleAlert();
+          }}
+          aria-label={hasAlert ? "Remover lembrete" : "Criar lembrete"}
+          className={`absolute top-1 right-1 z-10 size-5 rounded-full grid place-items-center bg-black/40 hover:bg-black/60 transition-opacity ${
+            hasAlert ? "opacity-100 text-primary" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-white/80"
+          }`}
+        >
+          {hasAlert ? <BellRing className="size-3.5" /> : <Bell className="size-3.5" />}
+        </button>
+      )}
+      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""} ${isUpcoming ? "pr-6" : ""}`}>{p.title}</div>
       <div className="text-[10px] opacity-80">
         {fmtHour(start)}–{fmtHour(stop)}
       </div>
@@ -422,7 +446,7 @@ function ProgramBlock({
           style={{ width: `${((now - start) / (stop - start)) * 100}%` }}
         />
       )}
-    </button>
+    </div>
   );
 }
 
