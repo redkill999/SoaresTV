@@ -370,16 +370,27 @@ function LoginPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="pass" className="text-xs tracking-wider text-muted-foreground">{t("auth.password")}</Label>
-                  <Input
-                    id="pass"
-                    required
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
-                    className="bg-white/5 border-white/10 h-12 text-base focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="pass"
+                      required
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 250)}
+                      className="bg-white/5 border-white/10 h-12 text-base pr-12 focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary/60"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                      tabIndex={-1}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <Button
