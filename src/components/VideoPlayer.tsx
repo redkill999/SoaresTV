@@ -462,6 +462,7 @@ export function VideoPlayer({
       destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${url}`);
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
