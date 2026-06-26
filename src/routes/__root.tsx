@@ -298,6 +298,7 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <FloatingMiniPlayer />
+        {showGlobalSearch && <GlobalSearch open={gsOpen} onOpenChange={setGsOpen} />}
       </ThemeProvider>
     </QueryClientProvider>
   );
