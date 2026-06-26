@@ -152,6 +152,9 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       initFn(args).then((value) => {
         initSettled = true;
         return value;
+      }).catch((err) => {
+        initSettled = true;
+        throw err;
       }),
       initTimeout,
     ]);
