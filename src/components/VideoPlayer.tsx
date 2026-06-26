@@ -512,6 +512,7 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      pushDbg(`attachHls url=${url}`);
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
