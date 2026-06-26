@@ -170,7 +170,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       // FIX B: exit registrado pré-initPlayer para não perder Back durante loading
       "jeepCapVideoPlayerExit",
     ];
-    for (const ev of events) {
+    await Promise.all(events.map(async (ev) => {
       try {
         const h = await listenable.addListener(ev, (data: unknown) => {
           if (ev === "jeepCapVideoPlayerExit" && opts.onExit) {
@@ -184,7 +184,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
         });
         debugHandles.push(h);
       } catch { /* ignore */ }
-    }
+    }));
 
     const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
     let initSettled = false;
