@@ -147,12 +147,13 @@ function GuidePage() {
   const windowEnd = windowStart + WINDOW_HOURS * 3600;
   const timelineWidth = WINDOW_HOURS * PX_PER_HOUR;
 
-  // Scroll so "now" is visible on first paint
+  // Scroll so "now" is visible — só na montagem, pra não interferir com scroll manual
   useEffect(() => {
     if (!timelineRef.current) return;
-    const x = (now - windowStart) * PX_PER_SEC - 160;
-    timelineRef.current.scrollLeft = Math.max(0, x);
-  }, [windowStart, now]);
+    const nowOffset = (now - windowStart) * PX_PER_SEC - 200;
+    timelineRef.current.scrollLeft = Math.max(0, nowOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!creds) {
     return (
