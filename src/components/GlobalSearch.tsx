@@ -230,5 +230,3 @@ function Thumb({ logo, icon: Icon }: { logo?: string; icon: typeof Tv }) {
   );
 }
 
-// useState import abaixo para manter o topo limpo.
-import { useState } from "react";
