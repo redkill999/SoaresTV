@@ -182,10 +182,8 @@ function PlaylistPage() {
               <VideoPlayer
                 src={active.url}
                 poster={active.logo}
-                title={active.name}
                 kind={/\/movie\/|\/series\//i.test(active.url) || /^Filmes\s*\|/i.test(active.group ?? "") ? "vod" : "live"}
               />
-
               <div className="mt-3 flex items-center justify-between">
                 <div>
                   <div className="font-semibold">{active.name}</div>
