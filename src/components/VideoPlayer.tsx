@@ -278,6 +278,13 @@ export function VideoPlayer({
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
+      if (!ok && isLiveSrc && srcHostProfile.forceNativeForLive) {
+        pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
+        nativeOpenedRef.current = false;
+        setPlayerMode("web");
+        setError("Falha ao abrir o ExoPlayer para este canal LIVE. Veja o diagnóstico abaixo.");
+        return;
+      }
       if (ok && isLiveSrc) {
         nativeLiveWatchdogRef.current = setTimeout(() => {
           if (cancelled || !nativeOpenedRef.current || nativeLivePlayedRef.current) return;
