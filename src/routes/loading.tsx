@@ -73,15 +73,19 @@ function LoadingPage() {
         { k: "series", action: "get_series_categories" },
         { k: "epg",    action: "get_live_streams" },
       ];
+      const result: Record<TestKey, Status> = {
+        live: "pending", vod: "pending", series: "pending", epg: "pending",
+      };
       await Promise.all(tests.map(async (t) => {
         try {
           const data = await api<unknown[]>(creds, t.action);
-          set(t.k, Array.isArray(data) ? "ok" : "fail");
+          result[t.k] = Array.isArray(data) ? "ok" : "fail";
         } catch {
-          set(t.k, "fail");
+          result[t.k] = "fail";
         }
+        set(t.k, result[t.k]);
       }));
-      return true;
+      return result;
     };
 
     const runM3U = async () => {
@@ -105,8 +109,15 @@ function LoadingPage() {
 
     (async () => {
       try {
-        if (creds) await runXtream();
-        else await runM3U();
+        if (creds) {
+          const xtreamStatus = await runXtream();
+          const xtreamOk = xtreamStatus && Object.values(xtreamStatus).every((s) => s === "ok");
+          // Alguns painéis deixam o get.php/M3U funcionar no APK, mas bloqueiam
+          // player_api.php em uma ou mais probes do loading. Se já existe a lista
+          // salva, validamos por ela antes de declarar falha — sem trocar lista,
+          // sem mexer nas credenciais e sem impactar listas que já passam no Xtream.
+          if (!xtreamOk && lists.length > 0) await runM3U();
+        } else await runM3U();
       } catch {
         /* runXtream/runM3U já tratam internamente — try/catch defensivo */
       }

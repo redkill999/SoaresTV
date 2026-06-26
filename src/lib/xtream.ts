@@ -231,10 +231,12 @@ async function nativeApiWithFallbackPorts<T = unknown>(
         break; // erro de rede/timeout: pula pro próximo server
       }
     }
-    // Se todos os UAs falharam por 401/403, este server provavelmente é
-    // o correto mas as credenciais foram rejeitadas — não vale a pena
-    // martelar mais portas.
-    if (authBlocked && server === base) {
+    // Se todos os UAs falharam por 401/403 em um server com porta explícita,
+    // ele provavelmente é o correto e as credenciais foram rejeitadas. Porém,
+    // quando o usuário salvou só o host sem porta (ex.: athra.sbs), o host raiz
+    // pode responder 403 enquanto a porta IPTV real funciona. Nesse caso NÃO
+    // desistimos no primeiro 403: seguimos testando as portas candidatas.
+    if (authBlocked && server === base && hasExplicitPort) {
       throw lastError;
     }
   }
