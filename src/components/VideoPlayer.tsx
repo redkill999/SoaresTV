@@ -1169,6 +1169,35 @@ export function VideoPlayer({
     };
   }, [src, kind, mediaId, mediaKind]);
 
+  // onReady: chama uma única vez no primeiro `canplay` do <video> em modo web,
+  // entregando um handle com seekTo. Usado por consumidores para oferecer
+  // toast "Continuar de onde parou?" sem mexer na lógica interna do player.
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  useEffect(() => {
+    if (playerMode !== "web") return;
+    const video = videoRef.current;
+    if (!video) return;
+    let fired = false;
+    const handle: VideoPlayerHandle = {
+      seekTo: (seconds: number) => {
+        try {
+          const dur = video.duration;
+          if (!Number.isFinite(seconds) || seconds < 0) return;
+          const target = Number.isFinite(dur) && dur > 0 ? Math.min(seconds, dur - 2) : seconds;
+          video.currentTime = target;
+        } catch { /* ignore */ }
+      },
+    };
+    const onCanPlayOnce = () => {
+      if (fired) return;
+      fired = true;
+      try { onReadyRef.current?.(handle); } catch { /* noop */ }
+    };
+    video.addEventListener("canplay", onCanPlayOnce);
+    return () => video.removeEventListener("canplay", onCanPlayOnce);
+  }, [src, playerMode]);
+
   // Auto-hide dos controles nativos: aparece só ao mover o mouse / tocar a tela,
   // some após 2.5s de inatividade. Evita que o player abra já com a barra
   // nativa do navegador visível em cima do vídeo.
