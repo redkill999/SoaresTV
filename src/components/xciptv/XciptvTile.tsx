@@ -15,15 +15,22 @@ export const XciptvTile = memo(function XciptvTile({
   id,
   name,
   image,
+  progress,
 }: {
   type: FavItem["type"];
   id: string;
   name: string;
   image?: string;
+  /** 0–1: mostra barra fina de "continue assistindo" na base do tile. */
+  progress?: number;
 }) {
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
   const hasImage = !!image && !errored;
+  const pct =
+    typeof progress === "number" && Number.isFinite(progress)
+      ? Math.max(0, Math.min(1, progress)) * 100
+      : null;
 
   return (
     <Link
