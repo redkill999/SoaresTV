@@ -1,5 +1,23 @@
 // Single-user local storage helpers
 
+// In-memory store for floating mini player (não persistir em localStorage).
+export type MiniPlayerState = { streamId: string; name: string; logo?: string } | null;
+let _miniPlayer: MiniPlayerState = null;
+const _miniListeners = new Set<() => void>();
+export const miniPlayerStore = {
+  get: (): MiniPlayerState => _miniPlayer,
+  set: (v: MiniPlayerState) => {
+    _miniPlayer = v;
+    _miniListeners.forEach((fn) => fn());
+  },
+  subscribe: (fn: () => void) => {
+    _miniListeners.add(fn);
+    return () => {
+      _miniListeners.delete(fn);
+    };
+  },
+};
+
 // Compatibilidade por lista/servidor: opções que sobrescrevem o comportamento
 // padrão do player para uma origem específica.
 export type ListUserAgent =
