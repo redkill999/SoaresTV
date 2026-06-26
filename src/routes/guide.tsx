@@ -364,15 +364,21 @@ function GuidePage() {
 
 function ProgramBlock({
   p,
+  streamId: _streamId,
   windowStart,
   windowEnd,
   now,
+  hasAlert,
+  onToggleAlert,
   onOpen,
 }: {
   p: EpgListing;
+  streamId: string;
   windowStart: number;
   windowEnd: number;
   now: number;
+  hasAlert: boolean;
+  onToggleAlert: () => void;
   onOpen: () => void;
 }) {
   const start = Number(p.start_timestamp);
