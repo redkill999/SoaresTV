@@ -15,7 +15,10 @@ const isPlayerType = (t: string): t is PlayerType =>
   (VALID_TYPES as readonly string[]).includes(t);
 
 export const Route = createFileRoute("/player/$type/$id")({
-  validateSearch: (s: Record<string, unknown>) => ({ name: (s.name as string) ?? "" }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    name: (s.name as string) ?? "",
+    src: (s.src as string) ?? "",
+  }),
   head: ({ params }) => ({ meta: [{ title: `Player — ${params.id}` }] }),
   component: PlayerPage,
 });
