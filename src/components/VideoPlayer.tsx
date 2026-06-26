@@ -420,11 +420,12 @@ export function VideoPlayer({
         setPlayerMode("web");
         return;
       }
-      if (isLiveSrc && srcHostProfile.forceNativeForLive && !manualNativeStartRef.current) {
-        pushDbg("ETAPA 4 debug pré-ExoPlayer ativo: não abrir overlay nativo automaticamente");
+      if (!manualNativeStartRef.current) {
+        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (${kind ?? "auto"}): não abrir overlay nativo automaticamente`);
         setPlayerMode("web");
         setHoldNativeDebug(true);
-        showStreamDiagnostic("Diagnóstico LIVE ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.");
+        const label = isLiveSrc ? "canal LIVE" : kind === "vod" ? "filme/episódio" : "stream";
+        showStreamDiagnostic(`Diagnóstico ${label} ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
         void probeNativeLiveStream(src, (line) => {
           if (!cancelled) pushDbg(line);
         }, () => cancelled);
@@ -433,11 +434,11 @@ export function VideoPlayer({
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
-      if (!ok && isLiveSrc && srcHostProfile.forceNativeForLive) {
+      if (!ok) {
         pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        showStreamDiagnostic("Falha ao abrir o ExoPlayer para este canal LIVE. Veja o diagnóstico abaixo.");
+        showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
         return;
       }
       if (ok && isLiveSrc) {
