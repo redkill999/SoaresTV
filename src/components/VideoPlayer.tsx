@@ -77,7 +77,8 @@ function proxied(url: string, kind?: "live" | "vod"): string {
 
 function maskIptvUrl(url: string): string {
   try {
-    const parsed = new URL(url);
+    const isRelative = /^\//.test(url);
+    const parsed = new URL(url, "http://local");
     const proxiedTarget = parsed.searchParams.get("u");
     if (proxiedTarget) {
       parsed.searchParams.set("u", maskIptvUrl(proxiedTarget));
@@ -88,7 +89,7 @@ function maskIptvUrl(url: string): string {
       /(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i,
       "$1***USER***/***PASS***$4",
     );
-    return parsed.toString();
+    return isRelative ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString();
   } catch {
     return url.replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4");
   }
