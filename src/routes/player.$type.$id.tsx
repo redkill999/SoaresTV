@@ -39,7 +39,7 @@ type MovieInfo = {
 
 function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
-  const { name } = Route.useSearch();
+  const { name, src: customSrc } = Route.useSearch();
   const navigate = useNavigate();
 
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
