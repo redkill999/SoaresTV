@@ -708,7 +708,7 @@ export function VideoPlayer({
       hlsProxied = hlsCandidate
         ? forceProxy
           ? proxiedX(hlsCandidate, kind)
-          : forceDirect
+          : forceDirect || (isLive && liveBypassProxy)
             ? hlsCandidate
             : proxiedX(hlsCandidate, kind)
         : null;
