@@ -19,6 +19,23 @@ function loud(msg) {
   console.log("====================================================");
 }
 
+function assertContains(file, checks) {
+  if (!existsSync(file)) {
+    loud(`[patch-video-player] VERIFICAÇÃO FALHOU: arquivo não existe: ${file}`);
+    hardFail = true;
+    return;
+  }
+  const src = readFileSync(file, "utf8");
+  for (const [label, token] of checks) {
+    if (src.includes(token)) {
+      console.log(`[patch-video-player] VERIFICADO: ${label}`);
+    } else {
+      loud(`[patch-video-player] VERIFICAÇÃO FALHOU: ${label}`);
+      hardFail = true;
+    }
+  }
+}
+
 if (existsSync(pkgPath)) {
   try {
     const v = JSON.parse(readFileSync(pkgPath, "utf8")).version;
@@ -76,7 +93,7 @@ patchFile(fragmentPath, [
   },
   {
     name: "2) LoadControl tolerante (20/60s)",
-    required: false,
+    required: true,
     mustContainAfter: "setBufferDurationsMs(20000, 60000",
     apply: (s) => s.replace(
       "LoadControl loadControl = new DefaultLoadControl();",
@@ -94,7 +111,7 @@ patchFile(fragmentPath, [
   },
   {
     name: "4) MediaItem MIME VIDEO_MP2T para .ts",
-    required: false,
+    required: true,
     mustContainAfter: "MimeTypes.VIDEO_MP2T",
     apply: (s) => s.replace(
       `      mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri));\n    } else if (vType.equals("dash") || vType.equals("mpd")) {`,
@@ -103,7 +120,7 @@ patchFile(fragmentPath, [
   },
   {
     name: "5) getVideoType por extensão real",
-    required: false,
+    required: true,
     mustContainAfter: 'path.endsWith(".ts")) return "ts"',
     apply: (s) => s.replace(
       `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
@@ -112,7 +129,7 @@ patchFile(fragmentPath, [
   },
   {
     name: "6) Watchdog BUFFERING 18s força playerExit (mostra diagnóstico)",
-    required: false,
+    required: true,
     mustContainAfter: "JEEP_BUFFER_WATCHDOG",
     apply: (s) => s.replace(
       `        @Override\n        public void onPlayerStateChanged(boolean playWhenReady, int state) {`,
@@ -127,7 +144,7 @@ patchFile(fragmentPath, [
   },
   {
     name: "7) Agendar/cancelar watchdog dentro de onPlayerStateChanged",
-    required: false,
+    required: true,
     mustContainAfter: "_bufferTimeout = new Runnable()",
     apply: (s) => s.replace(
       "private Runnable _bufferTimeout = null;\n        @Override\n        public void onPlayerStateChanged(boolean playWhenReady, int state) {",
@@ -175,6 +192,22 @@ patchFile(pluginPath, [
       `        NotificationCenter\n            .defaultCenter()\n            .addMethodForNotification(\n                "playerItemError",\n                new MyRunnable() {\n                    @Override\n                    public void run() {\n                        JSObject data = new JSObject();\n                        data.put("fromPlayerId", this.getInfo().get("fromPlayerId"));\n                        data.put("currentTime", this.getInfo().get("currentTime"));\n                        data.put("message", this.getInfo().get("message"));\n                        data.put("errorCode", this.getInfo().get("errorCode"));\n                        data.put("videoType", this.getInfo().get("videoType"));\n                        data.put("url", this.getInfo().get("url"));\n                        notifyListeners("jeepCapVideoPlayerError", data);\n                        return;\n                    }\n                }\n            );\n        NotificationCenter\n            .defaultCenter()\n            .addMethodForNotification(\n                "playerItemEnd",`,
     ),
   },
+]);
+
+assertContains(fragmentPath, [
+  ["formatos .ts/.mpegts registrados", '"flv", "ts", "mpegts"'],
+  ["buffer ExoPlayer 20s/60s", "setBufferDurationsMs(20000, 60000"],
+  ["onPlayerError nativo", "public void onPlayerError(com.google.android.exoplayer2.PlaybackException error)"],
+  ["MIME MPEG-TS no MediaItem", "MimeTypes.VIDEO_MP2T"],
+  ["detecção .ts por path", 'path.endsWith(".ts")'],
+  ["watchdog nativo BUFFERING", "JEEP_BUFFER_WATCHDOG"],
+  ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
+  ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
+]);
+
+assertContains(pluginPath, [
+  ["notification playerItemError", '"playerItemError"'],
+  ["listener JS jeepCapVideoPlayerError", "jeepCapVideoPlayerError"],
 ]);
 
 if (hardFail) {
