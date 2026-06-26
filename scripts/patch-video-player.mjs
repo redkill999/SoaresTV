@@ -291,6 +291,7 @@ assertContains(fragmentPath, [
   ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
   ["fullscreen insets aplicados", "JEEP_FULLSCREEN_INSETS"],
+  ["fitsSystemWindows desligado", "JEEP_FIT_INSETS_OFF"],
 ]);
 
 assertContains(pluginPath, [
