@@ -495,6 +495,8 @@ async function nativeLoadM3U(
   password?: string,
 ): Promise<M3UEntry[] | null> {
   if (!(await canUseNativeHttp())) return null;
+  const startedAt = Date.now();
+  const totalTimeoutMs = 22_000;
   const first = buildClientM3UUrl(url, username, password);
   const candidates = new Set<string>([first]);
   try {
@@ -507,10 +509,23 @@ async function nativeLoadM3U(
       !u.pathname.toLowerCase().endsWith(".m3u") &&
       !u.pathname.toLowerCase().endsWith(".m3u8")
     ) {
-      for (const scheme of ["http", "https"]) {
+      const scheme = u.protocol === "https:" ? "https" : "http";
+      for (const port of COMMON_XTREAM_PORTS) {
+        for (const output of ["m3u8", "ts"]) {
+          const out = new URL(`${scheme}://${u.hostname}${port ? `:${port}` : ""}/get.php`);
+          out.searchParams.set("username", user);
+          out.searchParams.set("password", pass);
+          out.searchParams.set("type", "m3u_plus");
+          out.searchParams.set("output", output);
+          candidates.add(out.toString());
+        }
+      }
+      // Se a entrada já veio em HTTPS, tenta HTTP como fallback controlado;
+      // se veio em HTTP, não faz upgrade automático para HTTPS.
+      if (u.protocol === "https:") {
         for (const port of COMMON_XTREAM_PORTS) {
           for (const output of ["m3u8", "ts"]) {
-            const out = new URL(`${scheme}://${u.hostname}${port ? `:${port}` : ""}/get.php`);
+            const out = new URL(`http://${u.hostname}${port ? `:${port}` : ""}/get.php`);
             out.searchParams.set("username", user);
             out.searchParams.set("password", pass);
             out.searchParams.set("type", "m3u_plus");
@@ -527,8 +542,10 @@ async function nativeLoadM3U(
   let lastStatus = 0;
   let lastError: unknown = null;
   for (const target of candidates) {
+    const remainingMs = totalTimeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) throw new Error("Tempo esgotado ao carregar M3U no Android");
     try {
-      const res = await nativeHttpGet(target, 30_000);
+      const res = await nativeHttpGet(target, Math.max(1_500, Math.min(4_000, remainingMs)));
       if (!res) return null;
       lastStatus = res.status;
       if (res.status < 200 || res.status >= 300) continue;
