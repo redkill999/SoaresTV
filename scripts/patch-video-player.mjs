@@ -260,7 +260,9 @@ const controlXmlPath = join(
 if (existsSync(controlXmlPath)) {
   let xml = readFileSync(controlXmlPath, "utf8");
   const before = xml;
-  xml = xml.replace(/\n\s*android:fitsSystemWindows="true"\s*\n/g, "\n");
+  // Remove "android:fitsSystemWindows="true"" tanto no meio da tag (espaço antes)
+  // quanto no fim (fecha com ">"). Mantém o ">" da tag se for o caso.
+  xml = xml.replace(/\s+android:fitsSystemWindows="true"(?=\s|>)/g, "");
   if (xml !== before) {
     writeFileSync(controlXmlPath, xml);
     console.log("[patch-video-player] XML controles: fitsSystemWindows removido");
