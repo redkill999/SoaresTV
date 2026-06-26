@@ -4,7 +4,7 @@
 
 let bound = false;
 let lastInteractionWasKeyboard = false;
-let routeWatchId: ReturnType<typeof setInterval> | null = null;
+let routeCleanup: (() => void) | null = null;
 
 // Anti-clique-fantasma do controle remoto / teclado:
 // - Debounce: ignora Enters repetidos em < 300ms (botão OK com repeat).
@@ -368,19 +368,62 @@ export function initTvDpad() {
     }
   }, 300);
 
-  // Re-foco após troca de rota (quando a página nova não tem foco)
-  let lastPath = window.location.pathname;
-  if (routeWatchId) clearInterval(routeWatchId);
-  routeWatchId = setInterval(() => {
-    if (window.location.pathname !== lastPath) {
-      lastPath = window.location.pathname;
-      setTimeout(() => {
-        if (!document.activeElement || document.activeElement === document.body) {
-          focusFirst();
-        }
-      }, 200);
+  // Re-foco após troca de rota — sem polling: escutamos popstate e
+  // monkey-patch único de pushState/replaceState (TanStack Router usa
+  // history.pushState internamente).
+  const onRouteChange = () => {
+    // Limpa qualquer confirmação pendente do D-pad (link "armado" do player)
+    if (pendingActivation) {
+      clearConfirmHint(pendingActivation.el);
+      pendingActivation = null;
     }
-  }, 250);
+    setTimeout(() => {
+      if (!document.activeElement || document.activeElement === document.body) {
+        // preventScroll: true — evita jogar a página pro topo se o
+        // primeiro focusable estiver fora da dobra inicial.
+        const preferred = document.querySelector<HTMLElement>("[data-tv-default-focus]");
+        if (preferred && isVisible(preferred)) {
+          preferred.focus({ preventScroll: true });
+        } else {
+          const list = visibleFocusables();
+          const target = list.find((el) => {
+            const r = el.getBoundingClientRect();
+            return r.top >= 0 && r.top < window.innerHeight;
+          }) ?? list[0];
+          target?.focus({ preventScroll: true });
+        }
+      }
+    }, 200);
+  };
+
+  const w = window as Window & {
+    __tvDpadHistoryPatched?: boolean;
+    __tvDpadRouteEvent?: string;
+  };
+  const EVT = "soarestv:tv-route-change";
+  w.__tvDpadRouteEvent = EVT;
+  if (!w.__tvDpadHistoryPatched) {
+    w.__tvDpadHistoryPatched = true;
+    const fire = () => window.dispatchEvent(new Event(EVT));
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function (...args: Parameters<typeof origPush>) {
+      const r = origPush.apply(this, args);
+      fire();
+      return r;
+    };
+    history.replaceState = function (...args: Parameters<typeof origReplace>) {
+      const r = origReplace.apply(this, args);
+      fire();
+      return r;
+    };
+  }
+  window.addEventListener(EVT, onRouteChange);
+  window.addEventListener("popstate", onRouteChange);
+  routeCleanup = () => {
+    window.removeEventListener(EVT, onRouteChange);
+    window.removeEventListener("popstate", onRouteChange);
+  };
 }
 
 /** Remove handlers do D-pad (útil para HMR/testes). */
@@ -389,7 +432,7 @@ export function destroyTvDpad() {
   window.removeEventListener("keydown", handleKey, { capture: true } as EventListenerOptions);
   window.removeEventListener("mousedown", handleMouse, { capture: true } as EventListenerOptions);
   window.removeEventListener("pointerdown", handleMouse, { capture: true } as EventListenerOptions);
-  if (routeWatchId) { clearInterval(routeWatchId); routeWatchId = null; }
+  if (routeCleanup) { routeCleanup(); routeCleanup = null; }
   bound = false;
 }
 
