@@ -120,25 +120,27 @@ async function probeNativeLiveStream(
       return;
     }
 
-    onLine(`ETAPA 4.0 probe GET parcial url=${maskIptvUrl(url)}`);
+    onLine(`ETAPA 4.0 probe GET url=${maskIptvUrl(url)}`);
+    const httpReq = (CapacitorHttp as unknown as {
+      request: (opts: Record<string, unknown>) => Promise<{
+        status?: number;
+        headers?: Record<string, string>;
+        data?: unknown;
+      }>;
+    }).request;
+    let firstOk: string | null = null;
     for (const [idx, [label, ua]] of uaList.entries()) {
       if (isCancelled()) return;
       try {
         const started = Date.now();
-        const res = await (CapacitorHttp as unknown as {
-          request: (opts: Record<string, unknown>) => Promise<{
-            status?: number;
-            headers?: Record<string, string>;
-            data?: unknown;
-          }>;
-        }).request({
+        // NOTE: muitos IPTV rejeitam Range em LIVE com 403 — não enviamos Range.
+        const res = await httpReq({
           method: "GET",
           url,
           headers: {
             "User-Agent": ua,
             "Accept": "*/*",
-            "Range": "bytes=0-1",
-            "Connection": "close",
+            "Icy-MetaData": "1",
           },
           connectTimeout: 4_000,
           readTimeout: 4_000,
@@ -148,13 +150,24 @@ async function probeNativeLiveStream(
         const headers = res.headers ?? {};
         const contentType = headers["content-type"] ?? headers["Content-Type"] ?? "-";
         const contentLength = headers["content-length"] ?? headers["Content-Length"] ?? "-";
-        onLine(`ETAPA 4.${idx + 1} probe UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}`);
-        if (res.status && res.status >= 200 && res.status < 400) return;
+        const bodyPreview =
+          typeof res.data === "string" ? res.data.slice(0, 80).replace(/\s+/g, " ") : "";
+        onLine(
+          `ETAPA 4.${idx + 1} UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}${bodyPreview ? ` body="${bodyPreview}"` : ""}`,
+        );
+        if (res.status && res.status >= 200 && res.status < 400 && !firstOk) {
+          firstOk = label;
+        }
       } catch (err) {
         if (isCancelled()) return;
         const msg = err instanceof Error ? err.message : String(err);
-        onLine(`ETAPA 4 probe UA=${label} erro=${msg.slice(0, 140)}`);
+        onLine(`ETAPA 4.${idx + 1} UA=${label} erro=${msg.slice(0, 140)}`);
       }
+    }
+    if (firstOk) {
+      onLine(`ETAPA 4.X UA recomendado para ExoPlayer: ${firstOk}`);
+    } else {
+      onLine("ETAPA 4.X nenhum UA passou — servidor pode estar bloqueando este IP/região");
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
