@@ -142,7 +142,7 @@ function PlayerPage() {
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
-  }, [creds, type, id, episodeUrl, movieQ.data]);
+  }, [creds, type, id, episodeUrl, movieQ.data, customSrc]);
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).
