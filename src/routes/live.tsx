@@ -129,7 +129,7 @@ function LivePage() {
           <XciptvCategoryList
             categories={sidebarCats}
             value={cat}
-            onChange={(v) => { setCat(v); setUnlocked(false); }}
+            onChange={handleCatChange}
             loading={!creds || (categoriesQ.isLoading && !categoriesQ.data)}
             favCount={favIds.size}
             recentCount={recentIds.length}
