@@ -618,7 +618,9 @@ export function VideoPlayer({
         // do .ts. mpegts.js não decoda HEVC e navegadores desktop também não
         // aceitam HEVC via MSE — só rodam no APK (ExoPlayer hardware). Quando
         // o nome do canal sugere 4K/UHD/HEVC, mostramos uma mensagem honesta.
-        const looks4k = /\b(4k|uhd|hevc|h\.?265)\b/i.test(`${title ?? ""} ${src}`);
+        // Detecta apenas pelo TÍTULO do canal — usar a URL gera falsos positivos
+        // (paths/IDs podem conter "uhd"/"4k" sem que o stream seja HEVC real).
+        const looks4k = !!title && /(^|[^a-z0-9])(4k|uhd|hevc|h\.?265)([^a-z0-9]|$)/i.test(title);
         if (isLive && looks4k) {
           setError("Canal 4K/UHD (HEVC) não é suportado pelo navegador desktop. Abra pelo APK Android para usar o decoder de hardware do ExoPlayer.");
         } else {
