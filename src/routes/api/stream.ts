@@ -141,6 +141,12 @@ async function handle(request: Request) {
   const range = request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  // LIVE: muitos painéis IPTV (Xtream) retornam 403 quando recebem qualquer
+  // header Range em streams .ts ao vivo. O proxy NUNCA deve injetar Range em
+  // LIVE — só repassa quando o cliente explicitamente pediu (raro em live).
+  const isLive =
+    !playlistPath && !isVod &&
+    (url.searchParams.get("kind") === "live" || /\/live\//i.test(upstreamUrl.pathname));
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
