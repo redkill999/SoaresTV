@@ -951,15 +951,26 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
   const run = async (signal?: AbortSignal) => {
     setRunning(true); setError(null); setResult(null);
     try {
-      // Baixa ~2MB de um endpoint de teste pra medir vazão real.
-      const url = "https://speed.cloudflare.com/__down?bytes=2000000&t=" + Date.now();
+      const bytes = 2_000_000;
+      const url = "https://speed.cloudflare.com/__down?bytes=" + bytes + "&t=" + Date.now();
+      const isNative = typeof window !== "undefined" && (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
+      let byteLength = 0;
       const t0 = performance.now();
-      const res = await fetch(url, { cache: "no-store", signal });
-      const buf = await res.arrayBuffer();
+      if (isNative) {
+        // No APK/TV o fetch padrão sofre CORS/limitações de WebView. Usa CapacitorHttp.
+        const { CapacitorHttp } = await import("@capacitor/core");
+        const res = await CapacitorHttp.get({ url, responseType: "text", headers: { "Cache-Control": "no-store" } });
+        if (signal?.aborted) return;
+        const data = res.data;
+        byteLength = typeof data === "string" ? data.length : (data ? JSON.stringify(data).length : bytes);
+      } else {
+        const res = await fetch(url, { cache: "no-store", signal });
+        const buf = await res.arrayBuffer();
+        byteLength = buf.byteLength;
+      }
       const t1 = performance.now();
       const ms = t1 - t0;
-      const bits = buf.byteLength * 8;
-      const mbps = bits / (ms / 1000) / 1_000_000;
+      const mbps = (byteLength * 8) / (ms / 1000) / 1_000_000;
       if (!signal?.aborted) setResult({ mbps, ms });
     } catch (e) {
       if ((e as { name?: string })?.name === "AbortError") return;
@@ -975,31 +986,50 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
     abortRef.current = ctrl;
     setResult(null); setError(null);
     void run(ctrl.signal);
-    return () => { ctrl.abort(); };
-  }, [open]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "GoBack" || e.key === "Backspace") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => { ctrl.abort(); window.removeEventListener("keydown", onKey); };
+  }, [open, onClose]);
 
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Teste rápido</DialogTitle>
-          <DialogDescription>Medida da velocidade de download.</DialogDescription>
-        </DialogHeader>
-        <div className="py-4 text-center">
-          {running && <div className="text-sm text-muted-foreground animate-pulse">Medindo…</div>}
-          {error && <div className="text-sm text-destructive">{error}</div>}
+    <div
+      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-[min(28rem,92%)] rounded-lg border border-white/10 bg-[#0b0f17] p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          aria-label="Fechar"
+        >
+          ✕
+        </button>
+        <h2 className="text-lg font-semibold text-white">Teste rápido</h2>
+        <p className="mb-4 text-sm text-white/60">Medida da velocidade de download.</p>
+        <div className="py-4 text-center text-white">
+          {running && <div className="text-sm text-white/60 animate-pulse">Medindo…</div>}
+          {error && <div className="text-sm text-red-400">{error}</div>}
           {result && (
             <div>
-              <div className="text-4xl font-bold tabular-nums">{result.mbps.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">Mbps</span></div>
-              <div className="text-xs text-muted-foreground mt-1">latência ~{result.ms.toFixed(0)} ms</div>
+              <div className="text-4xl font-bold tabular-nums">{result.mbps.toFixed(1)} <span className="text-sm font-normal text-white/60">Mbps</span></div>
+              <div className="text-xs text-white/60 mt-1">latência ~{result.ms.toFixed(0)} ms</div>
             </div>
           )}
         </div>
         <Button onClick={() => void run()} disabled={running} className="bg-brand-gradient w-full">
           {running ? "Testando…" : "Refazer teste"}
         </Button>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
