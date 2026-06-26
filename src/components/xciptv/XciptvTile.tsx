@@ -77,6 +77,11 @@ export const XciptvTile = memo(function XciptvTile({
           <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-white leading-tight line-clamp-2">
             {name}
           </div>
+          {pct !== null && pct > 0 && (
+            <div className="mt-1 h-1 rounded bg-white/10 overflow-hidden">
+              <div className="h-full bg-brand-gradient" style={{ width: `${pct}%` }} />
+            </div>
+          )}
         </div>
       </div>
     </Link>
