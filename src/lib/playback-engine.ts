@@ -87,19 +87,3 @@ export function classifyError(input: {
 // Log unificado. Mantém o prefixo [PLAYBACK ENGINE] em todas as etapas
 // para facilitar grep no console e no logcat do APK.
 // =========================================================================
-type LogStep =
-  | "start"
-  | "engine-pick"
-  | "engine-try"
-  | "engine-ok"
-  | "engine-fail"
-  | "fallback"
-  | "proxy-bypass"
-  | "https-skip"
-  | "buffer"
-  | "final-fail";
-
-export function plog(step: LogStep, data: Record<string, unknown>): void {
-  // eslint-disable-next-line no-console
-  console.log(`[PLAYBACK ENGINE] ${step}`, data);
-}
