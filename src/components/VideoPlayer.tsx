@@ -925,18 +925,35 @@ export function VideoPlayer({
         className={videoClass}
         hidden={playerMode === "native"}
       />
-      {playerMode === "native" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-player text-foreground">
-          <p className="text-sm opacity-80">Reproduzindo no player nativo (ExoPlayer)</p>
-          <button
-            type="button"
-            onClick={() => { void openNative(); }}
-            className="rounded-full bg-primary px-5 py-2 text-sm text-primary-foreground shadow-glow"
-          >
-            ▶ Abrir player
-          </button>
+      {playerMode === "native" && !error && (
+        <div className="absolute inset-0 flex flex-col bg-player text-foreground">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+            <span className="text-xs opacity-80">Player nativo (ExoPlayer) — diagnóstico</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  try { void navigator.clipboard?.writeText(dbgLines.join("\n")); } catch { /* noop */ }
+                }}
+                className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => { void openNative(); }}
+                className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground"
+              >
+                ▶ Abrir
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[10px] leading-tight whitespace-pre-wrap">
+            {dbgLines.length === 0 ? "(sem logs)" : dbgLines.join("\n")}
+          </div>
         </div>
       )}
+
       {error && (
         <div className="absolute inset-0 flex flex-col bg-black/90 text-white">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
