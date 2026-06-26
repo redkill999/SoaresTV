@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
 import { syncLangFromStorage } from "../lib/i18n";
+import { FloatingMiniPlayer } from "../components/FloatingMiniPlayer";
 
 
 function NotFoundComponent() {
