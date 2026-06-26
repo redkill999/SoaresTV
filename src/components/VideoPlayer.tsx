@@ -230,6 +230,34 @@ export function VideoPlayer({
         if (ok) void stopNative();
         return;
       }
+  useEffect(() => {
+    let cancelled = false;
+    setPlayerMode("deciding");
+    nativeOpenedRef.current = false;
+    // [DEBUG TEMP] reset por src
+    dbgRef.current = [];
+    setDbgLines([]);
+    pushDbg(`ETAPA 1 src=${src}`);
+    pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
+    (async () => {
+      const native = await isNativeApp();
+      if (cancelled) return;
+      pushDbg(`ETAPA 3 isNativeApp=${native} shouldUseNative=${shouldUseNativePlayer}`);
+      if (!native) {
+        setPlayerMode("web");
+        return;
+      }
+      if (!shouldUseNativePlayer) {
+        setPlayerMode("web");
+        return;
+      }
+      const ok = await openNative();
+      pushDbg(`ETAPA 4 native openNative=${ok}`);
+      if (ok) nativeOpenedRef.current = true;
+      if (cancelled) {
+        if (ok) void stopNative();
+        return;
+      }
       setPlayerMode(ok ? "native" : "web");
     })();
     return () => {
@@ -240,7 +268,7 @@ export function VideoPlayer({
         nativeOpenedRef.current = false;
       }
     };
-  }, [src, kind, openNative, shouldUseNativePlayer]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
