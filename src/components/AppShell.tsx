@@ -92,6 +92,15 @@ export function AppShell({
               </div>
             )}
             <div className="ml-auto shrink-0 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => globalSearchStore.set(true)}
+                title={`${t("common.search")} (Ctrl+K)`}
+                aria-label={t("common.search")}
+                className="inline-flex items-center justify-center size-7 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-foreground transition-colors"
+              >
+                <Search className="size-3.5" />
+              </button>
               <Link
                 to="/home"
                 title={t("common.home")}
