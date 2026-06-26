@@ -60,6 +60,7 @@ function HomePage() {
   const queryClient = useQueryClient();
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
   const [openConta, setOpenConta] = useState(false);
+  const { alerts } = useEpgAlerts();
 
   const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
   const [recOn, setRecOn] = useState(false);
