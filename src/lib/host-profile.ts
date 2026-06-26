@@ -76,6 +76,13 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     preferTs: true,
     forceNativeForLive: true,
   },
+  // suportejetflix.site: validado funcional em web desktop (canais + filmes).
+  // Mantém proxy ativo (necessário p/ CORS no browser) e prioriza TS original
+  // sem conversão HLS forçada.
+  "suportejetflix.site": {
+    disableHlsConversion: true,
+    preferTs: true,
+  },
 };
 
 
