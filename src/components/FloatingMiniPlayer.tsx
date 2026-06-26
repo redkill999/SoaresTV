@@ -44,6 +44,7 @@ export function FloatingMiniPlayer() {
 
   return (
     <div
+      ref={wrapRef}
       className="fixed z-50 bottom-16 right-3 sm:bottom-4 sm:right-4 w-56 sm:w-72 transition-all duration-300 translate-y-0 opacity-100"
     >
       <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black">
