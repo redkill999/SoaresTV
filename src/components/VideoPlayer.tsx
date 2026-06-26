@@ -425,17 +425,11 @@ export function VideoPlayer({
         setPlayerMode("web");
         return;
       }
-      if (!manualNativeStartRef.current) {
-        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (${kind ?? "auto"}): não abrir overlay nativo automaticamente`);
-        setPlayerMode("web");
-        setHoldNativeDebug(true);
-        const label = isLiveSrc ? "canal LIVE" : kind === "vod" ? "filme/episódio" : "stream";
-        showStreamDiagnostic(`Diagnóstico ${label} ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
-        void probeNativeLiveStream(src, (line) => {
-          if (!cancelled) pushDbg(line);
-        }, () => cancelled);
-        return;
-      }
+      // Abrir o ExoPlayer direto. O modo "hold pré-diagnóstico" só era útil
+      // durante a investigação ativa — em uso normal ele segurava a reprodução
+      // por ~20s rodando probe de 5 User-Agents e ainda exigia tap manual em
+      // "Abrir ExoPlayer", o que causava o atraso percebido de >1 min.
+
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
