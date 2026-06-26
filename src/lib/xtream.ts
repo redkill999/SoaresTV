@@ -200,21 +200,11 @@ async function nativeApiWithFallbackPorts<T = unknown>(
     // keep normalized base only
   }
 
-  // UA preferido (vencedor de login anterior) primeiro, depois os fallbacks.
+  // Apenas UA padrão (XCIPTV/6.0) ou UA já memorizado para o host.
+  // A rotação ampla de UAs no login nativo causou regressão em painéis que
+  // aceitavam o UA padrão (athra.sbs) — mantida apenas para reprodução de stream.
   const preferred = getUAHint(c.server);
-  const uaQueue: (string | undefined)[] = [
-    preferred,
-    undefined, // IPTV_HEADERS padrão (XCIPTV/6.0)
-    ...NATIVE_FALLBACK_UAS,
-  ];
-  // Dedup preservando ordem.
-  const seen = new Set<string>();
-  const uas = uaQueue.filter((u) => {
-    const k = u ?? "__default__";
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  const uas: (string | undefined)[] = preferred ? [preferred, undefined] : [undefined];
 
   let lastError: unknown = null;
   let consecutiveFailures = 0;
