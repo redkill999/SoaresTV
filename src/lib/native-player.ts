@@ -159,6 +159,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     const ok = (res as { result?: boolean })?.result !== false;
     if (!ok) {
       opts.onEvent?.("initPlayer:false", res);
+      await closeFullscreen(mod);
       return false;
     }
 
@@ -173,6 +174,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     return true;
   } catch (err) {
     opts.onEvent?.("exception", String((err as Error)?.message ?? err));
+    await closeFullscreen(mod);
     return false;
   }
 }
