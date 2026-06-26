@@ -188,19 +188,32 @@ export function VideoPlayer({
         : isLiveSrc && srcHostProfile.forceNativeForLive
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
+    pushDbg(`ETAPA 3.1 native UA=${ua}`);
     return playNative({
       url: src,
       userAgent: ua,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
+      onEvent: (name, data) => {
+        try {
+          const payload = typeof data === "string" ? data : JSON.stringify(data);
+          pushDbg(`NATIVE ${name} ${payload?.slice(0, 200) ?? ""}`);
+        } catch {
+          pushDbg(`NATIVE ${name}`);
+        }
+        // Se o ExoPlayer emitir erro explícito, mostra overlay com diag.
+        if (name === "jeepCapVideoPlayerError" || name === "initPlayer:false" || name === "exception") {
+          setError("Não foi possível reproduzir este canal (ExoPlayer).");
+        }
+      },
       onExit: (pos) => {
+        pushDbg(`NATIVE exit pos=${pos}`);
         if (kind !== "live" && pos > 0) {
-          // Duração real não vem do plugin; salvamos posição com duração
-          // best-effort para o store de "Continuar assistindo".
           onProgressRef.current?.(pos, Math.max(pos + 1, pos));
         }
       },
     });
-  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg]);
+
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
 
