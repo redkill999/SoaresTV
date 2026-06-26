@@ -36,6 +36,8 @@ function GuidePage() {
   const [page, setPage] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const timelineRef = useRef<HTMLDivElement>(null);
+  const { state: miniPlayer } = useMiniPlayer();
+  const activeStreamId = miniPlayer?.streamId ?? null;
 
   useEffect(() => setCreds(store.getCreds()), []);
   useEffect(() => {
