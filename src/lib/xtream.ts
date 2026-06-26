@@ -321,7 +321,7 @@ export async function discoverPanelServer(c: XtreamCreds) {
 }
 
 export const normalizeServer = (s: string) => {
-  let v = s.trim().replace(/\/+$/, "");
+  let v = s.trim().replace(/\s+/g, "").replace(/^(https?):\/{0,1}(?!\/)/i, "$1://").replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(v)) v = `http://${v}`;
   try {
     const u = new URL(v);
@@ -336,7 +336,7 @@ export function xtreamCredsFromUrl(
   username?: string,
   password?: string,
 ): XtreamCreds | null {
-  let target = (raw || "").trim();
+  let target = (raw || "").trim().replace(/\s+/g, "").replace(/^(https?):\/{0,1}(?!\/)/i, "$1://");
   if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
   try {
     const u = new URL(target);
@@ -424,7 +424,7 @@ export function parseM3U(text: string): M3UEntry[] {
 }
 
 function buildClientM3UUrl(raw: string, username?: string, password?: string): string {
-  let target = (raw || "").trim();
+  let target = (raw || "").trim().replace(/\s+/g, "").replace(/^(https?):\/{0,1}(?!\/)/i, "$1://");
   if (!target) throw new Error("URL vazia");
   if (!/^https?:\/\//i.test(target)) target = `http://${target}`;
   const u = new URL(target);
