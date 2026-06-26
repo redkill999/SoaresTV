@@ -138,9 +138,10 @@ async function handle(request: Request) {
     return new Response("bad protocol", { status: 400, headers: CORS });
   }
 
-  const range = request.headers.get("range");
+  const isLive = url.searchParams.get("kind") === "live";
+  const range = isLive ? null : request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
-  const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const isVod = !playlistPath && !isLive && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
@@ -189,8 +190,8 @@ async function handle(request: Request) {
   let lastStatus = 0;
   const rangeCandidates = isVod
     ? Array.from(new Set([effectiveVodRange, range, null]))
-    : playlistPath
-      ? [range]
+    : playlistPath || isLive
+      ? [null]
       : Array.from(new Set([range, "bytes=0-", null]));
   attempt: for (const ua of UA_CANDIDATES) {
     for (const rangeValue of rangeCandidates) {
@@ -248,6 +249,13 @@ async function handle(request: Request) {
     const v = upstream.headers.get(h);
     if (v) respHeaders.set(h, v);
   }
+  if (isLive) {
+    // Live TS é stream contínuo: nunca anunciar tamanho/range fixo, senão
+    // mpegts.js trata como arquivo e estoura NetworkError ao chegar no fim.
+    respHeaders.delete("content-length");
+    respHeaders.delete("content-range");
+    respHeaders.delete("accept-ranges");
+  }
 
   if (isPlaylist && upstream.ok) {
     const text = await upstream.text();
@@ -274,7 +282,7 @@ async function handle(request: Request) {
     normalizeVodRangeResponseHeaders(respHeaders, effectiveVodRange);
     return new Response(request.method === "HEAD" ? null : upstream.body, { status, headers: respHeaders });
   }
-  if (requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
+  if (!isLive && requestedRange?.trim().toLowerCase() === "bytes=0-" && !isVod && status === 200 && contentLength) {
     const total = Number(contentLength);
     if (Number.isFinite(total) && total > 0) {
       status = 206;
