@@ -130,16 +130,9 @@ export function PremiumChrome({
 
       {/* Header */}
       <header className="relative z-10 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-3 pt-2 sm:px-5 sm:pt-3">
-        {showBack ? (
-          <button
-            onClick={() => navigate({ to: "/home" })}
-            aria-label="Voltar"
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/80 hover:bg-white/10"
-          >
-            <ArrowLeft className="size-3.5" />
-            <span className="hidden sm:inline">Home</span>
-          </button>
-        ) : <span />}
+        {/* Botão HOME removido a pedido — o "Voltar" do XciptvHeader já cobre a navegação para /home */}
+        <span />
+
 
         <div className="flex items-center justify-center gap-2 min-w-0">
           <div className="grid size-7 sm:size-8 place-items-center rounded-lg bg-gradient-to-br from-red-500 to-blue-600 shadow-[0_0_18px_rgba(220,38,38,0.4)] shrink-0">
