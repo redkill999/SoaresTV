@@ -291,9 +291,26 @@ function GuidePage() {
                         <ProgramBlock
                           key={p.id}
                           p={p}
+                          streamId={String(s.stream_id)}
                           windowStart={windowStart}
                           windowEnd={windowEnd}
                           now={now}
+                          hasAlert={hasAlert(Number(p.start_timestamp))}
+                          onToggleAlert={() => {
+                            const ts = Number(p.start_timestamp);
+                            if (!Number.isFinite(ts)) return;
+                            if (hasAlert(ts)) {
+                              removeAlert(ts);
+                              toast("Lembrete removido");
+                            } else {
+                              addAlert({
+                                streamId: String(s.stream_id),
+                                programTitle: p.title,
+                                startTimestamp: ts,
+                              });
+                              toast.success("Lembrete criado para " + p.title);
+                            }
+                          }}
                           onOpen={() =>
                             navigate({
                               to: "/player/$type/$id",
