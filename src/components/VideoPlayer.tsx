@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
+import { PictureInPicture2, PictureInPicture } from "lucide-react";
+import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
