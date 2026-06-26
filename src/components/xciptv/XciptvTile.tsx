@@ -30,6 +30,9 @@ export const XciptvTile = memo(function XciptvTile({
       to="/player/$type/$id"
       params={{ type, id }}
       search={{ name }}
+      onClick={() => {
+        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image });
+      }}
       className="group block focus:outline-none"
     >
       <div className="xciptv-tile rounded-sm overflow-hidden aspect-square relative group-hover:xciptv-tile-active group-focus-visible:xciptv-tile-active">
