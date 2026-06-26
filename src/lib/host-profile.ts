@@ -40,6 +40,8 @@ export type HostProfile = {
   disableHlsConversion?: boolean;
   /** APENAS LIVE: priorizar candidato `.ts` sobre `.m3u8`. */
   preferTs?: boolean;
+  /** APENAS LIVE/APK: abrir direto no ExoPlayer nativo para evitar WebView/proxy. */
+  forceNativeForLive?: boolean;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
 };
@@ -72,6 +74,7 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
+    forceNativeForLive: true,
   },
 };
 
