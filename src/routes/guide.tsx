@@ -11,6 +11,7 @@ import {
   type LiveStream,
 } from "@/lib/xtream";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
+import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
