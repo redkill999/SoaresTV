@@ -5,7 +5,8 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
-import { store, type XtreamCreds } from "@/lib/storage";
+import { MediaCard } from "@/components/MediaCard";
+import { store, type XtreamCreds, type HistItem } from "@/lib/storage";
 import { api, type LiveCategory, type Series, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
@@ -79,6 +80,26 @@ function SeriesPage() {
   const history = useHistory();
   const favIds = useMemo(() => new Set(favs.filter((f) => f.type === "series").map((f) => f.id)), [favs]);
   const recentIds = useMemo(() => history.filter((h) => h.type === "series").map((h) => h.id), [history]);
+  const progressMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of history) {
+      if (h.type !== "series") continue;
+      if (!h.position || !h.duration) continue;
+      const p = h.position / h.duration;
+      if (p > 0) m.set(h.id, p);
+    }
+    return m;
+  }, [history]);
+  const continueWatching = useMemo(() => {
+    return (history as HistItem[])
+      .filter((h) => h.type === "series" && h.position && h.duration)
+      .filter((h) => {
+        const p = (h.position ?? 0) / (h.duration ?? 1);
+        return p >= 0.05 && p <= 0.95;
+      })
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 10);
+  }, [history]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -123,6 +144,27 @@ function SeriesPage() {
           totalCount={listQ.data?.length ?? 0}
         />
         <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
+          {continueWatching.length > 0 && (
+            <section className="mb-4">
+              <h2 className="text-xs uppercase tracking-widest text-white/70 mb-2 px-0.5">
+                Continue assistindo
+              </h2>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {continueWatching.map((h) => (
+                  <div key={h.id} className="shrink-0 w-28">
+                    <MediaCard
+                      type="series"
+                      id={h.id}
+                      name={h.name}
+                      image={h.logo}
+                      aspect="poster"
+                      progress={(h.position ?? 0) / (h.duration ?? 1)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {!creds || (listQ.isLoading && filtered.length === 0) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (
@@ -135,7 +177,7 @@ function SeriesPage() {
               Nenhuma série encontrada.
             </div>
           ) : (
-            <SeriesGrid filtered={filtered} />
+            <SeriesGrid filtered={filtered} progressMap={progressMap} />
           )}
         </div>
       </div>
@@ -144,20 +186,24 @@ function SeriesPage() {
   );
 }
 
-function SeriesGrid({ filtered }: { filtered: Series[] }) {
+function SeriesGrid({ filtered, progressMap }: { filtered: Series[]; progressMap: Map<string, number> }) {
   const { visible, sentinelRef, hasMore } = useProgressive(filtered);
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((s) => (
-          <XciptvTile
-            key={s.series_id}
-            type="series"
-            id={String(s.series_id)}
-            name={s.name}
-            image={s.cover}
-          />
-        ))}
+        {visible.map((s) => {
+          const id = String(s.series_id);
+          return (
+            <XciptvTile
+              key={s.series_id}
+              type="series"
+              id={id}
+              name={s.name}
+              image={s.cover}
+              progress={progressMap.get(id)}
+            />
+          );
+        })}
       </div>
       {hasMore && <div ref={sentinelRef} className="h-8" />}
     </>

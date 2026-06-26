@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
@@ -155,18 +156,47 @@ function PlayerPage() {
     });
   }, [url, type, id, creds]);
 
-  // Posição salva para "continue assistindo" (apenas VOD/série).
-  const initialPosition = useMemo(() => {
-    if (!type || type === "live") return 0;
-    return store.getHistoryItem(type, id)?.position ?? 0;
-  }, [type, id]);
-
+  // "Continuar de onde parou?" — em vez de seekar automaticamente, mostramos
+  // um toast 1.5s após o vídeo poder tocar. Usuário escolhe.
   const handleProgress = useCallback(
     (positionSec: number, durationSec: number) => {
       if (!type || type === "live") return;
       store.updateProgress(type, id, positionSec, durationSec);
     },
     [type, id],
+  );
+
+  const resumeToastShownRef = useRef<string | null>(null);
+  useEffect(() => { resumeToastShownRef.current = null; }, [type, id, url]);
+  const onPlayerReady = useCallback(
+    (handle: VideoPlayerHandle) => {
+      if (!type || type === "live" || !url) return;
+      const key = `${type}:${id}:${url}`;
+      if (resumeToastShownRef.current === key) return;
+      const item = store.getHistoryItem(type, id);
+      if (!item || !item.position || !item.duration) return;
+      if (item.position <= 30) return;
+      if (item.position >= item.duration - 30) return;
+      resumeToastShownRef.current = key;
+      const position = item.position;
+      const mins = Math.floor(position / 60);
+      const secs = Math.floor(position % 60).toString().padStart(2, "0");
+      window.setTimeout(() => {
+        toast("Continuar de onde parou?", {
+          description: `Você parou em ${mins}:${secs}.`,
+          duration: 6000,
+          action: {
+            label: "Continuar",
+            onClick: () => handle.seekTo(position),
+          },
+          cancel: {
+            label: "Do início",
+            onClick: () => { /* no-op: começa do zero */ },
+          },
+        });
+      }, 1500);
+    },
+    [type, id, url],
   );
 
   const leavingRef = useRef(false);
@@ -230,8 +260,10 @@ function PlayerPage() {
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
-              initialPosition={initialPosition}
+              mediaId={type !== "live" ? id : undefined}
+              mediaKind={type === "movie" || type === "series" ? type : undefined}
               onProgress={handleProgress}
+              onReady={onPlayerReady}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-player text-muted-foreground">

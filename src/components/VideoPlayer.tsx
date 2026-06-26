@@ -223,18 +223,32 @@ export function detectFormat(url: string): DetectedFormat {
   }
 }
 
+export type VideoPlayerHandle = {
+  /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
+  seekTo: (seconds: number) => void;
+};
+
 export function VideoPlayer({
   src,
   poster,
   kind,
   initialPosition,
   onProgress,
+  mediaId,
+  mediaKind,
+  onReady,
 }: {
   src: string;
   poster?: string;
   kind?: "live" | "vod";
   initialPosition?: number;
   onProgress?: (positionSec: number, durationSec: number) => void;
+  /** Quando informados, o player salva progresso direto em store.updateProgress
+   *  (em paralelo a onProgress, se houver). Ignorado para kind="live". */
+  mediaId?: string;
+  mediaKind?: "movie" | "series";
+  /** Chamado uma vez no primeiro `canplay`, com handle para seekTo. */
+  onReady?: (handle: VideoPlayerHandle) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1092,7 +1106,13 @@ export function VideoPlayer({
       captureProgress();
       if (lastDur <= 0) return;
       onProgressRef.current?.(lastPos, lastDur);
+      if (mediaId && mediaKind) {
+        // store.updateProgress já tem debounce interno (4s / 5s de delta),
+        // então pode ser chamado livremente em timeupdate/intervalo.
+        try { store.updateProgress(mediaKind, mediaId, lastPos, lastDur); } catch { /* noop */ }
+      }
     };
+
 
     let tickId: ReturnType<typeof setInterval> | null = null;
     const startTicking = () => {
@@ -1115,7 +1135,12 @@ export function VideoPlayer({
     const onEnded = () => {
       stopTicking();
       const dur = video.duration;
-      if (Number.isFinite(dur) && dur > 0) onProgressRef.current?.(dur, dur);
+      if (Number.isFinite(dur) && dur > 0) {
+        onProgressRef.current?.(dur, dur);
+        if (mediaId && mediaKind) {
+          try { store.updateProgress(mediaKind, mediaId, dur, dur); } catch { /* noop */ }
+        }
+      }
     };
 
     video.addEventListener("loadedmetadata", onLoadedMeta);
@@ -1129,7 +1154,12 @@ export function VideoPlayer({
       stopTicking();
       // Salva usando os últimos valores capturados — resiliente caso o effect
       // de playback já tenha chamado video.load() antes deste cleanup.
-      if (lastDur > 0) onProgressRef.current?.(lastPos, lastDur);
+      if (lastDur > 0) {
+        onProgressRef.current?.(lastPos, lastDur);
+        if (mediaId && mediaKind) {
+          try { store.updateProgress(mediaKind, mediaId, lastPos, lastDur); } catch { /* noop */ }
+        }
+      }
       video.removeEventListener("loadedmetadata", onLoadedMeta);
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("play", onPlay);
@@ -1137,7 +1167,36 @@ export function VideoPlayer({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };
-  }, [src, kind]);
+  }, [src, kind, mediaId, mediaKind]);
+
+  // onReady: chama uma única vez no primeiro `canplay` do <video> em modo web,
+  // entregando um handle com seekTo. Usado por consumidores para oferecer
+  // toast "Continuar de onde parou?" sem mexer na lógica interna do player.
+  const onReadyRef = useRef(onReady);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  useEffect(() => {
+    if (playerMode !== "web") return;
+    const video = videoRef.current;
+    if (!video) return;
+    let fired = false;
+    const handle: VideoPlayerHandle = {
+      seekTo: (seconds: number) => {
+        try {
+          const dur = video.duration;
+          if (!Number.isFinite(seconds) || seconds < 0) return;
+          const target = Number.isFinite(dur) && dur > 0 ? Math.min(seconds, dur - 2) : seconds;
+          video.currentTime = target;
+        } catch { /* ignore */ }
+      },
+    };
+    const onCanPlayOnce = () => {
+      if (fired) return;
+      fired = true;
+      try { onReadyRef.current?.(handle); } catch { /* noop */ }
+    };
+    video.addEventListener("canplay", onCanPlayOnce);
+    return () => video.removeEventListener("canplay", onCanPlayOnce);
+  }, [src, playerMode]);
 
   // Auto-hide dos controles nativos: aparece só ao mover o mouse / tocar a tela,
   // some após 2.5s de inatividade. Evita que o player abra já com a barra

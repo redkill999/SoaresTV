@@ -15,15 +15,22 @@ export const XciptvTile = memo(function XciptvTile({
   id,
   name,
   image,
+  progress,
 }: {
   type: FavItem["type"];
   id: string;
   name: string;
   image?: string;
+  /** 0–1: mostra barra fina de "continue assistindo" na base do tile. */
+  progress?: number;
 }) {
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
   const hasImage = !!image && !errored;
+  const pct =
+    typeof progress === "number" && Number.isFinite(progress)
+      ? Math.max(0, Math.min(1, progress)) * 100
+      : null;
 
   return (
     <Link
@@ -70,6 +77,11 @@ export const XciptvTile = memo(function XciptvTile({
           <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-white leading-tight line-clamp-2">
             {name}
           </div>
+          {pct !== null && pct > 0 && (
+            <div className="mt-1 h-1 rounded bg-white/10 overflow-hidden">
+              <div className="h-full bg-brand-gradient" style={{ width: `${pct}%` }} />
+            </div>
+          )}
         </div>
       </div>
     </Link>
