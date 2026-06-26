@@ -18,6 +18,22 @@ export const miniPlayerStore = {
   },
 };
 
+// In-memory store para abrir a busca global de qualquer lugar (AppShell, atalho).
+let _globalSearchOpen = false;
+const _gsListeners = new Set<() => void>();
+export const globalSearchStore = {
+  get: (): boolean => _globalSearchOpen,
+  set: (v: boolean) => {
+    if (_globalSearchOpen === v) return;
+    _globalSearchOpen = v;
+    _gsListeners.forEach((fn) => fn());
+  },
+  subscribe: (fn: () => void) => {
+    _gsListeners.add(fn);
+    return () => { _gsListeners.delete(fn); };
+  },
+};
+
 // Compatibilidade por lista/servidor: opções que sobrescrevem o comportamento
 // padrão do player para uma origem específica.
 export type ListUserAgent =

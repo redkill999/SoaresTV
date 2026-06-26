@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -14,6 +15,8 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../components/ThemeSwitcher";
 import { syncLangFromStorage } from "../lib/i18n";
 import { FloatingMiniPlayer } from "../components/FloatingMiniPlayer";
+import { GlobalSearch } from "../components/GlobalSearch";
+import { useGlobalSearch } from "../hooks/use-global-search";
 
 
 function NotFoundComponent() {
@@ -220,6 +223,9 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { open: gsOpen, setOpen: setGsOpen } = useGlobalSearch();
+  const showGlobalSearch = !["/", "/loading", "/home"].includes(pathname);
 
 
 
@@ -293,6 +299,7 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <FloatingMiniPlayer />
+        {showGlobalSearch && <GlobalSearch open={gsOpen} onOpenChange={setGsOpen} />}
       </ThemeProvider>
     </QueryClientProvider>
   );
