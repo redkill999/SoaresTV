@@ -185,7 +185,17 @@ export function hostOf(url: string): string | null {
 
 export function getHostProfile(host: string | null | undefined): HostProfile {
   if (!host) return {};
-  return memory[host.toLowerCase()] ?? {};
+  const h = host.toLowerCase();
+  if (memory[h]) return memory[h];
+  // Presets como "athra.sbs" precisam valer também quando o Xtream gera URLs
+  // com porta explícita (ex.: athra.sbs:80 / :8080). Sem este fallback, o APK
+  // não ativava forceNativeForLive nem o diagnóstico visual para canais LIVE.
+  const withoutPort = h.replace(/:\d+$/, "");
+  if (memory[withoutPort]) return memory[withoutPort];
+  const withoutWww = withoutPort.replace(/^www\./, "");
+  if (memory[withoutWww]) return memory[withoutWww];
+  const suffixPreset = Object.keys(HOST_PRESETS).find((presetHost) => withoutWww.endsWith(`.${presetHost}`));
+  return suffixPreset ? memory[suffixPreset] ?? {} : {};
 }
 
 export function updateHostProfile(host: string, patch: Partial<HostProfile>): HostProfile {
