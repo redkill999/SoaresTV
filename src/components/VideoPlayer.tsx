@@ -72,7 +72,8 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 }
 
 function proxied(url: string, kind?: "live" | "vod"): string {
-  return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
+  const k = kind === "vod" ? "&kind=vod" : kind === "live" ? "&kind=live" : "";
+  return `/api/stream?u=${encodeURIComponent(url)}${k}&v=6`;
 }
 
 function maskIptvUrl(url: string): string {
