@@ -1154,7 +1154,12 @@ export function VideoPlayer({
       stopTicking();
       // Salva usando os últimos valores capturados — resiliente caso o effect
       // de playback já tenha chamado video.load() antes deste cleanup.
-      if (lastDur > 0) onProgressRef.current?.(lastPos, lastDur);
+      if (lastDur > 0) {
+        onProgressRef.current?.(lastPos, lastDur);
+        if (mediaId && mediaKind) {
+          try { store.updateProgress(mediaKind, mediaId, lastPos, lastDur); } catch { /* noop */ }
+        }
+      }
       video.removeEventListener("loadedmetadata", onLoadedMeta);
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("play", onPlay);
@@ -1162,7 +1167,7 @@ export function VideoPlayer({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };
-  }, [src, kind]);
+  }, [src, kind, mediaId, mediaKind]);
 
   // Auto-hide dos controles nativos: aparece só ao mover o mouse / tocar a tela,
   // some após 2.5s de inatividade. Evita que o player abra já com a barra
