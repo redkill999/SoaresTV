@@ -63,10 +63,12 @@ patchFile(fragmentPath, (src) => {
 
   // 5) getVideoType por extensão real. A versão original usa contains(), então
   // pode confundir parâmetros/segmentos e também aceita "" cedo demais.
-  out = out.replace(
-    `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
-    `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
-  );
+  if (!out.includes('String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";')) {
+    out = out.replace(
+      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
+      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+    );
+  }
 
   return out;
 });
