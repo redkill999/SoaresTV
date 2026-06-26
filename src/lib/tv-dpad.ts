@@ -4,7 +4,7 @@
 
 let bound = false;
 let lastInteractionWasKeyboard = false;
-let routeWatchId: ReturnType<typeof setInterval> | null = null;
+let routeCleanup: (() => void) | null = null;
 
 // Anti-clique-fantasma do controle remoto / teclado:
 // - Debounce: ignora Enters repetidos em < 300ms (botão OK com repeat).
