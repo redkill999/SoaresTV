@@ -37,6 +37,7 @@ async function loadPlugin(): Promise<CVPModule | null> {
 const PLAYER_ID = "fullscreen";
 let exitHandle: { remove: () => void } | null = null;
 let debugHandles: Array<{ remove: () => void }> = [];
+let hasActivePlayer = false;
 
 // ---------------------------------------------------------------------------
 // FIX A: closeFullscreen com timeout individual por chamada.
@@ -56,7 +57,7 @@ function raceTimeout<T>(p: Promise<T> | undefined, ms: number): Promise<T | unde
 // FIX A + retry: tenta fechar o overlay até 3 vezes com pausa de 1 s entre
 // tentativas. Garante que o FrameLayout nativo seja removido mesmo se a
 // primeira chamada de exitPlayer() falhar silenciosamente.
-async function closeFullscreen(mod: CVPModule): Promise<void> {
+async function closeFullscreen(mod: CVPModule, opts?: { attempts?: number; exitTimeoutMs?: number; stopTimeoutMs?: number; retryDelayMs?: number }): Promise<void> {
   const player = mod as unknown as {
     exitPlayer?: () => Promise<unknown>;
     stopAllPlayers?: () => Promise<unknown>;
@@ -65,15 +66,15 @@ async function closeFullscreen(mod: CVPModule): Promise<void> {
   // IMPORTANTE: no Android, stopAllPlayers() apenas chama fsFragment.pause()
   // e NÃO remove o FrameLayout fullscreen. Para devolver a tela à WebView
   // precisamos chamar exitPlayer(), que dispara playerExit() e remove o overlay.
-  const MAX_ATTEMPTS = 3;
+  const MAX_ATTEMPTS = opts?.attempts ?? 3;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try { await raceTimeout(player.exitPlayer?.(), 3_000); } catch { /* ignore */ }
-    try { await raceTimeout(player.stopAllPlayers?.(), 2_000); } catch { /* ignore */ }
+    try { await raceTimeout(player.exitPlayer?.(), opts?.exitTimeoutMs ?? 3_000); } catch { /* ignore */ }
+    try { await raceTimeout(player.stopAllPlayers?.(), opts?.stopTimeoutMs ?? 2_000); } catch { /* ignore */ }
     // Após a primeira tentativa, aguarda 1 s antes de insistir. Se o evento
     // "jeepCapVideoPlayerExit" já foi disparado pelo plugin, não precisamos
     // tentar de novo — mas não temos como saber, então tentamos 3x.
     if (attempt < MAX_ATTEMPTS) {
-      await new Promise<void>((r) => setTimeout(r, 1_000));
+      await new Promise<void>((r) => setTimeout(r, opts?.retryDelayMs ?? 1_000));
     }
   }
 }
@@ -98,10 +99,14 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
 
 
   try {
-    // Tenta encerrar player anterior se ainda estiver aberto. Usar exitPlayer
-    // antes de stopAllPlayers evita deixar o overlay fullscreen preso por cima
-    // da WebView quando um LIVE nunca sai do loading.
-    await closeFullscreen(mod);
+    // Não faça limpeza pesada antes de TODO play: exitPlayer/stopAllPlayers
+    // podem levar vários segundos no Android mesmo quando não há overlay aberto,
+    // o que atrasava filmes/séries no APK. Só executa uma limpeza curta quando
+    // sabemos que existe um player nativo ativo nesta sessão.
+    if (hasActivePlayer) {
+      await closeFullscreen(mod, { attempts: 1, exitTimeoutMs: 700, stopTimeoutMs: 500, retryDelayMs: 0 });
+      hasActivePlayer = false;
+    }
 
     const headers: Record<string, string> = {};
     if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
@@ -172,6 +177,9 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
             const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
             opts.onExit(Number.isFinite(pos) ? pos : 0);
           }
+          if (ev === "jeepCapVideoPlayerExit" || ev === "jeepCapVideoPlayerEnded") {
+            hasActivePlayer = false;
+          }
           evCb?.(ev, data);
         });
         debugHandles.push(h);
@@ -214,10 +222,12 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       // Já coberto pelo loop acima — nada a fazer.
     }
 
+    hasActivePlayer = true;
     return true;
   } catch (err) {
     opts.onEvent?.("exception", String((err as Error)?.message ?? err));
     await closeFullscreen(mod);
+    hasActivePlayer = false;
     return false;
   }
 }
@@ -235,4 +245,5 @@ export async function stopNative(): Promise<void> {
   debugHandles = [];
   if (!mod) return;
   await closeFullscreen(mod);
+  hasActivePlayer = false;
 }
