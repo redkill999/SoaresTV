@@ -13,6 +13,7 @@ export function FloatingMiniPlayer() {
   const { state, clear } = useMiniPlayer();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = store.getCreds();
@@ -20,6 +21,19 @@ export function FloatingMiniPlayer() {
     const first = store.getM3U()[0];
     const rec = first ? xtreamCredsFromUrl(first.url, first.username, first.password) : null;
     if (rec) setCreds(rec);
+  }, [state?.streamId]);
+
+  // Marca o <video> interno para que o hotspot "Multitela" do home consiga
+  // chamar requestPictureInPicture nele via document.querySelector.
+  useEffect(() => {
+    if (!state) return;
+    const id = window.setInterval(() => {
+      const v = wrapRef.current?.querySelector("video");
+      if (v && !v.hasAttribute("data-mini-video")) {
+        v.setAttribute("data-mini-video", "true");
+      }
+    }, 300);
+    return () => window.clearInterval(id);
   }, [state?.streamId]);
 
   if (!state) return null;
