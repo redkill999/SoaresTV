@@ -156,6 +156,7 @@ async function nativeApi<T = unknown>(
   action?: string,
   params?: Record<string, string | number>,
   uaOverride?: string,
+  timeoutMs = 8_000,
 ): Promise<T | null> {
   const url = new URL(`${normalizeServer(c.server)}/player_api.php`);
   url.searchParams.set("username", c.username);
@@ -165,7 +166,7 @@ async function nativeApi<T = unknown>(
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   }
 
-  const res = await nativeHttpGet(url.toString(), 8_000, uaOverride);
+  const res = await nativeHttpGet(url.toString(), timeoutMs, uaOverride);
   if (!res) return null;
   if (res.status === 401 || res.status === 403) {
     const err = new Error(`Xtream respondeu HTTP ${res.status}`) as Error & { status?: number };
@@ -180,18 +181,29 @@ async function nativeApiWithFallbackPorts<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
+  opts: { timeoutMs?: number; totalTimeoutMs?: number; includeHttpsFallback?: boolean } = {},
 ): Promise<{ data: T; creds: XtreamCreds } | null> {
   if (!(await canUseNativeHttp())) return null;
   const base = normalizeServer(c.server);
   const candidates = new Set<string>([base]);
   let hasExplicitPort = false;
+  const perAttemptTimeout = opts.timeoutMs ?? 6_000;
+  const totalTimeoutMs = opts.totalTimeoutMs ?? 24_000;
+  const startedAt = Date.now();
   try {
     const u = new URL(base);
     hasExplicitPort = !!u.port;
     if (!hasExplicitPort) {
-      for (const scheme of ["http", "https"]) {
+      // Não força upgrade HTTP → HTTPS. Testa somente o esquema informado
+      // (ou HTTP quando o usuário digitou só o host). HTTPS entra apenas se
+      // solicitado explicitamente por opção.
+      const primaryScheme = u.protocol === "https:" ? "https" : "http";
+      const schemes = opts.includeHttpsFallback
+        ? [primaryScheme, primaryScheme === "https" ? "http" : "https"]
+        : [primaryScheme];
+      for (const scheme of schemes) {
         for (const port of COMMON_XTREAM_PORTS) {
-          candidates.add(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`);
+          candidates.add(normalizeServer(`${scheme}://${u.hostname}${port ? `:${port}` : ""}`));
         }
       }
     }
@@ -207,10 +219,21 @@ async function nativeApiWithFallbackPorts<T = unknown>(
 
   let lastError: unknown = null;
   for (const server of candidates) {
+    if (Date.now() - startedAt >= totalTimeoutMs) {
+      throw new Error("Tempo esgotado ao tentar conectar no servidor Xtream.");
+    }
     let authBlocked = false;
     for (const ua of uas) {
+      const remainingMs = totalTimeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) throw new Error("Tempo esgotado ao tentar conectar no servidor Xtream.");
       try {
-        const data = await nativeApi<T>({ ...c, server }, action, params, ua);
+        const data = await nativeApi<T>(
+          { ...c, server },
+          action,
+          params,
+          ua,
+          Math.max(1_500, Math.min(perAttemptTimeout, remainingMs)),
+        );
         if (data) {
           if (ua) setUAHint(server, ua);
           return { data, creds: { ...c, server } };
@@ -249,7 +272,10 @@ export async function api<T = unknown>(
   // estouramos a UI — caímos para o proxy do server-fn, que tem rotação
   // de User-Agent e bypassa Cloudflare/bloqueios de UA do painel.
   try {
-    const native = await nativeApiWithFallbackPorts<T>(c, action, params);
+    const native = await nativeApiWithFallbackPorts<T>(c, action, params, {
+      timeoutMs: 5_000,
+      totalTimeoutMs: 20_000,
+    });
     if (native) return native.data;
   } catch {
     // segue para o fallback do server-fn
@@ -258,7 +284,7 @@ export async function api<T = unknown>(
   // Hint: UA que já funcionou para esse host — server-fn tenta esse primeiro.
   const preferredUA = getUAHint(c.server);
   const r = await xtreamApi({
-    data: { ...c, action, params, preferredUA },
+    data: { ...c, action, params, preferredUA, timeoutMs: 10_000 },
   });
   if (!r.ok) {
     const msg =
@@ -272,6 +298,8 @@ export async function api<T = unknown>(
 
 export async function login(c: XtreamCreds) {
   // 1) Tenta autenticar pelo Android nativo (mesmo caminho do XCIPTV).
+  const nativeAvailable = await canUseNativeHttp();
+  let nativeError: unknown = null;
   let nativeRes: Awaited<
     ReturnType<
       typeof nativeApiWithFallbackPorts<{
@@ -284,9 +312,9 @@ export async function login(c: XtreamCreds) {
     nativeRes = await nativeApiWithFallbackPorts<{
       user_info?: { auth?: number | string; status?: string };
       server_info?: unknown;
-    }>(c);
-  } catch {
-    // ignora — vamos cair pro server-fn abaixo
+    }>(c, undefined, undefined, { timeoutMs: 4_000, totalTimeoutMs: 22_000 });
+  } catch (err) {
+    nativeError = err;
   }
 
   // 2) Se nativo não trouxe nada (web OU APK com painel bloqueando UA/IP),
@@ -296,8 +324,16 @@ export async function login(c: XtreamCreds) {
   let r: { user_info?: { auth?: number | string; status?: string }; server_info?: unknown } | undefined =
     nativeRes?.data;
   if (!r) {
+    // No APK, não fica preso no proxy/datacenter depois que o caminho nativo
+    // já esgotou. A tela de login falha rápido e o fallback visual decide o
+    // próximo passo, em vez de parecer conexão infinita.
+    if (nativeAvailable) {
+      throw nativeError instanceof Error
+        ? nativeError
+        : new Error("Não foi possível conectar ao servidor Xtream pelo Android.");
+    }
     const preferredUA = getUAHint(c.server);
-    const proxied = await xtreamApi({ data: { ...c, preferredUA } });
+    const proxied = await xtreamApi({ data: { ...c, preferredUA, timeoutMs: 10_000 } });
     if (!proxied.ok) {
       const msg =
         "error" in proxied && typeof proxied.error === "string"
