@@ -495,6 +495,8 @@ export function VideoPlayer({
     };
 
     const onVideoError = () => {
+      const mediaErr = video.error;
+      pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
       if (cancelled || hls) return;
       tryNextVod();
     };
