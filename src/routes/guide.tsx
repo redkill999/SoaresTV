@@ -274,10 +274,11 @@ function GuidePage() {
                 {visibleChannels.map((s, idx) => {
                   const epg = epgQueries[idx]?.data ?? [];
                   const loading = epgQueries[idx]?.isLoading;
+                  const isActive = activeStreamId === String(s.stream_id);
                   return (
                     <div
                       key={s.stream_id}
-                      className="relative border-b border-white/5"
+                      className={`relative border-b border-white/5 ${isActive ? "bg-primary/10" : ""}`}
                       style={{ height: ROW_HEIGHT, width: timelineWidth }}
                     >
                       {loading && (
@@ -300,7 +301,7 @@ function GuidePage() {
                         />
                       ))}
                       <div
-                        className="absolute top-0 bottom-0 w-px bg-red-500/70 pointer-events-none"
+                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-10"
                         style={{ left: nowOffsetPx }}
                       />
                     </div>
