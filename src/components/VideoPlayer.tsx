@@ -383,8 +383,8 @@ export function VideoPlayer({
       }
       destroyTsPlayer();
       vodIdx += 1;
-      if (vodIdx < playbackCandidates.length) playDirect();
-      else setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
+      if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); playDirect(); }
+      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia."); }
     };
 
     const armVodWatchdog = () => {
