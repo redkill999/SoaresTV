@@ -1039,8 +1039,9 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          ref={closeBtnRef}
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-label="Fechar"
         >
           ✕
