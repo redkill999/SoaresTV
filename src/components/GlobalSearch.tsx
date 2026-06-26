@@ -45,7 +45,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const seriesKey = `series-list:${acct}:all`;
   const livePersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(liveKey) : null), [liveKey, acct]);
   const vodPersisted = useMemo(() => (acct ? loadPersisted<VodStream[]>(vodKey) : null), [vodKey, acct]);
-  const seriesPersisted = useMemo(() => (acct ? loadPersisted<SeriesItem[]>(seriesKey) : null), [seriesKey, acct]);
+  const seriesPersisted = useMemo(() => (acct ? loadPersisted<Series[]>(seriesKey) : null), [seriesKey, acct]);
 
   const liveQ = useQuery({
     queryKey: ["live-streams", acct, "all"],
@@ -66,7 +66,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const seriesQ = useQuery({
     queryKey: ["series-list", acct, "all"],
     enabled: open && !!creds,
-    queryFn: withPersist(seriesKey, () => api<SeriesItem[]>(creds!, "get_series")),
+    queryFn: withPersist(seriesKey, () => api<Series[]>(creds!, "get_series")),
     initialData: seriesPersisted?.data,
     initialDataUpdatedAt: seriesPersisted?.updatedAt,
     staleTime: 10 * 60_000,
