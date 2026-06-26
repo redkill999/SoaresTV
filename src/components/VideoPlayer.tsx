@@ -293,7 +293,7 @@ export function VideoPlayer({
           nativeOpenedRef.current = false;
           setPlayerMode("web");
           setError("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
-        }, 18_000);
+        }, 12_000);
       }
       if (cancelled) {
         if (ok) void stopNative();
@@ -465,7 +465,7 @@ export function VideoPlayer({
         else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
           watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
         }
-      }, 18_000);
+      }, 12_000);
     };
 
     const bufferedAhead = () => {
