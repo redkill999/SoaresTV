@@ -1106,7 +1106,13 @@ export function VideoPlayer({
       captureProgress();
       if (lastDur <= 0) return;
       onProgressRef.current?.(lastPos, lastDur);
+      if (mediaId && mediaKind) {
+        // store.updateProgress já tem debounce interno (4s / 5s de delta),
+        // então pode ser chamado livremente em timeupdate/intervalo.
+        try { store.updateProgress(mediaKind, mediaId, lastPos, lastDur); } catch { /* noop */ }
+      }
     };
+
 
     let tickId: ReturnType<typeof setInterval> | null = null;
     const startTicking = () => {
