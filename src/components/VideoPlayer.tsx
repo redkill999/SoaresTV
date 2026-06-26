@@ -213,27 +213,6 @@ export function VideoPlayer({
     let cancelled = false;
     setPlayerMode("deciding");
     nativeOpenedRef.current = false;
-    (async () => {
-      const native = await isNativeApp();
-      if (cancelled) return;
-      if (!native) {
-        setPlayerMode("web");
-        return;
-      }
-      if (!shouldUseNativePlayer) {
-        setPlayerMode("web");
-        return;
-      }
-      const ok = await openNative();
-      if (ok) nativeOpenedRef.current = true;
-      if (cancelled) {
-        if (ok) void stopNative();
-        return;
-      }
-  useEffect(() => {
-    let cancelled = false;
-    setPlayerMode("deciding");
-    nativeOpenedRef.current = false;
     // [DEBUG TEMP] reset por src
     dbgRef.current = [];
     setDbgLines([]);
