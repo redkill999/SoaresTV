@@ -241,6 +241,7 @@ assertContains(fragmentPath, [
   ["watchdog nativo BUFFERING", "JEEP_BUFFER_WATCHDOG"],
   ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
+  ["fullscreen insets aplicados", "JEEP_FULLSCREEN_INSETS"],
 ]);
 
 assertContains(pluginPath, [
