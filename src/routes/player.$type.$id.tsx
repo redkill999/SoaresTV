@@ -259,7 +259,11 @@ function PlayerPage() {
 
           {/* Título/tipo e botões extras ficam ocultos durante a reprodução. */}
         {type === "series" && (
-          <details className="absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur">
+          <details
+            className={`absolute bottom-4 right-4 z-30 max-h-[62dvh] w-[min(26rem,calc(100dvw-2rem))] overflow-y-auto rounded-lg border border-white/10 bg-player/82 backdrop-blur transition-opacity duration-300 ${
+              showControls ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
+          >
             <summary className="cursor-pointer px-4 py-3 font-semibold flex items-center gap-2">
               Episódios
             </summary>
