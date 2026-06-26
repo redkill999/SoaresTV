@@ -249,26 +249,90 @@ patchFile(fragmentPath, [
     ),
   },
   {
-    name: "10) ExoPlayer abre direto em FILL fullscreen",
+    name: "10) ExoPlayer agenda mesmo layout do botão expandir na abertura",
     required: true,
-    mustContainAfter: "JEEP_DEFAULT_RESIZE_FILL",
+    mustContainAfter: "JEEP_AUTOFIT_CONTROLS_ON_OPEN",
     apply: (s) => s.replace(
       "    styledPlayerView.setShowPreviousButton(false);\n    styledPlayerView.setShowNextButton(false);\n    styledPlayerView.setShowFastForwardButton(false);\n    styledPlayerView.setShowRewindButton(false);",
       `    styledPlayerView.setShowPreviousButton(false);
     styledPlayerView.setShowNextButton(false);
     styledPlayerView.setShowFastForwardButton(false);
     styledPlayerView.setShowRewindButton(false);
-    // JEEP_DEFAULT_RESIZE_FILL: o player estava iniciando em FIT e só ficava
-    // alinhado com a tela inteira depois do botão expandir. Forçamos o mesmo
-    // modo do primeiro clique já na abertura do ExoPlayer.
-    try {
-      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
-      resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
-    } catch (Exception ignored) {}`,
+    // JEEP_AUTOFIT_CONTROLS_ON_OPEN: não basta setar FILL cedo; em alguns APKs
+    // os controles (pause/barra) só recalculam o tamanho depois do botão expandir.
+    // Agenda o mesmo ajuste após o layout inicial do controller.
+    try { styledPlayerView.postDelayed(() -> forceExpandedControlLayout(), 250); } catch (Exception ignored) {}`,
     ),
   },
   {
-    name: "11) adjustAspectRatio sempre mantém FILL em landscape/TV",
+    name: "11) helper força controles no mesmo estado do expandir",
+    required: true,
+    mustContainAfter: "JEEP_FORCE_EXPANDED_CONTROLS",
+    apply: (s) => s.replace(
+      `  /**
+   * Show controller
+   */
+  public void showController() {
+    styledPlayerView.showController();
+  }`,
+      `  /**
+   * Show controller
+   */
+  public void showController() {
+    styledPlayerView.showController();
+  }
+
+  private void forceExpandedControlLayout() {
+    // JEEP_FORCE_EXPANDED_CONTROLS: replica automaticamente o estado visual que
+    // o usuário obtém ao apertar o botão expandir: vídeo e controller ocupando
+    // match_parent, sem padding de system bars, com pause central e barra de
+    // progresso alinhados ao player desde a primeira abertura.
+    try {
+      if (styledPlayerView == null) return;
+      hideSystemUi();
+      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+      resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
+      if (resizeBtn != null) resizeBtn.setImageResource(R.drawable.ic_zoom);
+      ViewGroup.LayoutParams vp = styledPlayerView.getLayoutParams();
+      if (vp != null) {
+        vp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+        vp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        styledPlayerView.setLayoutParams(vp);
+      }
+      styledPlayerView.setPadding(0, 0, 0, 0);
+      View controller = styledPlayerView.findViewById(com.google.android.exoplayer2.ui.R.id.exo_controller);
+      if (controller != null) {
+        ViewGroup.LayoutParams cp = controller.getLayoutParams();
+        if (cp != null) {
+          cp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+          cp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+          controller.setLayoutParams(cp);
+        }
+        controller.setPadding(0, 0, 0, 0);
+        controller.requestLayout();
+      }
+      styledPlayerView.requestLayout();
+      styledPlayerView.invalidate();
+    } catch (Exception ignored) {}
+  }`,
+    ),
+  },
+  {
+    name: "12) STATE_READY refaz layout expandido após controller existir",
+    required: true,
+    mustContainAfter: "JEEP_READY_REFIT_CONTROLS",
+    apply: (s) => s.replace(
+      `              linearLayout.setVisibility(View.INVISIBLE);
+              Log.v(TAG, "**** in ExoPlayer.STATE_READY firstReadyToPlay " + firstReadyToPlay);`,
+      `              linearLayout.setVisibility(View.INVISIBLE);
+              // JEEP_READY_REFIT_CONTROLS: no READY o controller já foi inflado;
+              // refaz o mesmo ajuste do expandir para alinhar pause/progresso.
+              try { styledPlayerView.post(() -> forceExpandedControlLayout()); } catch (Exception ignored) {}
+              Log.v(TAG, "**** in ExoPlayer.STATE_READY firstReadyToPlay " + firstReadyToPlay);`,
+    ),
+  },
+  {
+    name: "13) adjustAspectRatio sempre mantém layout expandido",
     required: true,
     mustContainAfter: "JEEP_KEEP_LANDSCAPE_FILL",
     apply: (s) => s.replace(
@@ -283,10 +347,7 @@ patchFile(fragmentPath, [
     // JEEP_KEEP_LANDSCAPE_FILL: APK/TV é landscape fixo. Nunca voltar para FIT
     // automaticamente, porque FIT é exatamente o estado desalinhado que só era
     // corrigido ao tocar no botão expandir.
-    if (styledPlayerView == null) return;
-    styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
-    resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
-    if (resizeBtn != null) resizeBtn.setImageResource(R.drawable.ic_zoom);
+    forceExpandedControlLayout();
   }`,
     ),
   },
@@ -355,7 +416,9 @@ assertContains(fragmentPath, [
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
   ["fullscreen insets aplicados", "JEEP_FULLSCREEN_INSETS"],
   ["fitsSystemWindows desligado", "JEEP_FIT_INSETS_OFF"],
-  ["resize FILL padrão na abertura", "JEEP_DEFAULT_RESIZE_FILL"],
+  ["autofit controles na abertura", "JEEP_AUTOFIT_CONTROLS_ON_OPEN"],
+  ["helper controles expandidos", "JEEP_FORCE_EXPANDED_CONTROLS"],
+  ["refit no READY", "JEEP_READY_REFIT_CONTROLS"],
   ["landscape mantém FILL", "JEEP_KEEP_LANDSCAPE_FILL"],
 ]);
 
