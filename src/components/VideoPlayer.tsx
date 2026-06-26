@@ -1125,15 +1125,32 @@ export function VideoPlayer({
     };
   }, [src, kind]);
 
-
-
+  // Auto-hide dos controles nativos: aparece só ao mover o mouse / tocar a tela,
+  // some após 2.5s de inatividade. Evita que o player abra já com a barra
+  // nativa do navegador visível em cima do vídeo.
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealNativeControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2500);
+  }, []);
+  useEffect(() => () => {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+  }, []);
 
   return (
-    <div className="relative h-full w-full bg-player">
+    <div
+      className="relative h-full w-full bg-player"
+      onMouseMove={revealNativeControls}
+      onMouseEnter={revealNativeControls}
+      onTouchStart={revealNativeControls}
+      onClick={revealNativeControls}
+    >
       <video
         ref={videoRef}
         poster={poster}
-        controls
+        controls={controlsVisible}
         autoPlay
         playsInline
         style={{
@@ -1145,6 +1162,7 @@ export function VideoPlayer({
         className={videoClass}
         hidden={playerMode === "native"}
       />
+
       {playerMode === "native" && !error && (
         <div className="absolute inset-0 flex flex-col bg-player text-foreground">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
