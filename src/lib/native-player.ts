@@ -96,15 +96,16 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       args.startAtSec = opts.startAtSec;
     }
 
-    const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
-    const res = await initFn(args);
-    const ok = (res as { result?: boolean })?.result !== false;
     const listenable = mod as unknown as {
       addListener: (
         ev: string,
         handler: (data: unknown) => void,
       ) => Promise<{ remove: () => void }> | { remove: () => void };
     };
+
+    // Registra os listeners ANTES de abrir o fullscreen nativo. Em alguns APKs
+    // o ExoPlayer emite ready/error durante o initPlayer; se registrarmos depois,
+    // o debug visual nunca recebe o motivo da falha.
     if (opts.onEvent) {
       const evCb = opts.onEvent;
       const events = [
@@ -121,6 +122,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
         } catch { /* ignore */ }
       }
     }
+
+    const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
+    const res = await initFn(args);
+    const ok = (res as { result?: boolean })?.result !== false;
     if (!ok) {
       opts.onEvent?.("initPlayer:false", res);
       return false;
