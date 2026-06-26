@@ -279,6 +279,8 @@ function GuidePage() {
                   const epg = epgQueries[idx]?.data ?? [];
                   const loading = epgQueries[idx]?.isLoading;
                   const isActive = activeStreamId === String(s.stream_id);
+                  const hasCatchup =
+                    Number(s.tv_archive) === 1 || Number(s.tv_archive_duration) > 0;
                   return (
                     <div
                       key={s.stream_id}
@@ -297,6 +299,20 @@ function GuidePage() {
                           windowEnd={windowEnd}
                           now={now}
                           hasAlert={hasAlert(Number(p.start_timestamp))}
+                          hasCatchup={hasCatchup}
+                          onPlayCatchup={() => {
+                            if (!creds) return;
+                            const start = Number(p.start_timestamp);
+                            const stop = Number(p.stop_timestamp);
+                            if (!Number.isFinite(start) || !Number.isFinite(stop)) return;
+                            const durationMin = Math.max(1, Math.ceil((stop - start) / 60));
+                            const url = timeshiftUrl(creds, s.stream_id, start, durationMin);
+                            navigate({
+                              to: "/player/$type/$id",
+                              params: { type: "live", id: String(s.stream_id) },
+                              search: { name: `${s.name} — ${p.title}`, src: url },
+                            });
+                          }}
                           onToggleAlert={() => {
                             const ts = Number(p.start_timestamp);
                             if (!Number.isFinite(ts)) return;
@@ -316,7 +332,7 @@ function GuidePage() {
                             navigate({
                               to: "/player/$type/$id",
                               params: { type: "live", id: String(s.stream_id) },
-                              search: { name: s.name },
+                              search: { name: s.name, src: "" },
                             })
                           }
                         />
