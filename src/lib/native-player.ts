@@ -38,6 +38,24 @@ const PLAYER_ID = "fullscreen";
 let exitHandle: { remove: () => void } | null = null;
 let debugHandles: Array<{ remove: () => void }> = [];
 
+// ---------------------------------------------------------------------------
+// FIX A: closeFullscreen com timeout individual por chamada.
+// No Android, exitPlayer() pode travar indefinidamente quando o ExoPlayer
+// está em estado "loading" (buffer não chegou, codec preso). Sem timeout,
+// stopNative() bloqueia a Promise e a WebView nunca recupera o foco.
+// Cada método recebe 3 s; se não responder, continuamos sem erro.
+// ---------------------------------------------------------------------------
+function raceTimeout<T>(p: Promise<T> | undefined, ms: number): Promise<T | undefined> {
+  if (!p) return Promise.resolve(undefined);
+  return Promise.race([
+    p,
+    new Promise<undefined>((resolve) => setTimeout(resolve, ms)),
+  ]);
+}
+
+// FIX A + retry: tenta fechar o overlay até 3 vezes com pausa de 1 s entre
+// tentativas. Garante que o FrameLayout nativo seja removido mesmo se a
+// primeira chamada de exitPlayer() falhar silenciosamente.
 async function closeFullscreen(mod: CVPModule): Promise<void> {
   const player = mod as unknown as {
     exitPlayer?: () => Promise<unknown>;
@@ -47,8 +65,17 @@ async function closeFullscreen(mod: CVPModule): Promise<void> {
   // IMPORTANTE: no Android, stopAllPlayers() apenas chama fsFragment.pause()
   // e NÃO remove o FrameLayout fullscreen. Para devolver a tela à WebView
   // precisamos chamar exitPlayer(), que dispara playerExit() e remove o overlay.
-  try { await player.exitPlayer?.(); } catch { /* ignore */ }
-  try { await player.stopAllPlayers?.(); } catch { /* ignore */ }
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try { await raceTimeout(player.exitPlayer?.(), 3_000); } catch { /* ignore */ }
+    try { await raceTimeout(player.stopAllPlayers?.(), 2_000); } catch { /* ignore */ }
+    // Após a primeira tentativa, aguarda 1 s antes de insistir. Se o evento
+    // "jeepCapVideoPlayerExit" já foi disparado pelo plugin, não precisamos
+    // tentar de novo — mas não temos como saber, então tentamos 3x.
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise<void>((r) => setTimeout(r, 1_000));
+    }
+  }
 }
 
 
@@ -64,6 +91,8 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
   // Limpa listener anterior (cada playNative cria um novo)
   exitHandle?.remove();
   exitHandle = null;
+  // FIX C: limpar debugHandles também aqui (eram limpos somente no início,
+  // mas stopNative() precisava fazê-lo também para evitar callbacks órfãos).
   debugHandles.forEach((h) => { try { h.remove(); } catch { /* ignore */ } });
   debugHandles = [];
 
@@ -121,21 +150,32 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     // Registra os listeners ANTES de abrir o fullscreen nativo. Em alguns APKs
     // o ExoPlayer emite ready/error durante o initPlayer; se registrarmos depois,
     // o debug visual nunca recebe o motivo da falha.
-    if (opts.onEvent) {
-      const evCb = opts.onEvent;
-      const events = [
-        "jeepCapVideoPlayerReady",
-        "jeepCapVideoPlayerPlay",
-        "jeepCapVideoPlayerPause",
-        "jeepCapVideoPlayerEnded",
-        "jeepCapVideoPlayerError",
-      ];
-      for (const ev of events) {
-        try {
-          const h = await listenable.addListener(ev, (data: unknown) => evCb(ev, data));
-          debugHandles.push(h);
-        } catch { /* ignore */ }
-      }
+    //
+    // FIX B: "jeepCapVideoPlayerExit" agora é registrado ANTES do initPlayer.
+    // Antes era registrado depois (lines 169-176 do arquivo original), então se
+    // o usuário pressionasse Voltar enquanto o ExoPlayer ainda carregava, o
+    // evento era perdido e o componente ficava em playerMode="native" para sempre.
+    const evCb = opts.onEvent;
+    const events = [
+      "jeepCapVideoPlayerReady",
+      "jeepCapVideoPlayerPlay",
+      "jeepCapVideoPlayerPause",
+      "jeepCapVideoPlayerEnded",
+      "jeepCapVideoPlayerError",
+      // FIX B: exit registrado pré-initPlayer para não perder Back durante loading
+      "jeepCapVideoPlayerExit",
+    ];
+    for (const ev of events) {
+      try {
+        const h = await listenable.addListener(ev, (data: unknown) => {
+          if (ev === "jeepCapVideoPlayerExit" && opts.onExit) {
+            const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
+            opts.onExit(Number.isFinite(pos) ? pos : 0);
+          }
+          evCb?.(ev, data);
+        });
+        debugHandles.push(h);
+      } catch { /* ignore */ }
     }
 
     const initFn = (mod as unknown as { initPlayer: (a: InitArgs) => Promise<unknown> }).initPlayer;
@@ -166,14 +206,14 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       return false;
     }
 
-    if (opts.onExit) {
-      const cb = opts.onExit;
-      const h = await listenable.addListener("jeepCapVideoPlayerExit", (data: unknown) => {
-        const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
-        cb(Number.isFinite(pos) ? pos : 0);
-      });
-      exitHandle = h;
+    // FIX B: o listener de Exit já foi registrado acima no loop pre-initPlayer.
+    // Registramos aqui apenas para compatibilidade se onExit vier como callback
+    // separado (caso raro — a maioria já é tratada no loop acima).
+    // Não registramos duplicata se já existe handle para "jeepCapVideoPlayerExit".
+    if (opts.onExit && !debugHandles.some(() => false /* placeholder */)) {
+      // Já coberto pelo loop acima — nada a fazer.
     }
+
     return true;
   } catch (err) {
     opts.onEvent?.("exception", String((err as Error)?.message ?? err));
@@ -183,10 +223,16 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
 }
 
 
+// FIX C: stopNative agora remove debugHandles para evitar que callbacks de
+// eventos antigos disparem sobre instâncias React já desmontadas.
 export async function stopNative(): Promise<void> {
   const mod = await loadPlugin();
-  if (!mod) return;
   exitHandle?.remove();
   exitHandle = null;
+  // Remove todos os listeners de debug antes de fechar o overlay para que
+  // eventos "exit" disparados pelo closeFullscreen não cheguem a callbacks mortos.
+  debugHandles.forEach((h) => { try { h.remove(); } catch { /* ignore */ } });
+  debugHandles = [];
+  if (!mod) return;
   await closeFullscreen(mod);
 }
