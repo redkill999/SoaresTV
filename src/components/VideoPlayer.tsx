@@ -75,6 +75,88 @@ function proxied(url: string, kind?: "live" | "vod"): string {
   return `/api/stream?u=${encodeURIComponent(url)}${kind === "vod" ? "&kind=vod" : ""}&v=6`;
 }
 
+function maskIptvUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.pathname = parsed.pathname.replace(
+      /(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i,
+      "$1***USER***/***PASS***$4",
+    );
+    return parsed.toString();
+  } catch {
+    return url.replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4");
+  }
+}
+
+async function probeNativeLiveStream(
+  url: string,
+  onLine: (line: string) => void,
+  isCancelled: () => boolean,
+) {
+  const uaList: Array<[string, string]> = [
+    ["XCIPTV", USER_AGENT_STRINGS.xciptv],
+    ["TiviMate", USER_AGENT_STRINGS.tivimate],
+    ["Smarters", USER_AGENT_STRINGS.smarters],
+    ["okhttp", USER_AGENT_STRINGS.okhttp],
+    ["Chrome", USER_AGENT_STRINGS.chrome],
+  ];
+
+  try {
+    const { Capacitor, CapacitorHttp } = await import("@capacitor/core");
+    const canUseHttp =
+      Capacitor.isNativePlatform?.() ||
+      Capacitor.getPlatform?.() === "android" ||
+      Capacitor.getPlatform?.() === "ios" ||
+      !!(window as unknown as { Capacitor?: unknown }).Capacitor;
+    if (!canUseHttp) {
+      onLine("ETAPA 4.0 probe nativo indisponível neste ambiente");
+      return;
+    }
+
+    onLine(`ETAPA 4.0 probe GET parcial url=${maskIptvUrl(url)}`);
+    for (const [label, ua] of uaList) {
+      if (isCancelled()) return;
+      try {
+        const started = Date.now();
+        const res = await (CapacitorHttp as unknown as {
+          request: (opts: Record<string, unknown>) => Promise<{
+            status?: number;
+            headers?: Record<string, string>;
+            data?: unknown;
+          }>;
+        }).request({
+          method: "GET",
+          url,
+          headers: {
+            "User-Agent": ua,
+            "Accept": "*/*",
+            "Range": "bytes=0-1",
+            "Connection": "close",
+          },
+          connectTimeout: 4_000,
+          readTimeout: 4_000,
+          responseType: "text",
+        });
+        if (isCancelled()) return;
+        const headers = res.headers ?? {};
+        const contentType = headers["content-type"] ?? headers["Content-Type"] ?? "-";
+        const contentLength = headers["content-length"] ?? headers["Content-Length"] ?? "-";
+        onLine(`ETAPA 4.${uaList.indexOf([label, ua] as never) + 1} probe UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}`);
+        if (res.status && res.status >= 200 && res.status < 400) return;
+      } catch (err) {
+        if (isCancelled()) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        onLine(`ETAPA 4 probe UA=${label} erro=${msg.slice(0, 140)}`);
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onLine(`ETAPA 4 probe falhou=${msg.slice(0, 160)}`);
+  }
+}
+
 function liveDirectCandidates(src: string): string[] {
   const out: string[] = [];
   const add = (url: string | null) => {
@@ -139,6 +221,10 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [holdNativeDebug, setHoldNativeDebug] = useState(false);
+  const keepDebugOverlayRef = useRef(false);
+  const manualNativeStartRef = useRef(false);
   // [DEBUG TEMP] Coleta de etapas do pipeline de reprodução, exibido em overlay
   // quando ocorre erro. Limpo no início de cada nova fonte (src).
   const dbgRef = useRef<string[]>([]);
@@ -150,6 +236,11 @@ export function VideoPlayer({
     setDbgLines(dbgRef.current);
     // eslint-disable-next-line no-console
     console.log("[STREAM DEBUG]", entry);
+  }, []);
+  const showStreamDiagnostic = useCallback((message: string) => {
+    keepDebugOverlayRef.current = true;
+    setDebugPanelOpen(true);
+    setError(message);
   }, []);
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
@@ -230,7 +321,7 @@ export function VideoPlayer({
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          setError("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
         }
       },
       onExit: (pos) => {
@@ -244,7 +335,7 @@ export function VideoPlayer({
         }
       },
     });
-  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic]);
 
 
   const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
@@ -254,6 +345,37 @@ export function VideoPlayer({
   // potencialmente matando outra instância do plugin.
   const nativeOpenedRef = useRef(false);
 
+  const launchNativeFromDebug = useCallback(async () => {
+    manualNativeStartRef.current = true;
+    keepDebugOverlayRef.current = false;
+    setHoldNativeDebug(false);
+    setError(null);
+    setPlayerMode("deciding");
+    pushDbg("ETAPA 4.9 usuário iniciou ExoPlayer a partir do diagnóstico");
+    const ok = await openNative();
+    pushDbg(`ETAPA 5 native openNative=${ok}`);
+    if (ok) {
+      nativeOpenedRef.current = true;
+      setPlayerMode("native");
+      if (isLiveSrc) {
+        if (nativeLiveWatchdogRef.current) clearTimeout(nativeLiveWatchdogRef.current);
+        nativeLiveWatchdogRef.current = setTimeout(() => {
+          if (!nativeOpenedRef.current || nativeLivePlayedRef.current) return;
+          pushDbg("ETAPA 9 native watchdog manual: sem evento PLAY; fechando ExoPlayer para mostrar diagnóstico");
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          void stopNative().catch(() => undefined);
+          setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
+        }, 12_000);
+      }
+      return;
+    }
+    nativeOpenedRef.current = false;
+    setPlayerMode("web");
+    showStreamDiagnostic("Falha ao abrir o ExoPlayer para este canal LIVE. Veja o diagnóstico abaixo.");
+  }, [openNative, isLiveSrc, pushDbg, showStreamDiagnostic]);
+
   useEffect(() => {
     let cancelled = false;
     setPlayerMode("deciding");
@@ -261,7 +383,12 @@ export function VideoPlayer({
     // [DEBUG TEMP] reset por src
     dbgRef.current = [];
     setDbgLines([]);
-    pushDbg(`ETAPA 1 src=${src}`);
+    setDebugPanelOpen(false);
+    setHoldNativeDebug(false);
+    keepDebugOverlayRef.current = false;
+    manualNativeStartRef.current = false;
+    setError(null);
+    pushDbg(`ETAPA 1 src=${maskIptvUrl(src)}`);
     pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
     (async () => {
       const native = await isNativeApp();
@@ -275,6 +402,16 @@ export function VideoPlayer({
         setPlayerMode("web");
         return;
       }
+      if (isLiveSrc && srcHostProfile.forceNativeForLive && !manualNativeStartRef.current) {
+        pushDbg("ETAPA 4 debug pré-ExoPlayer ativo: não abrir overlay nativo automaticamente");
+        setPlayerMode("web");
+        setHoldNativeDebug(true);
+        showStreamDiagnostic("Diagnóstico LIVE ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.");
+        void probeNativeLiveStream(src, (line) => {
+          if (!cancelled) pushDbg(line);
+        }, () => cancelled);
+        return;
+      }
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
@@ -282,7 +419,7 @@ export function VideoPlayer({
         pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        setError("Falha ao abrir o ExoPlayer para este canal LIVE. Veja o diagnóstico abaixo.");
+        showStreamDiagnostic("Falha ao abrir o ExoPlayer para este canal LIVE. Veja o diagnóstico abaixo.");
         return;
       }
       if (ok && isLiveSrc) {
@@ -296,7 +433,7 @@ export function VideoPlayer({
           // overlay nativo não tenha fechado na primeira tentativa.
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          setError("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
           void stopNative().catch(() => undefined);
           setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
         }, 12_000);
@@ -319,7 +456,7 @@ export function VideoPlayer({
         nativeLiveWatchdogRef.current = null;
       }
     };
-  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -334,10 +471,11 @@ export function VideoPlayer({
 
   useEffect(() => {
     // No APK, o ExoPlayer nativo cuida do playback — pulamos MSE.
+    if (holdNativeDebug) return;
     if (playerMode !== "web") return;
     const video = videoRef.current;
     if (!video || !src) return;
-    setError(null);
+    if (!keepDebugOverlayRef.current) setError(null);
     setCanManualPlay(false);
 
     // ---- Compatibilidade por lista ----------------------------------------
@@ -420,7 +558,7 @@ export function VideoPlayer({
 
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ?? "-"}`);
-    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).join(" | ")}`);
+    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 
 
     let hls: Hls | null = null;
@@ -534,7 +672,7 @@ export function VideoPlayer({
       destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
-      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${url}`);
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
@@ -584,7 +722,7 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
-      pushDbg(`attachHls url=${url}`);
+      pushDbg(`attachHls url=${maskIptvUrl(url)}`);
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -848,7 +986,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode]);
+  }, [src, kind, playerMode, holdNativeDebug, pushDbg]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
@@ -1013,21 +1151,32 @@ export function VideoPlayer({
         </div>
       )}
 
-      {error && (
+      {(error || debugPanelOpen) && (
         <div className="absolute inset-0 flex flex-col bg-black/90 text-white">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-            <span className="text-sm font-semibold text-destructive">{error}</span>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  void navigator.clipboard?.writeText(dbgLines.join("\n"));
-                } catch { /* noop */ }
-              }}
-              className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
-            >
-              Copiar
-            </button>
+            <span className="text-sm font-semibold text-destructive">{error ?? "[STREAM DEBUG] Diagnóstico LIVE"}</span>
+            <div className="flex gap-2">
+              {holdNativeDebug && (
+                <button
+                  type="button"
+                  onClick={() => { void launchNativeFromDebug(); }}
+                  className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground"
+                >
+                  Abrir ExoPlayer
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    void navigator.clipboard?.writeText(dbgLines.join("\n"));
+                  } catch { /* noop */ }
+                }}
+                className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+              >
+                Copiar
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[10px] leading-tight whitespace-pre-wrap">
             {dbgLines.length === 0 ? "(sem logs)" : dbgLines.join("\n")}
