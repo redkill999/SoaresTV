@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
+import { PictureInPicture2, PictureInPicture } from "lucide-react";
+import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
@@ -1212,6 +1214,39 @@ export function VideoPlayer({
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
   }, []);
 
+  // ===== Picture-in-Picture (Web API) =====
+  const pipSupported = typeof document !== "undefined" && !!document.pictureInPictureEnabled;
+  const [pipActive, setPipActive] = useState(false);
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !pipSupported) return;
+    const onEnter = () => setPipActive(true);
+    const onLeave = () => setPipActive(false);
+    v.addEventListener("enterpictureinpicture", onEnter);
+    v.addEventListener("leavepictureinpicture", onLeave);
+    return () => {
+      v.removeEventListener("enterpictureinpicture", onEnter);
+      v.removeEventListener("leavepictureinpicture", onLeave);
+    };
+  }, [pipSupported]);
+  const togglePip = useCallback(async () => {
+    if (!pipSupported) {
+      toast("Picture-in-Picture não suportado neste dispositivo");
+      return;
+    }
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (document.pictureInPictureElement === v) {
+        await document.exitPictureInPicture();
+      } else {
+        await v.requestPictureInPicture();
+      }
+    } catch {
+      toast("Não foi possível ativar o Picture-in-Picture");
+    }
+  }, [pipSupported]);
+
   return (
     <div
       className="relative h-full w-full bg-player"
@@ -1305,6 +1340,17 @@ export function VideoPlayer({
           aria-label="Reproduzir"
         >
           ▶
+        </button>
+      )}
+      {pipSupported && playerMode === "web" && !error && (
+        <button
+          type="button"
+          onClick={() => { void togglePip(); }}
+          aria-label={pipActive ? "Sair do Picture-in-Picture" : "Picture-in-Picture"}
+          title="Picture-in-Picture"
+          className={`absolute bottom-3 right-3 z-20 size-10 rounded-full bg-black/60 backdrop-blur grid place-items-center hover:bg-black/80 transition-opacity ${controlsVisible || pipActive ? "opacity-100" : "opacity-0 pointer-events-none"} ${pipActive ? "text-primary" : "text-white"}`}
+        >
+          {pipActive ? <PictureInPicture className="size-5" /> : <PictureInPicture2 className="size-5" />}
         </button>
       )}
     </div>

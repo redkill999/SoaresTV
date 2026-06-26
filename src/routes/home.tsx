@@ -132,6 +132,26 @@ function HomePage() {
     if (h.action === "update") return runUpdate();
     if (h.action === "conta")  return setOpenConta(true);
     if (h.action)              return setOpenStatus(h.action);
+    if (h.key === "multi") {
+      // Tenta abrir o miniplayer atual em Picture-in-Picture; se não houver
+      // canal ativo ou o navegador não suportar, cai pro /live padrão.
+      const v = document.querySelector<HTMLVideoElement>("video[data-mini-video]");
+      if (v && document.pictureInPictureEnabled) {
+        if (document.pictureInPictureElement === v) {
+          void document.exitPictureInPicture().catch(() => undefined);
+        } else {
+          v.requestPictureInPicture().catch(() => {
+            toast("Não foi possível ativar o Picture-in-Picture");
+          });
+        }
+        return;
+      }
+      if (!document.pictureInPictureEnabled && v) {
+        toast("Picture-in-Picture não suportado neste dispositivo");
+        return;
+      }
+      // Sem canal ativo → navegação padrão
+    }
     if (h.to)                  return goTo(h.to);
   };
 

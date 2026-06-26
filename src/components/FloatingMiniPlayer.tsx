@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { MiniLivePlayer } from "@/components/MiniLivePlayer";
@@ -13,6 +13,7 @@ export function FloatingMiniPlayer() {
   const { state, clear } = useMiniPlayer();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = store.getCreds();
@@ -20,6 +21,19 @@ export function FloatingMiniPlayer() {
     const first = store.getM3U()[0];
     const rec = first ? xtreamCredsFromUrl(first.url, first.username, first.password) : null;
     if (rec) setCreds(rec);
+  }, [state?.streamId]);
+
+  // Marca o <video> interno para que o hotspot "Multitela" do home consiga
+  // chamar requestPictureInPicture nele via document.querySelector.
+  useEffect(() => {
+    if (!state) return;
+    const id = window.setInterval(() => {
+      const v = wrapRef.current?.querySelector("video");
+      if (v && !v.hasAttribute("data-mini-video")) {
+        v.setAttribute("data-mini-video", "true");
+      }
+    }, 300);
+    return () => window.clearInterval(id);
   }, [state?.streamId]);
 
   if (!state) return null;
@@ -30,6 +44,7 @@ export function FloatingMiniPlayer() {
 
   return (
     <div
+      ref={wrapRef}
       className="fixed z-50 bottom-16 right-3 sm:bottom-4 sm:right-4 w-56 sm:w-72 transition-all duration-300 translate-y-0 opacity-100"
     >
       <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black">
