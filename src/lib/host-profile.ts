@@ -191,7 +191,11 @@ export function getHostProfile(host: string | null | undefined): HostProfile {
   // com porta explícita (ex.: athra.sbs:80 / :8080). Sem este fallback, o APK
   // não ativava forceNativeForLive nem o diagnóstico visual para canais LIVE.
   const withoutPort = h.replace(/:\d+$/, "");
-  return memory[withoutPort] ?? {};
+  if (memory[withoutPort]) return memory[withoutPort];
+  const withoutWww = withoutPort.replace(/^www\./, "");
+  if (memory[withoutWww]) return memory[withoutWww];
+  const suffixPreset = Object.keys(HOST_PRESETS).find((presetHost) => withoutWww.endsWith(`.${presetHost}`));
+  return suffixPreset ? memory[suffixPreset] ?? {} : {};
 }
 
 export function updateHostProfile(host: string, patch: Partial<HostProfile>): HostProfile {
