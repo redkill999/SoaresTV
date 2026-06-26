@@ -138,9 +138,10 @@ async function handle(request: Request) {
     return new Response("bad protocol", { status: 400, headers: CORS });
   }
 
-  const range = request.headers.get("range");
+  const isLive = url.searchParams.get("kind") === "live";
+  const range = isLive ? null : request.headers.get("range");
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
-  const isVod = !playlistPath && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
+  const isVod = !playlistPath && !isLive && (url.searchParams.get("kind") === "vod" || isVodPath(upstreamUrl.pathname));
   const effectiveVodRange = isVod ? vodRangeForUpstream(range, request.method === "HEAD") : null;
 
   // Alguns provedores Xtream bloqueiam UAs específicos (notadamente "VLC")
