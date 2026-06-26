@@ -180,6 +180,44 @@ patchFile(fragmentPath, [
           else { _cancelBufferWatchdog(); }`,
     ),
   },
+  {
+    name: "8) hideSystemUi aplica IMMERSIVE no decorView + cutout edge-to-edge",
+    required: true,
+    mustContainAfter: "JEEP_FULLSCREEN_INSETS",
+    apply: (s) => s.replace(
+      "  private void hideSystemUi() {\n    if (styledPlayerView != null) styledPlayerView.setSystemUiVisibility(",
+      `  private void hideSystemUi() {
+    // JEEP_FULLSCREEN_INSETS: aplica fullscreen no decorView da Activity (não
+    // só na styledPlayerView). Sem isso a status bar / navigation bar continuam
+    // reservando espaço e empurram os controles do ExoPlayer para fora da tela
+    // em alguns devices (TV-mode / phones com cutout / Android 11+).
+    try {
+      android.app.Activity act = getActivity();
+      if (act != null) {
+        android.view.Window win = act.getWindow();
+        if (win != null) {
+          win.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+          win.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+          if (android.os.Build.VERSION.SDK_INT >= 28) {
+            android.view.WindowManager.LayoutParams lp = win.getAttributes();
+            lp.layoutInDisplayCutoutMode =
+              android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            win.setAttributes(lp);
+          }
+          win.getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+          );
+        }
+      }
+    } catch (Exception ignored) {}
+    if (styledPlayerView != null) styledPlayerView.setSystemUiVisibility(`,
+    ),
+  },
 ]);
 
 patchFile(pluginPath, [
@@ -203,6 +241,7 @@ assertContains(fragmentPath, [
   ["watchdog nativo BUFFERING", "JEEP_BUFFER_WATCHDOG"],
   ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
+  ["fullscreen insets aplicados", "JEEP_FULLSCREEN_INSETS"],
 ]);
 
 assertContains(pluginPath, [
