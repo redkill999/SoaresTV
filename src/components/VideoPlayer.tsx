@@ -153,6 +153,9 @@ export function VideoPlayer({
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
 
+  const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
+  const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
+
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
   // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
   // que usa ExoPlayer/Media3 em overlay fullscreen, fora do WebView. Ganhos:
@@ -170,6 +173,8 @@ export function VideoPlayer({
     const ua =
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
+        : isLiveSrc && srcHostProfile.forceNativeForLive
+          ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
     return playNative({
       url: src,
@@ -183,9 +188,9 @@ export function VideoPlayer({
         }
       },
     });
-  }, [src, kind]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive]);
 
-  const shouldUseNativePlayer = settings.defaultPlayer === "exo";
+  const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
@@ -260,6 +265,9 @@ export function VideoPlayer({
     // Detecção automática pelo sufixo da URL. Override do usuário (compat)
     // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
     const auto = detectFormat(workingSrc);
+    const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
+    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
+    const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
     // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
@@ -267,6 +275,7 @@ export function VideoPlayer({
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
+      (isLive && !!liveHostProfile.disableHlsConversion) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -274,8 +283,6 @@ export function VideoPlayer({
 
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
-    const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const vodCandidates: string[] = [];
     const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
     if (vodMatch && (!hlsCandidate || isVod)) {
@@ -300,7 +307,6 @@ export function VideoPlayer({
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
-    const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
     const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
