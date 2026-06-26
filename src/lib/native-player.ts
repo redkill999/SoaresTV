@@ -36,6 +36,8 @@ async function loadPlugin(): Promise<CVPModule | null> {
 
 const PLAYER_ID = "fullscreen";
 let exitHandle: { remove: () => void } | null = null;
+let debugHandles: Array<{ remove: () => void }> = [];
+
 
 export async function isNativePlayerAvailable(): Promise<boolean> {
   const mod = await loadPlugin();
