@@ -466,6 +466,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [loading, setLoading] = useState(false);
   const [creds, setCreds] = useState<ReturnType<typeof store.getCreds>>(null);
   const [showCompat, setShowCompat] = useState(false);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) { setInfo(null); setCreds(null); return; }
@@ -488,6 +489,21 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
     return () => { alive = false; };
   }, [open]);
 
+  // Esc/Back fecha + auto-foco no botão fechar (evita o "dois cliques"
+  // no APK/TV onde o foco fica no trigger original).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "GoBack" || e.key === "Backspace") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 50);
+    return () => { window.removeEventListener("keydown", onKey); clearTimeout(t); };
+  }, [open, onClose]);
+
   const isTrial = (() => {
     const v = info?.is_trial;
     if (v === undefined || v === null) return null;
@@ -497,13 +513,31 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const statusRaw = (info?.status || "").toString().toUpperCase();
   const isActive = statusRaw === "ACTIVE" || statusRaw === "ATIVO";
 
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#0b1220] p-0 text-white">
-        <DialogHeader className="px-6 pt-6">
-          <DialogTitle className="text-base font-semibold tracking-wide text-white">CONTA</DialogTitle>
-          <DialogDescription className="text-white/60">Informações da sua conexão.</DialogDescription>
-        </DialogHeader>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Conta"
+      className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-[min(28rem,calc(100%-2rem))] max-h-[calc(100%-2rem)] overflow-y-auto rounded-lg border border-white/10 bg-[#0b1220] text-white shadow-[0_20px_60px_-10px_rgba(0,0,0,0.9)]">
+        <div className="flex items-start justify-between px-6 pt-6">
+          <div>
+            <h2 className="text-base font-semibold tracking-wide text-white">CONTA</h2>
+            <p className="text-sm text-white/60 mt-1">Informações da sua conexão.</p>
+          </div>
+          <button
+            ref={closeBtnRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="ml-3 -mt-1 -mr-1 rounded-md p-2 text-white/70 hover:text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          >
+            ✕
+          </button>
+        </div>
 
         <div className="space-y-3 px-6 pb-4 pt-2 text-sm">
           {creds ? (
@@ -513,15 +547,8 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
               <>
                 <InfoRow label="Nome de usuário" value={info?.username || creds.username} />
                 <InfoRow label="Mensagem" value={info?.message || "—"} highlight />
-                <InfoRow
-                  label="Está no Teste"
-                  value={isTrial ?? "—"}
-                  highlight={isTrial === "Sim"}
-                />
-                <InfoRow
-                  label="Max Conn"
-                  value={`${info?.active_cons ?? "0"} / ${info?.max_connections ?? "—"}`}
-                />
+                <InfoRow label="Está no Teste" value={isTrial ?? "—"} highlight={isTrial === "Sim"} />
+                <InfoRow label="Max Conn" value={`${info?.active_cons ?? "0"} / ${info?.max_connections ?? "—"}`} />
                 <InfoRow label="Expira" value={formatExp(info?.exp_date ?? null)} />
                 <InfoRow
                   label="Status"
@@ -580,8 +607,8 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
             }}
           />
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
@@ -625,6 +652,7 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const platform = typeof navigator !== "undefined" ? navigator.platform : "";
   const lang = typeof navigator !== "undefined" ? navigator.language : "";
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -634,7 +662,8 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 50);
+    return () => { window.removeEventListener("keydown", onKey); clearTimeout(t); };
   }, [open, onClose]);
   if (!open) return null;
   return (
@@ -647,8 +676,9 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          ref={closeBtnRef}
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-label="Fechar"
         >
           ✕
@@ -947,6 +977,7 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
   const [result, setResult] = useState<{ mbps: number; ms: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   const run = async (signal?: AbortSignal) => {
     setRunning(true); setError(null); setResult(null);
@@ -993,7 +1024,8 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => { ctrl.abort(); window.removeEventListener("keydown", onKey); };
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 50);
+    return () => { ctrl.abort(); window.removeEventListener("keydown", onKey); clearTimeout(t); };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -1007,8 +1039,9 @@ function SpeedTestDialog({ open, onClose }: { open: boolean; onClose: () => void
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          ref={closeBtnRef}
           onClick={onClose}
-          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white"
+          className="absolute right-3 top-3 rounded p-1 text-white/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-label="Fechar"
         >
           ✕
