@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import homeBg from "@/assets/home-bg.png.asset.json";
 
 const APP_VERSION = "1.0.0";
@@ -59,6 +60,7 @@ function HomePage() {
   const queryClient = useQueryClient();
   const [m3uList, setM3uList] = useState<M3UPlaylist | null>(null);
   const [openConta, setOpenConta] = useState(false);
+  const { alerts } = useEpgAlerts();
 
   const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
   const [recOn, setRecOn] = useState(false);
@@ -181,6 +183,9 @@ function HomePage() {
             )}
             {h.key === "alarm" && alarmMin > 0 && (
               <span className="absolute right-2 top-2 size-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+            )}
+            {h.key === "epg" && alerts.length > 0 && (
+              <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
             )}
           </button>
         ))}
