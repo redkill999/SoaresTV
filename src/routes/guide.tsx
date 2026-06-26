@@ -11,6 +11,7 @@ import {
   type LiveStream,
 } from "@/lib/xtream";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
+import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { CalendarDays, ChevronLeft, ChevronRight, Tv } from "lucide-react";
 
 export const Route = createFileRoute("/guide")({
@@ -35,6 +36,8 @@ function GuidePage() {
   const [page, setPage] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const timelineRef = useRef<HTMLDivElement>(null);
+  const { state: miniPlayer } = useMiniPlayer();
+  const activeStreamId = miniPlayer?.streamId ?? null;
 
   useEffect(() => setCreds(store.getCreds()), []);
   useEffect(() => {
@@ -144,12 +147,13 @@ function GuidePage() {
   const windowEnd = windowStart + WINDOW_HOURS * 3600;
   const timelineWidth = WINDOW_HOURS * PX_PER_HOUR;
 
-  // Scroll so "now" is visible on first paint
+  // Scroll so "now" is visible — só na montagem, pra não interferir com scroll manual
   useEffect(() => {
     if (!timelineRef.current) return;
-    const x = (now - windowStart) * PX_PER_SEC - 160;
-    timelineRef.current.scrollLeft = Math.max(0, x);
-  }, [windowStart, now]);
+    const nowOffset = (now - windowStart) * PX_PER_SEC - 200;
+    timelineRef.current.scrollLeft = Math.max(0, nowOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!creds) {
     return (
@@ -222,7 +226,9 @@ function GuidePage() {
           <div className="flex flex-1 min-h-0 overflow-y-auto">
             {/* Channel column */}
             <div className="shrink-0 border-r border-white/10 bg-black/20" style={{ width: CHANNEL_COL }}>
-              {visibleChannels.map((s) => (
+              {visibleChannels.map((s) => {
+                const isActive = activeStreamId === String(s.stream_id);
+                return (
                 <button
                   key={s.stream_id}
                   type="button"
@@ -235,7 +241,9 @@ function GuidePage() {
                       search: { name: s.name },
                     })
                   }
-                  className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/5 transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/10"
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
+                    isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-white/5"
+                  }`}
                   style={{ height: ROW_HEIGHT }}
                 >
                   {s.stream_icon ? (
@@ -256,7 +264,8 @@ function GuidePage() {
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">#{s.num}</div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             {/* Programs grid */}
@@ -265,10 +274,11 @@ function GuidePage() {
                 {visibleChannels.map((s, idx) => {
                   const epg = epgQueries[idx]?.data ?? [];
                   const loading = epgQueries[idx]?.isLoading;
+                  const isActive = activeStreamId === String(s.stream_id);
                   return (
                     <div
                       key={s.stream_id}
-                      className="relative border-b border-white/5"
+                      className={`relative border-b border-white/5 ${isActive ? "bg-primary/10" : ""}`}
                       style={{ height: ROW_HEIGHT, width: timelineWidth }}
                     >
                       {loading && (
@@ -291,7 +301,7 @@ function GuidePage() {
                         />
                       ))}
                       <div
-                        className="absolute top-0 bottom-0 w-px bg-red-500/70 pointer-events-none"
+                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-10"
                         style={{ left: nowOffsetPx }}
                       />
                     </div>
@@ -362,7 +372,7 @@ function ProgramBlock({
       type="button"
       onClick={onOpen}
       title={`${p.title}\n${fmtHour(start)} – ${fmtHour(stop)}${p.description ? "\n\n" + p.description : ""}`}
-      className={`absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`absolute top-1 bottom-1 rounded-md px-2 text-left text-xs leading-tight overflow-hidden transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary relative ${
         isNow
           ? "bg-primary/30 border border-primary text-foreground hover:bg-primary/40"
           : isPast
@@ -371,10 +381,21 @@ function ProgramBlock({
       }`}
       style={{ left, width: Math.max(width, 2) }}
     >
-      <div className="font-semibold truncate">{p.title}</div>
+      {isNow && (
+        <span className="absolute top-0 left-0 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-br rounded-tl-md leading-none z-10">
+          AO VIVO
+        </span>
+      )}
+      <div className={`font-semibold truncate ${isNow ? "pl-14" : ""}`}>{p.title}</div>
       <div className="text-[10px] opacity-80">
         {fmtHour(start)}–{fmtHour(stop)}
       </div>
+      {isNow && (
+        <div
+          className="absolute bottom-0 left-0 h-1 bg-primary"
+          style={{ width: `${((now - start) / (stop - start)) * 100}%` }}
+        />
+      )}
     </button>
   );
 }
