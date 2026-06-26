@@ -139,6 +139,18 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [canManualPlay, setCanManualPlay] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => store.getAppSettings());
+  // [DEBUG TEMP] Coleta de etapas do pipeline de reprodução, exibido em overlay
+  // quando ocorre erro. Limpo no início de cada nova fonte (src).
+  const dbgRef = useRef<string[]>([]);
+  const [dbgLines, setDbgLines] = useState<string[]>([]);
+  const pushDbg = useCallback((line: string) => {
+    const stamp = new Date().toISOString().slice(11, 23);
+    const entry = `[${stamp}] ${line}`;
+    dbgRef.current = [...dbgRef.current, entry].slice(-40);
+    setDbgLines(dbgRef.current);
+    // eslint-disable-next-line no-console
+    console.log("[STREAM DEBUG]", entry);
+  }, []);
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
@@ -201,9 +213,15 @@ export function VideoPlayer({
     let cancelled = false;
     setPlayerMode("deciding");
     nativeOpenedRef.current = false;
+    // [DEBUG TEMP] reset por src
+    dbgRef.current = [];
+    setDbgLines([]);
+    pushDbg(`ETAPA 1 src=${src}`);
+    pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
     (async () => {
       const native = await isNativeApp();
       if (cancelled) return;
+      pushDbg(`ETAPA 3 isNativeApp=${native} shouldUseNative=${shouldUseNativePlayer}`);
       if (!native) {
         setPlayerMode("web");
         return;
@@ -213,6 +231,7 @@ export function VideoPlayer({
         return;
       }
       const ok = await openNative();
+      pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (cancelled) {
         if (ok) void stopNative();
@@ -228,7 +247,7 @@ export function VideoPlayer({
         nativeOpenedRef.current = false;
       }
     };
-  }, [src, kind, openNative, shouldUseNativePlayer]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -327,6 +346,10 @@ export function VideoPlayer({
         ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
         : directCandidates.map((url) => proxiedX(url, kind));
 
+    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
+    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ?? "-"}`);
+    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).join(" | ")}`);
+
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
@@ -360,8 +383,8 @@ export function VideoPlayer({
       }
       destroyTsPlayer();
       vodIdx += 1;
-      if (vodIdx < playbackCandidates.length) playDirect();
-      else setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia.");
+      if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); playDirect(); }
+      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia."); }
     };
 
     const armVodWatchdog = () => {
@@ -413,7 +436,8 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, () => {
+        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
+          pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
           if (!cancelled) tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
@@ -438,6 +462,7 @@ export function VideoPlayer({
       destroyTsPlayer();
       triedDirect = true;
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${url}`);
       const decodedUrl = (() => {
         try {
           return decodeURIComponent(url);
@@ -470,6 +495,8 @@ export function VideoPlayer({
     };
 
     const onVideoError = () => {
+      const mediaErr = video.error;
+      pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
       if (cancelled || hls) return;
       tryNextVod();
     };
@@ -485,6 +512,7 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      pushDbg(`attachHls url=${url}`);
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -631,6 +659,7 @@ export function VideoPlayer({
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (cancelled) return;
+          if (data.fatal) pushDbg(`hls FATAL type=${data.type} details=${data.details} http=${(data as { response?: { code?: number } }).response?.code ?? "-"} url=${(data as { url?: string }).url ?? "-"}`);
           if (!data.fatal) {
             if (isLive && (
               data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
@@ -896,8 +925,24 @@ export function VideoPlayer({
         </div>
       )}
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-player/80 px-3 py-2 text-xs text-destructive">
-          {error}
+        <div className="absolute inset-0 flex flex-col bg-black/90 text-white">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+            <span className="text-sm font-semibold text-destructive">{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  void navigator.clipboard?.writeText(dbgLines.join("\n"));
+                } catch { /* noop */ }
+              }}
+              className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+            >
+              Copiar
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto px-3 py-2 font-mono text-[10px] leading-tight whitespace-pre-wrap">
+            {dbgLines.length === 0 ? "(sem logs)" : dbgLines.join("\n")}
+          </div>
         </div>
       )}
       {canManualPlay && !error && playerMode === "web" && (
