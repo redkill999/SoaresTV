@@ -432,7 +432,7 @@ export function destroyTvDpad() {
   window.removeEventListener("keydown", handleKey, { capture: true } as EventListenerOptions);
   window.removeEventListener("mousedown", handleMouse, { capture: true } as EventListenerOptions);
   window.removeEventListener("pointerdown", handleMouse, { capture: true } as EventListenerOptions);
-  if (routeWatchId) { clearInterval(routeWatchId); routeWatchId = null; }
+  if (routeCleanup) { routeCleanup(); routeCleanup = null; }
   bound = false;
 }
 
