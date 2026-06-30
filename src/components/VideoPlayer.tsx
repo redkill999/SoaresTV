@@ -76,7 +76,7 @@ function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
 
 function proxied(url: string, kind?: "live" | "vod"): string {
   const k = kind === "vod" ? "&kind=vod" : kind === "live" ? "&kind=live" : "";
-  return `/api/stream?u=${encodeURIComponent(url)}${k}&v=6`;
+  return `/api/stream?u=${encodeURIComponent(url)}${k}&v=7`;
 }
 
 type StreamProbeResult = {
