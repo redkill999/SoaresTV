@@ -627,8 +627,9 @@ export function VideoPlayer({
         ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
         : directCandidates.map((url) => proxiedX(url, kind));
 
-    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
-    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ?? "-"}`);
+    pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
+    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
+    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 
 
