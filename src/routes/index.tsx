@@ -143,9 +143,7 @@ function LoginPage() {
         }
       }
 
-      const playlistUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
-        username,
-      )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+      const playlistUrl = buildLoginPlaylistUrl(normalizedServer, username, password);
       const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
       const savedList = { name: listName, url: playlistUrl, username, password, mode: "xtream" as const };
 
