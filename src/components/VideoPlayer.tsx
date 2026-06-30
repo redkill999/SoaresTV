@@ -1018,10 +1018,28 @@ export function VideoPlayer({
                     setError("Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.");
                     return;
                   }
-                  if (!triedDirect) playDirect();
-                  else setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                  // FIX: se o candidate atual é exatamente a URL HLS que falhou,
+                  // avança vodIdx para não reentrar em attachHls com a mesma URL.
+                  const advanceIfHlsMatches = () => {
+                    const cur = playbackCandidates[vodIdx];
+                    if (!cur || !currentHlsUrl) return;
+                    const norm = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+                    if (norm(cur) === norm(currentHlsUrl) || /\.m3u8(\?|&|$)/i.test(norm(cur))) {
+                      vodIdx += 1;
+                      pushDbg(`ETAPA 8.5 hls→next idx=${vodIdx} (advance from failed .m3u8)`);
+                    }
+                  };
+                  advanceIfHlsMatches();
+                  if (vodIdx >= playbackCandidates.length) {
+                    pushDbg(`ETAPA 10 FIM sem candidatos restantes (hls fatal http=${httpCode})`);
+                    setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    return;
+                  }
+                  triedDirect = true;
+                  playDirect();
                   return;
                 }
+
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
                 setTimeout(() => {
                   if (cancelled) return;
