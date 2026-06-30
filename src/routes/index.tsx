@@ -110,9 +110,7 @@ function LoginPage() {
         normalizedServer = normalizeServer(creds.server);
       } catch (loginErr) {
         const native = await isNativeApp();
-        const playlistProbeUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
-          username,
-        )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+        const playlistProbeUrl = buildLoginPlaylistUrl(normalizedServer, username, password);
         let m3uTimedOut = false;
         try {
           entries = await withTimeout(
