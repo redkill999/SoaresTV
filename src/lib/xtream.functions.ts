@@ -571,9 +571,57 @@ export const fetchM3U = createServerFn({ method: "POST" })
       }
     }
 
+    // Valida amostra de URLs LIVE de uma M3U: aceita a lista apenas se ao
+    // menos uma URL LIVE responder OK (direta, ou variante .ts<->.m3u8).
+    async function probeLiveUrl(url: string): Promise<{ ok: boolean; status: number }> {
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+            Accept: "*/*",
+            "Accept-Encoding": "identity",
+            "Icy-MetaData": "0",
+          },
+          redirect: "follow",
+          signal: ctrl.signal,
+        });
+        try { await res.body?.cancel(); } catch { /* noop */ }
+        return { ok: res.ok, status: res.status };
+      } catch {
+        return { ok: false, status: 0 };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function isLiveEntryUrl(url: string): boolean {
+      return /\/live\/[^/]+\/[^/]+\/[^/?#]+\.(ts|m3u8)(\?|#|$)/i.test(url);
+    }
+
+    async function validateM3UEntries(entries: M3UEntryDTO[]): Promise<boolean> {
+      const live = entries.filter((e) => isLiveEntryUrl(e.url)).slice(0, 5);
+      if (!live.length) return true; // sem live testável: aceita (pode ser só VOD)
+      for (const entry of live) {
+        const direct = await probeLiveUrl(entry.url);
+        if (direct.ok) return true;
+        if (/\.m3u8(\?|#|$)/i.test(entry.url)) {
+          const tsUrl = entry.url.replace(/\.m3u8(\?|#|$)/i, ".ts$1");
+          const ts = await probeLiveUrl(tsUrl);
+          if (ts.ok) return true;
+        } else if (/\.ts(\?|#|$)/i.test(entry.url)) {
+          const hlsUrl = entry.url.replace(/\.ts(\?|#|$)/i, ".m3u8$1");
+          const hls = await probeLiveUrl(hlsUrl);
+          if (hls.ok) return true;
+        }
+      }
+      return false;
+    }
+
     try {
       const candidates = buildM3UCandidateUrls(data.url, data.username, data.password);
-      const target = candidates[0];
       const explicitM3U = isExplicitM3UInput(data.url);
 
       // If the user pasted a concrete M3U/get.php URL, parse that playlist first:
@@ -581,20 +629,43 @@ export const fetchM3U = createServerFn({ method: "POST" })
       // player_api JSON can build wrong stream URLs for panels that separate API
       // and stream hosts.
       if (explicitM3U) {
-        const first = await fetchText(target);
-        if (first.text.includes("#EXTINF")) {
-          const entries = parseM3UText(first.text);
-          if (entries.length) {
-            if (access) {
-              const [seriesCats, seriesData] = await Promise.all([
-                loadCategories(access, "get_series_categories"),
-                fetchJson(`${access.origin}/player_api.php?username=${encodeURIComponent(access.username)}&password=${encodeURIComponent(access.password)}&action=get_series`),
-              ]);
-              const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
-              return { entries: mergeEntries(entries, seriesEntries) };
-            }
-            return { entries };
+        let bestEntries: M3UEntryDTO[] = [];
+        let bestSource = "";
+        let lastError = "";
+
+        for (const candidate of candidates) {
+          const fetched = await fetchText(candidate);
+          if (!fetched.text.includes("#EXTINF")) {
+            lastError = fetched.error || "Conteúdo não parece M3U válido";
+            continue;
           }
+          const entries = parseM3UText(fetched.text);
+          if (!entries.length) continue;
+
+          const valid = await validateM3UEntries(entries);
+          if (valid) {
+            bestEntries = entries;
+            bestSource = candidate;
+            break;
+          }
+          lastError = `Lista carregou, mas streams LIVE testados retornaram erro. Candidate rejeitado: ${candidate.replace(/username=[^&]+/i, "username=**USER**").replace(/password=[^&]+/i, "password=**PASS**")}`;
+        }
+
+        if (bestEntries.length) {
+          if (access) {
+            const [seriesCats, seriesData] = await Promise.all([
+              loadCategories(access, "get_series_categories"),
+              fetchJson(`${access.origin}/player_api.php?username=${encodeURIComponent(access.username)}&password=${encodeURIComponent(access.password)}&action=get_series`),
+            ]);
+            const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
+            return { entries: mergeEntries(bestEntries, seriesEntries), sourceUrl: bestSource };
+          }
+          return { entries: bestEntries, sourceUrl: bestSource };
+        }
+
+        if (lastError) {
+          // Cai para o ramo de fallback (Xtream JSON / candidates puros).
+          console.warn("[fetchM3U] explicitM3U rejeitado:", lastError);
         }
       }
 
