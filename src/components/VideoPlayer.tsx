@@ -643,6 +643,9 @@ export function VideoPlayer({
     let currentHlsUrl: string | null = null;
     let detachStallListeners: (() => void) | null = null;
     let lastLiveError: string | null = null;
+    const triedUrls = new Set<string>();
+    const normUrl = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
@@ -776,15 +779,26 @@ export function VideoPlayer({
       }
       destroyTsPlayer();
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
-      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
-      const decodedUrl = (() => {
-        try {
-          return decodeURIComponent(url);
-        } catch {
-          return url;
+      // Pula candidates já tentados (HLS pré-flight ou loop após fatal).
+      while (vodIdx < playbackCandidates.length) {
+        const c = playbackCandidates[vodIdx];
+        if (c && triedUrls.has(normUrl(c))) {
+          pushDbg(`SKIP candidate idx=${vodIdx} já tentado`);
+          vodIdx += 1;
+          continue;
         }
-      })();
+        break;
+      }
+      if (vodIdx >= playbackCandidates.length) {
+        pushDbg(`ETAPA 10 FIM sem candidatos restantes`);
+        setError(isLive ? (lastLiveError ?? "Não foi possível reproduzir este canal.") : "Não foi possível reproduzir esta mídia.");
+        return;
+      }
+      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
+      triedUrls.add(normUrl(url));
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
+      const decodedUrl = normUrl(url);
+
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
@@ -827,7 +841,9 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      triedUrls.add(normUrl(url));
       pushDbg(`attachHls url=${maskIptvUrl(url)}`);
+
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -1018,10 +1034,28 @@ export function VideoPlayer({
                     setError("Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.");
                     return;
                   }
-                  if (!triedDirect) playDirect();
-                  else setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                  // FIX: se o candidate atual é exatamente a URL HLS que falhou,
+                  // avança vodIdx para não reentrar em attachHls com a mesma URL.
+                  const advanceIfHlsMatches = () => {
+                    const cur = playbackCandidates[vodIdx];
+                    if (!cur || !currentHlsUrl) return;
+                    const norm = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+                    if (norm(cur) === norm(currentHlsUrl) || /\.m3u8(\?|&|$)/i.test(norm(cur))) {
+                      vodIdx += 1;
+                      pushDbg(`ETAPA 8.5 hls→next idx=${vodIdx} (advance from failed .m3u8)`);
+                    }
+                  };
+                  advanceIfHlsMatches();
+                  if (vodIdx >= playbackCandidates.length) {
+                    pushDbg(`ETAPA 10 FIM sem candidatos restantes (hls fatal http=${httpCode})`);
+                    setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    return;
+                  }
+                  triedDirect = true;
+                  playDirect();
                   return;
                 }
+
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);
                 setTimeout(() => {
                   if (cancelled) return;
