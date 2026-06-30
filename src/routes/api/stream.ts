@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { maskIptvUrl } from "@/lib/iptv-url";
 
 // Proxy upstream IPTV streams so the browser doesn't hit CORS / mixed-content
 // issues. LIVE keeps the playlist-rewrite + Range-strip path. VOD uses a
@@ -13,23 +14,18 @@ const CORS = {
 };
 
 const UA_LIST = [
-  "VLC/3.0.20 LibVLC/3.0.20",
   "XCIPTV/7.0 (Linux; Android 13)",
-  "TiviMate/5.1.0",
   "IPTV Smarters Pro/4.0",
+  "TiviMate/5.1.0",
+  "VLC/3.0.20 LibVLC/3.0.20",
   "okhttp/4.12.0",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0",
 ];
 
 // Padrões que indicam recusa de autenticação devolvida como corpo (em vez de
 // 401/403 HTTP). Painéis Xtream tipicamente devolvem 200 + texto.
-const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|max\s+connections|Banned|forbidden/i;
-
-function maskUrlForLog(u: string): string {
-  return u
-    .replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4")
-    .replace(/([?&](?:username|password)=)[^&]+/gi, "$1***");
-}
+const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|Not\s+allowed|Max\s+connections|Blocked|Banned|forbidden/i;
+const AUTH_REASON = "Servidor recusou autenticação ou autorização.";
 
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
@@ -52,11 +48,72 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jsonError(error: string, status: number): Response {
+function jsonError(error: string, status: number, responseStatus = status): Response {
   return new Response(JSON.stringify({ error, status }), {
+    status: responseStatus >= 500 ? 424 : responseStatus,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
+function jsonData(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+function isProbablyText(contentType: string): boolean {
+  return /^(text\/|application\/(json|xml|xhtml))/i.test(contentType);
+}
+
+function isProbablyPlayable(contentType: string, path: string): boolean {
+  return /video\/|mpegurl|mp2t|octet-stream|binary/i.test(contentType) || /\.(ts|m3u8?|mp4|m4v|mov|mkv|webm)(\?|$)/i.test(path);
+}
+
+async function bodyPreview(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<string> {
+  const clone = res.clone();
+  const timeout = new Promise<Uint8Array[]>((resolve) => setTimeout(() => resolve([]), timeoutMs));
+  const read = (async () => {
+    const chunks: Uint8Array[] = [];
+    const reader = clone.body?.getReader();
+    if (!reader) return chunks;
+    let total = 0;
+    try {
+      while (total < maxBytes) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        chunks.push(value);
+        total += value.byteLength;
+        if (value.byteLength === 0) break;
+      }
+    } finally {
+      try { await reader.cancel(); } catch { /* noop */ }
+    }
+    return chunks;
+  })();
+  const chunks = await Promise.race([read, timeout]);
+  const bytes = new Uint8Array(Math.min(maxBytes, chunks.reduce((sum, c) => sum + c.byteLength, 0)));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const slice = chunk.slice(0, Math.max(0, bytes.length - offset));
+    bytes.set(slice, offset);
+    offset += slice.byteLength;
+    if (offset >= bytes.length) break;
+  }
+  try {
+    return new TextDecoder().decode(bytes).replace(/\s+/g, " ").trim().slice(0, 240);
+  } catch {
+    return "";
+  }
+}
+
+function reasonForStatus(status: number): string | undefined {
+  if (status === 401 || status === 403) return AUTH_REASON;
+  if (status === 404) return "Stream não encontrado no servidor.";
+  if (status === 424 || status === 502 || status === 503 || status === 504 || status >= 500) {
+    return "Proxy não conseguiu abrir o stream. O servidor pode estar bloqueando o IP do Web Desktop.";
+  }
+  return undefined;
 }
 
 function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
