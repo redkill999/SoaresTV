@@ -144,6 +144,7 @@ async function handle(request: Request) {
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
   if (!target) return jsonError("missing ?u", 400);
+  const isProbe = url.searchParams.get("probe") === "1";
 
   let upstreamUrl: URL;
   try {
@@ -156,7 +157,6 @@ async function handle(request: Request) {
   }
 
   const isLive = url.searchParams.get("kind") === "live";
-  const isProbe = url.searchParams.get("probe") === "1";
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   // LIVE strips Range completely; VOD/segment passes the client's Range through.
   const clientRange = isLive ? null : request.headers.get("range");
