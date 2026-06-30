@@ -342,7 +342,7 @@ export function VideoPlayer({
       onEvent: (name, data) => {
         try {
           const payload = typeof data === "string" ? data : JSON.stringify(data);
-          pushDbg(`NATIVE ${name} ${payload?.slice(0, 200) ?? ""}`);
+          pushDbg(`NATIVE ${name} ${payload ? maskIptvUrl(payload).slice(0, 200) : ""}`);
         } catch {
           pushDbg(`NATIVE ${name}`);
         }
