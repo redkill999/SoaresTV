@@ -147,12 +147,16 @@ async function handle(request: Request) {
   }
 
   if (!upstream) {
-    const msg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
+    const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
+    const msg = maskUrlForLog(rawMsg);
+    // 401/403 explícito do upstream: propaga com mensagem clara.
+    if (lastStatus === 401 || lastStatus === 403) {
+      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", lastStatus);
+    }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
-    const status = lastStatus === 401 || lastStatus === 403 ? lastStatus : 424;
-    return jsonError(msg, status);
+    return jsonError(msg, 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
@@ -161,6 +165,29 @@ async function handle(request: Request) {
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
     /\.m3u(\?|$)/i.test(upstreamUrl.pathname) ||
     playlistPath;
+
+  // Sniff: alguns provedores devolvem 200 + corpo de texto com mensagem de
+  // recusa ("UnauthorizedUser") em vez de 401. Sem isso, esse texto é
+  // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
+  // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
+  const looksTextual = /^(text\/|application\/(json|xml|xhtml))/i.test(ct);
+  if (
+    upstream.ok &&
+    !isPlaylist &&
+    looksTextual &&
+    request.method !== "HEAD"
+  ) {
+    try {
+      const bodyText = await upstream.clone().text();
+      if (AUTH_FAIL_RE.test(bodyText)) {
+        try { await upstream.body?.cancel(); } catch { /* noop */ }
+        return jsonError(
+          "Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.",
+          401,
+        );
+      }
+    } catch { /* noop */ }
+  }
 
   const respHeaders = new Headers(CORS);
 
