@@ -13,7 +13,10 @@ import type { M3UEntry } from "./xtream";
 type Cached = { url: string; name: string; entries: M3UEntry[]; at: number };
 
 const DB_NAME = "soarestv";
-const STORE = "m3u";
+// v2: invalida cache antigo gerado com output=m3u8 que produzia URLs LIVE 404
+// em painéis sem variante HLS (ex.: flipex.pro). O nome "m3u" antigo continua
+// no DB mas é ignorado — a próxima escrita popula "m3u_v2".
+const STORE = "m3u_v2";
 const TTL_MS = 12 * 60 * 60 * 1000; // 12h — refresh in background after that
 const STALE_MS = 2 * 60 * 60 * 1000; // 2h — UI shows cached but revalidates
 
