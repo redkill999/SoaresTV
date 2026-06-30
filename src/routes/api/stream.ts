@@ -285,7 +285,7 @@ async function handle(request: Request) {
   // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
   // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
   const looksTextual = isProbablyText(ct);
-  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok || !isProbablyPlayable(ct, upstreamUrl.pathname));
+  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || isLive || !upstream.ok);
   let preview = lastPreview;
   if (needsPreview) {
     try {
