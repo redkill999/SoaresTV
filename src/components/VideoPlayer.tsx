@@ -625,7 +625,11 @@ export function VideoPlayer({
         })
       : liveBypassProxy
         ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
-        : directCandidates.map((url) => proxiedX(url, kind));
+        : directCandidates.flatMap((url) => Array.from(new Set([proxiedX(url, kind), url])));
+        // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
+        //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
+        //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
+        //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
