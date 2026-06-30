@@ -200,7 +200,19 @@ type M3UEntryDTO = {
   group?: string;
 };
 
-type M3UResultDTO = { entries: M3UEntryDTO[]; error?: string };
+type M3UResultDTO = { entries: M3UEntryDTO[]; error?: string; sourceUrl?: string };
+
+/**
+ * Output preferido por host ao montar URLs Xtream `get.php`.
+ * Painéis como flipex.pro só servem LIVE em `.ts` — pedir `output=m3u8`
+ * gera lista com URLs `.m3u8` que retornam 404. Default global = "ts"
+ * (o player faz fallback para `.m3u8` quando necessário).
+ */
+function preferredM3UOutput(hostname: string): "ts" | "m3u8" {
+  const h = (hostname || "").toLowerCase();
+  if (h === "flipex.pro" || h.endsWith(".flipex.pro")) return "ts";
+  return "ts";
+}
 
 const MAX_SERVER_ENTRIES = 10_000;
 
