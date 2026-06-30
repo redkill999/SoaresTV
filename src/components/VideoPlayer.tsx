@@ -841,7 +841,9 @@ export function VideoPlayer({
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
+      triedUrls.add(normUrl(url));
       pushDbg(`attachHls url=${maskIptvUrl(url)}`);
+
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
