@@ -230,10 +230,12 @@ export function updateHostProfile(host: string, patch: Partial<HostProfile>): Ho
  * Detecta se um status HTTP é um sintoma de proxy quebrado pra esse host.
  * 502/503/504 indicam que o proxy não consegue alcançar o upstream — não
  * adianta insistir, vamos direto.
+ * 424 = o próprio proxy /api/stream rebaixa 5xx do upstream para Failed
+ * Dependency (evita disparar o runtime-error boundary). Tratamos igual.
  */
 export function isProxyDeadStatus(status: number | string | null | undefined): boolean {
   const s = Number(status);
-  return s === 502 || s === 503 || s === 504;
+  return s === 502 || s === 503 || s === 504 || s === 424;
 }
 
 export function rememberProxyDead(host: string, status: number | string): void {
