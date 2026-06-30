@@ -183,6 +183,8 @@ async function handle(request: Request) {
   let lastError: unknown = null;
   let lastStatus = 0;
   let lastPreview = "";
+  let lastContentType = "";
+  let lastNonPlayableReason = "";
   let authRejected = false;
   for (const ua of uaCandidates) {
     try {
@@ -196,19 +198,33 @@ async function handle(request: Request) {
       });
       clearTimeout(timeout);
       lastStatus = res.status;
+      lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
         authRejected = true;
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
-      const loopCt = res.headers.get("content-type") || "";
+      const loopCt = lastContentType;
       const loopIsPlaylist = /mpegurl/i.test(loopCt) || isPlaylistPath(upstreamUrl.pathname);
-      if (res.ok && !loopIsPlaylist && (isProbe || isLive || isProbablyText(loopCt))) {
+      if (!loopIsPlaylist && (isProbe || isLive || isProbablyText(loopCt) || !res.ok)) {
         const preview = await bodyPreview(res);
         if (preview) lastPreview = preview;
         if (AUTH_FAIL_RE.test(preview)) {
           authRejected = true;
           lastStatus = 401;
+          try { await res.body?.cancel(); } catch { /* noop */ }
+          continue;
+        }
+      }
+      if ((isProbe || isLive) && !res.ok) {
+        lastNonPlayableReason = reasonForStatus(res.status) || `Stream upstream HTTP ${res.status}`;
+        try { await res.body?.cancel(); } catch { /* noop */ }
+        continue;
+      }
+      if ((isProbe || isLive) && res.ok) {
+        const loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
+        if (!loopPlayable) {
+          lastNonPlayableReason = "Resposta upstream não parece vídeo.";
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -245,12 +261,13 @@ async function handle(request: Request) {
       return jsonData({
         ok: false,
         status: lastStatus || 424,
-        contentType: "",
+          contentType: lastContentType,
         finalUrlHost: upstreamUrl.host,
-        reason: reasonForStatus(lastStatus || 424) || msg,
+          reason: lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg,
+          bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
       });
     }
-    return jsonError(msg, 424);
+    return jsonError(lastNonPlayableReason || msg, lastStatus || 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
