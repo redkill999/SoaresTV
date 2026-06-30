@@ -192,11 +192,11 @@ async function probeNativeLiveStream(
 }
 
 function isHlsUrl(url: string): boolean {
-  return /\.m3u8(\?|$)/i.test(url);
+  return /\.m3u8([?#&]|$)/i.test(url);
 }
 
 function isTsUrl(url: string): boolean {
-  return /\.ts(\?|$)/i.test(url);
+  return /\.ts([?#&]|$)/i.test(url);
 }
 
 // Mantém a URL original como primeira tentativa e gera a variante alternativa
