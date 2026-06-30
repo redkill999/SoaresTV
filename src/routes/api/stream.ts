@@ -156,6 +156,7 @@ async function handle(request: Request) {
   }
 
   const isLive = url.searchParams.get("kind") === "live";
+  const isProbe = url.searchParams.get("probe") === "1";
   const playlistPath = isPlaylistPath(upstreamUrl.pathname);
   // LIVE strips Range completely; VOD/segment passes the client's Range through.
   const clientRange = isLive ? null : request.headers.get("range");
@@ -170,6 +171,7 @@ async function handle(request: Request) {
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
+    try { h.set("Connection", "keep-alive"); } catch { /* forbidden in some fetch runtimes */ }
     // Alguns painéis verificam Referer/Origin para liberar o stream.
     h.set("Referer", `${upstreamOrigin}/`);
     h.set("Origin", upstreamOrigin);
@@ -180,12 +182,14 @@ async function handle(request: Request) {
   let upstream: Response | null = null;
   let lastError: unknown = null;
   let lastStatus = 0;
+  let lastPreview = "";
+  let authRejected = false;
   for (const ua of uaCandidates) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
       const res = await fetch(upstreamUrl.toString(), {
-        method: request.method === "HEAD" ? "HEAD" : "GET",
+        method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
         headers: buildHeaders(ua),
         redirect: "follow",
         signal: controller.signal,
@@ -193,8 +197,21 @@ async function handle(request: Request) {
       clearTimeout(timeout);
       lastStatus = res.status;
       if (res.status === 401 || res.status === 403) {
+        authRejected = true;
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
+      }
+      const loopCt = res.headers.get("content-type") || "";
+      const loopIsPlaylist = /mpegurl/i.test(loopCt) || isPlaylistPath(upstreamUrl.pathname);
+      if (res.ok && !loopIsPlaylist && (isProbe || isLive || isProbablyText(loopCt))) {
+        const preview = await bodyPreview(res);
+        if (preview) lastPreview = preview;
+        if (AUTH_FAIL_RE.test(preview)) {
+          authRejected = true;
+          lastStatus = 401;
+          try { await res.body?.cancel(); } catch { /* noop */ }
+          continue;
+        }
       }
       upstream = res;
       break;
@@ -205,18 +222,41 @@ async function handle(request: Request) {
 
   if (!upstream) {
     const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
-    const msg = maskUrlForLog(rawMsg);
+    const msg = maskIptvUrl(rawMsg);
     // 401/403 explícito do upstream: propaga com mensagem clara.
-    if (lastStatus === 401 || lastStatus === 403) {
-      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", lastStatus);
+    if (authRejected || lastStatus === 401 || lastStatus === 403) {
+      const status = lastStatus === 403 ? 403 : 401;
+      if (isProbe) {
+        return jsonData({
+          ok: false,
+          status,
+          contentType: "",
+          finalUrlHost: upstreamUrl.host,
+          reason: AUTH_REASON,
+          bodyPreview: maskIptvUrl(lastPreview),
+        });
+      }
+      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
     }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
+    if (isProbe) {
+      return jsonData({
+        ok: false,
+        status: lastStatus || 424,
+        contentType: "",
+        finalUrlHost: upstreamUrl.host,
+        reason: reasonForStatus(lastStatus || 424) || msg,
+      });
+    }
     return jsonError(msg, 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
+  const finalUrlHost = (() => {
+    try { return new URL(upstream?.url || upstreamUrl.toString()).host; } catch { return upstreamUrl.host; }
+  })();
   const isPlaylist =
     /mpegurl/i.test(ct) ||
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
@@ -227,23 +267,49 @@ async function handle(request: Request) {
   // recusa ("UnauthorizedUser") em vez de 401. Sem isso, esse texto é
   // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
   // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
-  const looksTextual = /^(text\/|application\/(json|xml|xhtml))/i.test(ct);
-  if (
-    upstream.ok &&
-    !isPlaylist &&
-    looksTextual &&
-    request.method !== "HEAD"
-  ) {
+  const looksTextual = isProbablyText(ct);
+  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || isLive || looksTextual || !upstream.ok);
+  let preview = lastPreview;
+  if (needsPreview) {
     try {
-      const bodyText = await upstream.clone().text();
-      if (AUTH_FAIL_RE.test(bodyText)) {
+      if (!preview) preview = await bodyPreview(upstream);
+      if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
-        return jsonError(
-          "Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.",
-          401,
-        );
+        if (isProbe) {
+          return jsonData({
+            ok: false,
+            status: 401,
+            contentType: ct,
+            finalUrlHost,
+            reason: AUTH_REASON,
+            bodyPreview: maskIptvUrl(preview),
+          });
+        }
+        return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
       }
     } catch { /* noop */ }
+  }
+
+  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname)) && !(looksTextual && !isPlaylist);
+  if (isProbe) {
+    return jsonData({
+      ok: playable,
+      status: upstream.status,
+      contentType: ct,
+      finalUrlHost,
+      reason: playable ? undefined : reasonForStatus(upstream.status) || "Resposta upstream não parece vídeo.",
+      bodyPreview: preview ? maskIptvUrl(preview) : undefined,
+    });
+  }
+
+  if (isLive && !upstream.ok) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return jsonError(reasonForStatus(upstream.status) || `Stream upstream HTTP ${upstream.status}`, upstream.status);
+  }
+
+  if (isLive && upstream.ok && !isPlaylist && looksTextual) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return jsonError("Resposta upstream não parece vídeo.", 424);
   }
 
   const respHeaders = new Headers(CORS);
