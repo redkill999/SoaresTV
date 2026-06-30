@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import { PictureInPicture2, PictureInPicture } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
-import { getHostProfile, hostOf, rememberHlsUnsupported } from "@/lib/host-profile";
+import { getHostProfile, hostOf, rememberHlsUnsupported, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
@@ -625,7 +625,11 @@ export function VideoPlayer({
         })
       : liveBypassProxy
         ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
-        : directCandidates.map((url) => proxiedX(url, kind));
+        : directCandidates.flatMap((url) => Array.from(new Set([proxiedX(url, kind), url])));
+        // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
+        //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
+        //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
+        //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
@@ -796,6 +800,30 @@ export function VideoPlayer({
       }
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       triedUrls.add(normUrl(url));
+      const isProxied = /^\/api\/stream\?/i.test(url);
+      // ETAPA 8.6: LIVE caiu no candidato direto (fora do proxy) — útil pra
+      // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
+      if (isLive && !isProxied) {
+        pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
+        // Aprendizado: chegamos a um candidato direto LIVE, logo todos os
+        // proxiados anteriores falharam (404/5xx). Memoriza pra próxima sessão
+        // já priorizar direto pra esse host e não desperdiçar tentativas.
+        try {
+          const h = hostOf(url);
+          if (h && !getHostProfile(h).bypassProxyForLive) {
+            updateHostProfile(h, { bypassProxyForLive: true });
+            pushDbg(`ETAPA 8.6 host ${h} marcado bypassProxyForLive=true`);
+          }
+        } catch { /* noop */ }
+        // Mixed content: página https + stream http é silenciosamente bloqueada
+        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
+        // o tryNextVod normalmente.
+        try {
+          if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
+            pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
+          }
+        } catch { /* noop */ }
+      }
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
 

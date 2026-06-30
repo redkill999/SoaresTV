@@ -86,9 +86,12 @@ const HOST_PRESETS: Record<string, HostProfile> = {
   // flipex.pro: painel só serve LIVE em .ts. A variante .m3u8 retorna 404 em
   // todos os UAs e o hls.js gasta retries antes de desistir. Pula a conversão
   // HLS e vai direto pro mpegts.js no caminho web.
+  // flipex.pro também bloqueia o IP do datacenter do proxy /api/stream para
+  // LIVE (todas as variantes retornam 404). Pulamos o proxy direto.
   "flipex.pro": {
     disableHlsConversion: true,
     preferTs: true,
+    bypassProxyForLive: true,
   },
 };
 

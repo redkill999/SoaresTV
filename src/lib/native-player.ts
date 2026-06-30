@@ -108,6 +108,17 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       hasActivePlayer = false;
     }
 
+    // FIX D (alinhamento da barra de controles): trava landscape ANTES do
+    // initPlayer. Sem isso, a Activity reconfigura dimensões logo após o
+    // PlayerView ser desenhado e o overlay nativo dos controles fica
+    // deslocado até o primeiro toque (bug conhecido do capacitor-video-player).
+    try {
+      const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+      await ScreenOrientation.lock({ orientation: "landscape" });
+      // Frame extra para o WindowManager terminar o relayout antes do initPlayer.
+      await new Promise<void>((r) => setTimeout(r, 80));
+    } catch { /* não-native ou plugin ausente: segue normal */ }
+
     const headers: Record<string, string> = {};
     if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
 
@@ -179,6 +190,20 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
           }
           if (ev === "jeepCapVideoPlayerExit" || ev === "jeepCapVideoPlayerEnded") {
             hasActivePlayer = false;
+          }
+          // FIX D: ao receber Ready, reaplicar displayMode após pequeno delay
+          // força o plugin a redesenhar os controles nativos com as dimensões
+          // finais já estabilizadas — corrige a barra de progresso deslocada
+          // que aparecia no primeiro toque.
+          if (ev === "jeepCapVideoPlayerReady") {
+            setTimeout(() => {
+              try {
+                const m = mod as unknown as {
+                  setDisplayMode?: (a: { mode: string; playerId: string }) => unknown;
+                };
+                m.setDisplayMode?.({ mode: "all", playerId: PLAYER_ID });
+              } catch { /* método pode não existir nesta versão do plugin */ }
+            }, 200);
           }
           evCb?.(ev, data);
         });
