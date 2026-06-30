@@ -1,7 +1,7 @@
 // Single-user local storage helpers
 
 // In-memory store for floating mini player (não persistir em localStorage).
-export type MiniPlayerState = { streamId: string; name: string; logo?: string } | null;
+export type MiniPlayerState = { streamId: string; name: string; logo?: string; src?: string } | null;
 let _miniPlayer: MiniPlayerState = null;
 const _miniListeners = new Set<() => void>();
 export const miniPlayerStore = {
