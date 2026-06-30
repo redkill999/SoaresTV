@@ -627,6 +627,16 @@ export function VideoPlayer({
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
     const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
+    // LIVE/Web: quando o host tem httpsPort no perfil (ex.: flipex.pro:25463)
+    // E a página está em HTTPS, prepende candidatos `https://host:port/...` que
+    // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
+    // bloquear IPs do Cloudflare Worker.
+    const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
+    const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
+      ? directCandidates
+          .map((u) => httpsVariantWithPort(u, liveHostProfile.httpsPort!))
+          .filter((u): u is string => !!u)
+      : [];
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -642,9 +652,14 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : liveBypassProxy
-        ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
-        : directCandidates.flatMap((url) => Array.from(new Set([proxiedX(url, kind), url])));
+      : Array.from(new Set([
+          // 1º) HTTPS direto na porta do provedor (sem proxy, sem mixed-content)
+          ...httpsPortCandidates,
+          // 2º) Demais candidatos LIVE
+          ...(liveBypassProxy
+            ? directCandidates.flatMap((url) => [url, proxiedX(url, kind)])
+            : directCandidates.flatMap((url) => [proxiedX(url, kind), url])),
+        ]));
         // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
         //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
