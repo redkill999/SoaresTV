@@ -779,15 +779,26 @@ export function VideoPlayer({
       }
       destroyTsPlayer();
       triedDirect = true;
-      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
-      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
-      const decodedUrl = (() => {
-        try {
-          return decodeURIComponent(url);
-        } catch {
-          return url;
+      // Pula candidates já tentados (HLS pré-flight ou loop após fatal).
+      while (vodIdx < playbackCandidates.length) {
+        const c = playbackCandidates[vodIdx];
+        if (c && triedUrls.has(normUrl(c))) {
+          pushDbg(`SKIP candidate idx=${vodIdx} já tentado`);
+          vodIdx += 1;
+          continue;
         }
-      })();
+        break;
+      }
+      if (vodIdx >= playbackCandidates.length) {
+        pushDbg(`ETAPA 10 FIM sem candidatos restantes`);
+        setError(isLive ? (lastLiveError ?? "Não foi possível reproduzir este canal.") : "Não foi possível reproduzir esta mídia.");
+        return;
+      }
+      const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
+      triedUrls.add(normUrl(url));
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
+      const decodedUrl = normUrl(url);
+
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
         return;
