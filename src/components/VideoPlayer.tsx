@@ -563,14 +563,19 @@ export function VideoPlayer({
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
     const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const sourceIsHls = isHlsUrl(workingSrc);
+    const sourceIsTs = isTsUrl(workingSrc);
+    const sourceFormat = sourceIsHls ? "hls" : sourceIsTs ? "ts" : "auto";
     // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
+    // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
+    // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      (isLive && !!liveHostProfile.disableHlsConversion) ||
+      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
