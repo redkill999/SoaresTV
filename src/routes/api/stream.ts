@@ -315,7 +315,7 @@ async function handle(request: Request) {
       contentType: ct,
       finalUrlHost,
       reason: playable ? undefined : reasonForStatus(upstream.status) || "Resposta upstream não parece vídeo.",
-      bodyPreview: preview ? maskIptvUrl(preview) : undefined,
+      bodyPreview: !playable && preview ? maskIptvUrl(preview) : undefined,
     });
   }
 
