@@ -212,6 +212,9 @@ function liveDirectCandidates(src: string): string[] {
   if (isHlsUrl(src)) {
     add(src.replace(/\.m3u8(\?|$)/i, ".ts$1"));
   } else if (isTsUrl(src)) {
+    // Web Desktop não reproduz MPEG-TS direto no <video>, e mpegts.js pode
+    // falhar em codecs AAC/HE-AAC que o HLS do próprio provedor toca. Mantemos
+    // a URL original, mas adicionamos a playlist HLS logo em seguida.
     add(src.replace(/\.ts(\?|$)/i, ".m3u8$1"));
   } else {
     // M3U Xtream pode vir sem extensão (/usuario/senha/id). Mantém a URL real
@@ -227,8 +230,6 @@ function liveDirectCandidates(src: string): string[] {
         // e sim /live/usuario/senha/id.ts. Mantém a URL curta original como
         // primeira tentativa e adiciona as variantes Xtream reais depois.
         if (parts.length === 3 && /^\d+$/.test(parts[2])) {
-          // Web Desktop lida melhor com HLS; TS segue como fallback, sem afetar
-          // a URL original que continua sempre em primeiro lugar.
           add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.m3u8${tail}`);
           add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.ts${tail}`);
         } else {
@@ -677,6 +678,13 @@ export function VideoPlayer({
           .map((u) => httpsVariantWithPort(u, liveHostProfile.httpsPort!))
           .filter((u): u is string => !!u)
       : [];
+    const orderLiveCandidates = (candidates: string[]) => {
+      if (!isLive || liveHostProfile.preferTs) return candidates;
+      // Em Web Desktop, prioriza HLS para LIVE quando disponível. A URL original
+      // continua preservada na lista, só não bloqueia o caminho funcional.
+      return [...candidates].sort((a, b) => Number(isHlsUrl(normUrl(b))) - Number(isHlsUrl(normUrl(a))));
+    };
+
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -692,12 +700,12 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : Array.from(new Set([
+      : orderLiveCandidates(Array.from(new Set([
           // 1º) HTTPS direto na porta do provedor (sem proxy, sem mixed-content)
           ...httpsPortCandidates,
           // 2º) Demais candidatos LIVE
           ...directCandidates.flatMap(liveCandidatePair),
-        ]));
+        ])));
         // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
         //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
@@ -1230,17 +1238,17 @@ export function VideoPlayer({
             ? hlsCandidate
             : proxiedX(hlsCandidate, kind)
         : null;
-      if (native && forceDirect) {
+       if (native && forceDirect) {
         // APK/TV com transporte direto forçado: tenta direto primeiro e mantém
         // proxy como último recurso. No modo automático usamos proxy primeiro
         // para evitar bloqueio de CORS/mixed-content no WebView do APK.
-        playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.flatMap((url) => {
+        playbackCandidates.splice(0, playbackCandidates.length, ...orderLiveCandidates(directCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
           const list = [url, secure, proxiedX(url, kind)];
           return Array.from(new Set(list.filter(Boolean) as string[]));
-        }));
+        })));
       } else if (native && forceProxy) {
-        playbackCandidates.splice(0, playbackCandidates.length, ...directCandidates.map((u) => proxiedX(u, kind)));
+        playbackCandidates.splice(0, playbackCandidates.length, ...orderLiveCandidates(directCandidates.map((u) => proxiedX(u, kind))));
       }
       if (hlsProxied) attachHls(hlsProxied);
       else playDirect();
