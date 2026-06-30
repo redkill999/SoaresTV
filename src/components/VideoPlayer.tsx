@@ -219,10 +219,21 @@ function liveDirectCandidates(src: string): string[] {
     try {
       const parsed = new URL(src);
       if (!/\.[a-z0-9]+$/i.test(parsed.pathname)) {
-        const base = src.replace(/([?#].*)$/, "");
-        const tail = src.slice(base.length);
-        add(`${base}.ts${tail}`);
-        add(`${base}.m3u8${tail}`);
+        const parts = parsed.pathname.split("/").filter(Boolean);
+        const tail = `${parsed.search}${parsed.hash}`;
+        // Xtream output=ts frequentemente vem no formato curto
+        //   /usuario/senha/id
+        // O fallback correto NÃO é /usuario/senha/id.ts (404 em flipex.pro),
+        // e sim /live/usuario/senha/id.ts. Mantém a URL curta original como
+        // primeira tentativa e adiciona as variantes Xtream reais depois.
+        if (parts.length === 3 && /^\d+$/.test(parts[2])) {
+          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.ts${tail}`);
+          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.m3u8${tail}`);
+        } else {
+          const base = src.replace(/([?#].*)$/, "");
+          add(`${base}.ts${tail}`);
+          add(`${base}.m3u8${tail}`);
+        }
       }
     } catch {
       // mantém apenas a URL original
@@ -883,7 +894,11 @@ export function VideoPlayer({
         attachHls(url);
         return;
       }
-      if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
+      // LIVE MPEG-TS de M3U pode não ter extensão visível (ex.: /user/pass/id)
+      // ou estar dentro do /api/stream?u=... sem .ts no path. Nesses casos o
+      // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
+      // precisa passar pelo mpegts.js. VOD continua intocado.
+      if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
