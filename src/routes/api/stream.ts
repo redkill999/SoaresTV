@@ -235,7 +235,7 @@ async function handle(request: Request) {
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
-        if (res.ok && sniff.binaryLike && /\.ts(\?|$)/i.test(upstreamUrl.pathname)) {
+        if (res.ok && sniff.binaryLike && /\.ts$/i.test(upstreamUrl.pathname)) {
           loopPlayable = true;
         }
       }
