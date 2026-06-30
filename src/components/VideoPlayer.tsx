@@ -229,6 +229,25 @@ function httpsVariant(url: string): string | null {
   }
 }
 
+/**
+ * Reescreve uma URL HTTP para HTTPS na porta oficial do provedor (vinda de
+ * server_info.https_port). Usado APENAS em LIVE quando o host tem `httpsPort`
+ * no perfil — permite o navegador conectar direto sem proxy nem mixed-content.
+ */
+function httpsVariantWithPort(url: string, httpsPort: number): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" && Number(parsed.port || 443) === httpsPort) {
+      return parsed.toString();
+    }
+    parsed.protocol = "https:";
+    parsed.port = String(httpsPort);
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
 //   .ts           → "ts"    (mpegts.js no web, ExoPlayer nativo no APK)
@@ -608,6 +627,16 @@ export function VideoPlayer({
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
     const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
+    // LIVE/Web: quando o host tem httpsPort no perfil (ex.: flipex.pro:25463)
+    // E a página está em HTTPS, prepende candidatos `https://host:port/...` que
+    // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
+    // bloquear IPs do Cloudflare Worker.
+    const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
+    const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
+      ? directCandidates
+          .map((u) => httpsVariantWithPort(u, liveHostProfile.httpsPort!))
+          .filter((u): u is string => !!u)
+      : [];
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = httpsVariant(url);
@@ -623,16 +652,21 @@ export function VideoPlayer({
           }
           return Array.from(new Set(candidates.filter(Boolean) as string[]));
         })
-      : liveBypassProxy
-        ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
-        : directCandidates.flatMap((url) => Array.from(new Set([proxiedX(url, kind), url])));
+      : Array.from(new Set([
+          // 1º) HTTPS direto na porta do provedor (sem proxy, sem mixed-content)
+          ...httpsPortCandidates,
+          // 2º) Demais candidatos LIVE
+          ...(liveBypassProxy
+            ? directCandidates.flatMap((url) => [url, proxiedX(url, kind)])
+            : directCandidates.flatMap((url) => [proxiedX(url, kind), url])),
+        ]));
         // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
         //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
-    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
+    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 

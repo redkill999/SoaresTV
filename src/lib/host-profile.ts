@@ -42,6 +42,14 @@ export type HostProfile = {
   preferTs?: boolean;
   /** APENAS LIVE/APK: abrir direto no ExoPlayer nativo para evitar WebView/proxy. */
   forceNativeForLive?: boolean;
+  /**
+   * APENAS LIVE/Web: porta HTTPS oficial do provedor (server_info.https_port do
+   * Xtream). Quando definida E a página está em HTTPS, o VideoPlayer prepende
+   * uma variante `https://<host>:<httpsPort>/<path>` como primeiro candidato,
+   * evitando o proxy /api/stream (cujo IP frequentemente é bloqueado pelo CDN do
+   * provedor) e ao mesmo tempo respeitando a política de mixed-content do browser.
+   */
+  httpsPort?: number;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
 };
@@ -92,6 +100,10 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
     bypassProxyForLive: true,
+    // server_info.https_port retornado pelo player_api do flipex.pro.
+    // Quando o navegador HTTPS consegue abrir essa porta, joga LIVE sem
+    // depender do proxy /api/stream (cujo IP é bloqueado pelo CDN deles).
+    httpsPort: 25463,
   },
 };
 
