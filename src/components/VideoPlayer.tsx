@@ -938,8 +938,14 @@ export function VideoPlayer({
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (isLive) {
-                if (netRetries++ >= MAX_NET_RETRIES) {
-                  if (nativeDirect && hlsCandidate && currentHlsUrl === hlsCandidate) {
+                // Fail-fast quando upstream/proxy devolve 4xx (404/424/403...):
+                // a variante .m3u8 não existe ou o proxy não conseguiu alcançar
+                // o servidor. Sem retry — caímos direto pro fallback (.ts via
+                // mpegts.js), que é o que a maioria dos painéis Xtream serve.
+                const httpCode = (data as { response?: { code?: number } }).response?.code ?? 0;
+                const hardFail = httpCode >= 400 && httpCode < 500;
+                if (hardFail || netRetries++ >= MAX_NET_RETRIES) {
+                  if (!hardFail && nativeDirect && hlsCandidate && currentHlsUrl === hlsCandidate) {
                     detachStallListeners?.();
                     hls?.destroy();
                     hls = null;
