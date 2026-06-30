@@ -174,8 +174,12 @@ async function handle(request: Request) {
   respHeaders.set("Content-Type", badCt ? contentTypeForPath(upstreamUrl.pathname) : ct);
   if (!isLive && !respHeaders.has("accept-ranges")) respHeaders.set("Accept-Ranges", "bytes");
 
+  // Downgrade upstream 5xx → 424 so the runtime-error boundary doesn't flag
+  // a recoverable proxy failure as a blank-screen crash. Player walks to the
+  // next candidate on any non-OK status either way.
+  const outStatus = upstream.status >= 500 ? 424 : upstream.status;
   return new Response(request.method === "HEAD" ? null : upstream.body, {
-    status: upstream.status,
+    status: outStatus,
     headers: respHeaders,
   });
 }
