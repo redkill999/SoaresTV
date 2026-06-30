@@ -634,8 +634,9 @@ async function nativeLoadM3U(
       !u.pathname.toLowerCase().endsWith(".m3u8")
     ) {
       const scheme = u.protocol === "https:" ? "https" : "http";
+      const outputs = preferredM3UOutput(u.hostname) === "ts" ? ["ts", "m3u8"] : ["m3u8", "ts"];
       for (const port of COMMON_XTREAM_PORTS) {
-        for (const output of ["m3u8", "ts"]) {
+        for (const output of outputs) {
           const out = new URL(`${scheme}://${u.hostname}${port ? `:${port}` : ""}/get.php`);
           out.searchParams.set("username", user);
           out.searchParams.set("password", pass);
@@ -648,7 +649,7 @@ async function nativeLoadM3U(
       // se veio em HTTP, não faz upgrade automático para HTTPS.
       if (u.protocol === "https:") {
         for (const port of COMMON_XTREAM_PORTS) {
-          for (const output of ["m3u8", "ts"]) {
+          for (const output of outputs) {
             const out = new URL(`http://${u.hostname}${port ? `:${port}` : ""}/get.php`);
             out.searchParams.set("username", user);
             out.searchParams.set("password", pass);
