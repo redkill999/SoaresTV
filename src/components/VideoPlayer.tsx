@@ -678,10 +678,18 @@ export function VideoPlayer({
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
       if (!isLive || liveHostProfile.preferTs) return candidates;
-      // Em Web Desktop, prioriza HLS para LIVE quando disponível. A URL original
-      // continua preservada na lista, só não bloqueia o caminho funcional.
+      // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
+      // continua preservada como fallback, mas não deve vir antes do proxy:
+      // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
+      // antes de chegar na variante funcional /api/stream m3u8.
       const decode = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
-      return [...candidates].sort((a, b) => Number(isHlsUrl(decode(b))) - Number(isHlsUrl(decode(a))));
+      const rank = (u: string) => {
+        const d = decode(u);
+        const hlsRank = isHlsUrl(d) ? 0 : 1;
+        const proxyRank = /^\/api\/stream\?/i.test(u) ? 0 : 1;
+        return hlsRank * 10 + proxyRank;
+      };
+      return [...candidates].sort((a, b) => rank(a) - rank(b));
     };
 
     const playbackCandidates = isVod
