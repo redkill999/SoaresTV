@@ -682,7 +682,8 @@ export function VideoPlayer({
       if (!isLive || liveHostProfile.preferTs) return candidates;
       // Em Web Desktop, prioriza HLS para LIVE quando disponível. A URL original
       // continua preservada na lista, só não bloqueia o caminho funcional.
-      return [...candidates].sort((a, b) => Number(isHlsUrl(normUrl(b))) - Number(isHlsUrl(normUrl(a))));
+      const decode = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+      return [...candidates].sort((a, b) => Number(isHlsUrl(decode(b))) - Number(isHlsUrl(decode(a))));
     };
 
     const playbackCandidates = isVod
