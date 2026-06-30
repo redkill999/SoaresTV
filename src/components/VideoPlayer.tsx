@@ -191,15 +191,28 @@ async function probeNativeLiveStream(
   }
 }
 
+function isHlsUrl(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url);
+}
+
+function isTsUrl(url: string): boolean {
+  return /\.ts(\?|$)/i.test(url);
+}
+
+// Mantém a URL original como primeira tentativa e gera a variante alternativa
+// (.m3u8 ↔ .ts) apenas como fallback. Crítico: se o src veio .m3u8 da M3U,
+// NUNCA jogar o .m3u8 fora — disableHlsConversion só bloqueia inventar .m3u8
+// a partir de um .ts, jamais o contrário.
 function liveDirectCandidates(src: string): string[] {
   const out: string[] = [];
   const add = (url: string | null) => {
     if (url && !out.includes(url)) out.push(url);
   };
-  if (/\.m3u8(\?|$)/i.test(src)) {
+  add(src);
+  if (isHlsUrl(src)) {
     add(src.replace(/\.m3u8(\?|$)/i, ".ts$1"));
-  } else {
-    add(src);
+  } else if (isTsUrl(src)) {
+    add(src.replace(/\.ts(\?|$)/i, ".m3u8$1"));
   }
   return out;
 }
