@@ -800,6 +800,20 @@ export function VideoPlayer({
       }
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       triedUrls.add(normUrl(url));
+      const isProxied = /^\/api\/stream\?/i.test(url);
+      // ETAPA 8.6: LIVE caiu no candidato direto (fora do proxy) — útil pra
+      // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
+      if (isLive && !isProxied) {
+        pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
+        // Mixed content: página https + stream http é silenciosamente bloqueada
+        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
+        // o tryNextVod normalmente.
+        try {
+          if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
+            pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
+          }
+        } catch { /* noop */ }
+      }
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
 
