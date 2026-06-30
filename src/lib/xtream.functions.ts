@@ -624,15 +624,43 @@ export const fetchM3U = createServerFn({ method: "POST" })
       const candidates = buildM3UCandidateUrls(data.url, data.username, data.password);
       const explicitM3U = isExplicitM3UInput(data.url);
 
-      // If the user pasted a concrete M3U/get.php URL, parse that playlist first:
-      // it contains the provider's real playback host/port. Falling back to
-      // player_api JSON can build wrong stream URLs for panels that separate API
-      // and stream hosts.
-      if (explicitM3U) {
-        let bestEntries: M3UEntryDTO[] = [];
-        let bestSource = "";
-        let lastError = "";
+      // Quando temos credenciais Xtream (mesmo numa URL explícita /get.php),
+      // tentamos PRIMEIRO o player_api.php — JSON compacto que não estoura
+      // o limite de memória do worker SSR como a M3U bruta de 50–100 MB faz.
+      // Só caímos pro download da M3U se o JSON não retornar nada.
+      if (access) {
+        try {
+          const apiUrl = (action: string) => {
+            const u = new URL(`${access.origin}/player_api.php`);
+            u.searchParams.set("username", access.username);
+            u.searchParams.set("password", access.password);
+            u.searchParams.set("action", action);
+            return u.toString();
+          };
 
+          const [liveCats, vodCats, seriesCats, liveData, vodData, seriesData] = await Promise.all([
+            loadCategories(access, "get_live_categories"),
+            loadCategories(access, "get_vod_categories"),
+            loadCategories(access, "get_series_categories"),
+            fetchJson(apiUrl("get_live_streams")),
+            fetchJson(apiUrl("get_vod_streams")),
+            fetchJson(apiUrl("get_series")),
+          ]);
+
+          const liveEntries = mapXtreamLiveStreams(liveData, access, liveCats);
+          const vodEntries = mapXtreamVodStreams(vodData, access, vodCats);
+          const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
+
+          const entries = [...liveEntries, ...vodEntries, ...seriesEntries];
+          if (entries.length) return { entries };
+        } catch (e) {
+          console.warn("[fetchM3U] player_api falhou, tentando M3U bruta:", e);
+        }
+      }
+
+      // Fallback: baixar a M3U bruta (apenas se player_api falhou ou não há creds).
+      if (explicitM3U) {
+        let lastError = "";
         for (const candidate of candidates) {
           const fetched = await fetchText(candidate);
           if (!fetched.text.includes("#EXTINF")) {
@@ -640,63 +668,13 @@ export const fetchM3U = createServerFn({ method: "POST" })
             continue;
           }
           const entries = parseM3UText(fetched.text);
-          if (!entries.length) continue;
-
-          const valid = await validateM3UEntries(entries);
-          if (valid) {
-            bestEntries = entries;
-            bestSource = candidate;
-            break;
-          }
-          lastError = `Lista carregou, mas streams LIVE testados retornaram erro. Candidate rejeitado: ${candidate.replace(/username=[^&]+/i, "username=**USER**").replace(/password=[^&]+/i, "password=**PASS**")}`;
+          if (entries.length) return { entries, sourceUrl: candidate };
         }
-
-        if (bestEntries.length) {
-          if (access) {
-            const [seriesCats, seriesData] = await Promise.all([
-              loadCategories(access, "get_series_categories"),
-              fetchJson(`${access.origin}/player_api.php?username=${encodeURIComponent(access.username)}&password=${encodeURIComponent(access.password)}&action=get_series`),
-            ]);
-            const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
-            return { entries: mergeEntries(bestEntries, seriesEntries), sourceUrl: bestSource };
-          }
-          return { entries: bestEntries, sourceUrl: bestSource };
-        }
-
-        if (lastError) {
-          // Cai para o ramo de fallback (Xtream JSON / candidates puros).
-          console.warn("[fetchM3U] explicitM3U rejeitado:", lastError);
-        }
+        if (lastError) console.warn("[fetchM3U] explicitM3U fallback:", lastError);
       }
 
-      // For bare Xtream credentials, prefer player_api.php (compact JSON) over
-      // get.php (huge M3U dump that can exceed Worker memory/time limits).
-      // Pull live + VOD + series in parallel so the playlist UI sees all three.
-      if (access && !explicitM3U) {
-        const apiUrl = (action: string) => {
-          const u = new URL(`${access.origin}/player_api.php`);
-          u.searchParams.set("username", access.username);
-          u.searchParams.set("password", access.password);
-          u.searchParams.set("action", action);
-          return u.toString();
-        };
+      // (player_api já foi tentado acima quando há credenciais)
 
-        const [liveCats, vodCats, seriesCats, liveData, vodData, seriesData] = await Promise.all([
-          loadCategories(access, "get_live_categories"),
-          loadCategories(access, "get_vod_categories"),
-          loadCategories(access, "get_series_categories"),
-          fetchJson(apiUrl("get_live_streams")),
-          fetchJson(apiUrl("get_vod_streams")),
-          fetchJson(apiUrl("get_series")),
-        ]);
-
-        const liveEntries = mapXtreamLiveStreams(liveData, access, liveCats);
-        const vodEntries = mapXtreamVodStreams(vodData, access, vodCats);
-        const seriesEntries = await mapXtreamSeries(seriesData, access, seriesCats);
-
-        const entries = [...liveEntries, ...vodEntries, ...seriesEntries];
-        if (entries.length) return { entries };
-      }
 
       let lastError = "";
       let lastSnippet = "";
