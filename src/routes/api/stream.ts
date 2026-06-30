@@ -267,7 +267,7 @@ async function handle(request: Request) {
           bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
       });
     }
-    return jsonError(lastNonPlayableReason || msg, lastStatus || 424);
+    return jsonError(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
