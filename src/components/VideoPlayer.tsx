@@ -59,10 +59,10 @@ async function unlockOrientation() {
   }
 }
 
-// Xtream live URLs come as `.ts` (raw MPEG-TS), which browsers cannot decode
-// natively. Most providers also expose an HLS variant at the same path with
-// `.m3u8`. We try HLS first and fall back to the original on error. Everything
-// flows through our /api/stream proxy to dodge CORS / mixed-content.
+// Xtream live URLs often come as `.ts` (raw MPEG-TS). Some providers expose an
+// HLS variant, but hosts with disableHlsConversion/preferTs must keep the
+// original `.ts` first. Everything flows through /api/stream on Web Desktop to
+// avoid CORS / mixed-content, unless native transport is explicitly selected.
 function toHlsCandidate(src: string, kind?: "live" | "vod"): string | null {
   if (kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(src) || /\/series\/[^/]+\/[^/]+\//i.test(src)) return null;
   if (/\.m3u8(\?|$)/i.test(src)) return src;
