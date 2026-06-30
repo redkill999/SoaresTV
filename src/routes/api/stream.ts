@@ -106,12 +106,16 @@ async function handle(request: Request) {
   const forcedUA = url.searchParams.get("ua");
   const uaCandidates = forcedUA ? Array.from(new Set([forcedUA, ...UA_LIST])) : UA_LIST;
 
+  const upstreamOrigin = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
   const buildHeaders = (ua: string) => {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
+    // Alguns painéis verificam Referer/Origin para liberar o stream.
+    h.set("Referer", `${upstreamOrigin}/`);
+    h.set("Origin", upstreamOrigin);
     if (clientRange) h.set("Range", clientRange);
     return h;
   };
