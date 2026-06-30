@@ -100,6 +100,10 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
     bypassProxyForLive: true,
+    // server_info.https_port retornado pelo player_api do flipex.pro.
+    // Quando o navegador HTTPS consegue abrir essa porta, joga LIVE sem
+    // depender do proxy /api/stream (cujo IP é bloqueado pelo CDN deles).
+    httpsPort: 25463,
   },
 };
 
