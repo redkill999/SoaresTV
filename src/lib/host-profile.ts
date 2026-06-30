@@ -96,10 +96,6 @@ const HOST_PRESETS: Record<string, HostProfile> = {
   // deve ser o caminho principal via proxy same-origin (CORS/mixed-content safe).
   "flipex.pro": {
     bypassProxyForLive: true,
-    // server_info.https_port retornado pelo player_api do flipex.pro.
-    // Quando o navegador HTTPS consegue abrir essa porta, joga LIVE sem
-    // depender do proxy /api/stream (cujo IP é bloqueado pelo CDN deles).
-    httpsPort: 25463,
   },
 };
 
@@ -196,9 +192,9 @@ if (memory["athra.sbs"]) {
 // Limpeza pontual: versões anteriores marcaram flipex.pro como TS-only. Teste
 // real mostrou que canais ativos desse host tocam via HLS; manter essas flags
 // persistidas faz o Web Desktop cair em MPEG-TS antes da playlist funcional.
-if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs) {
+if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs || memory["flipex.pro"]?.httpsPort) {
   const cur = memory["flipex.pro"];
-  const { disableHlsConversion: _dh, preferTs: _pt, ...rest } = cur;
+  const { disableHlsConversion: _dh, preferTs: _pt, httpsPort: _hp, ...rest } = cur;
   memory["flipex.pro"] = rest;
   writeStorage(memory);
   console.log("[HOST PROFILE] limpou flags TS-only quebradas de flipex.pro");
