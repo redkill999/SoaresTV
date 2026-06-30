@@ -16,6 +16,18 @@ import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginBgWebAsset from "@/assets/login-web.png.asset.json";
 
+function buildLoginPlaylistUrl(server: string, username: string, password: string): string {
+  const base = server.replace(/\/+$/, "");
+  const u = new URL(`${base}/get.php`);
+  u.searchParams.set("username", username);
+  u.searchParams.set("password", password);
+  u.searchParams.set("type", "m3u_plus");
+  // Default global = "ts": evita que painéis sem variante HLS retornem 404
+  // em todos os canais LIVE. O player faz fallback .ts <-> .m3u8 quando preciso.
+  u.searchParams.set("output", "ts");
+  return u.toString();
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -110,9 +122,7 @@ function LoginPage() {
         normalizedServer = normalizeServer(creds.server);
       } catch (loginErr) {
         const native = await isNativeApp();
-        const playlistProbeUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
-          username,
-        )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+        const playlistProbeUrl = buildLoginPlaylistUrl(normalizedServer, username, password);
         let m3uTimedOut = false;
         try {
           entries = await withTimeout(
@@ -145,9 +155,7 @@ function LoginPage() {
         }
       }
 
-      const playlistUrl = `${normalizedServer}/get.php?username=${encodeURIComponent(
-        username,
-      )}&password=${encodeURIComponent(password)}&type=m3u_plus&output=m3u8`;
+      const playlistUrl = buildLoginPlaylistUrl(normalizedServer, username, password);
       const listName = `Xtream — ${new URL(normalizedServer).hostname}`;
       const savedList = { name: listName, url: playlistUrl, username, password, mode: "xtream" as const };
 
