@@ -167,7 +167,7 @@ async function probeNativeLiveStream(
         const contentType = headers["content-type"] ?? headers["Content-Type"] ?? "-";
         const contentLength = headers["content-length"] ?? headers["Content-Length"] ?? "-";
         const bodyPreview =
-          typeof res.data === "string" ? res.data.slice(0, 80).replace(/\s+/g, " ") : "";
+          typeof res.data === "string" ? maskIptvUrl(res.data.slice(0, 80).replace(/\s+/g, " ")) : "";
         onLine(
           `ETAPA 4.${idx + 1} UA=${label} status=${res.status ?? "?"} ct=${contentType} len=${contentLength} ms=${Date.now() - started}${bodyPreview ? ` body="${bodyPreview}"` : ""}`,
         );
