@@ -294,9 +294,7 @@ function buildM3UUrl(raw: string, username?: string, password?: string): string 
     if (user) out.searchParams.set("username", user);
     if (pass) out.searchParams.set("password", pass);
     out.searchParams.set("type", "m3u_plus");
-    // Browser playback needs HLS. Xtream accepts output=m3u8 and returns
-    // stream URLs with the provider's real playback host/port.
-    out.searchParams.set("output", "m3u8");
+    out.searchParams.set("output", preferredM3UOutput(u.hostname));
     return out.toString();
   }
 
@@ -305,7 +303,10 @@ function buildM3UUrl(raw: string, username?: string, password?: string): string 
     if (username && !u.searchParams.get("username")) u.searchParams.set("username", username);
     if (password && !u.searchParams.get("password")) u.searchParams.set("password", password);
     if (!u.searchParams.get("type")) u.searchParams.set("type", "m3u_plus");
-    u.searchParams.set("output", "m3u8");
+    // Preserva output explícito do usuário; só define quando ausente.
+    if (!u.searchParams.get("output")) {
+      u.searchParams.set("output", preferredM3UOutput(u.hostname));
+    }
     return u.toString();
   }
 
