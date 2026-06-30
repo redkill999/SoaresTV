@@ -191,15 +191,28 @@ async function probeNativeLiveStream(
   }
 }
 
+function isHlsUrl(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url);
+}
+
+function isTsUrl(url: string): boolean {
+  return /\.ts(\?|$)/i.test(url);
+}
+
+// Mantém a URL original como primeira tentativa e gera a variante alternativa
+// (.m3u8 ↔ .ts) apenas como fallback. Crítico: se o src veio .m3u8 da M3U,
+// NUNCA jogar o .m3u8 fora — disableHlsConversion só bloqueia inventar .m3u8
+// a partir de um .ts, jamais o contrário.
 function liveDirectCandidates(src: string): string[] {
   const out: string[] = [];
   const add = (url: string | null) => {
     if (url && !out.includes(url)) out.push(url);
   };
-  if (/\.m3u8(\?|$)/i.test(src)) {
+  add(src);
+  if (isHlsUrl(src)) {
     add(src.replace(/\.m3u8(\?|$)/i, ".ts$1"));
-  } else {
-    add(src);
+  } else if (isTsUrl(src)) {
+    add(src.replace(/\.ts(\?|$)/i, ".m3u8$1"));
   }
   return out;
 }
@@ -550,14 +563,19 @@ export function VideoPlayer({
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
     const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const sourceIsHls = isHlsUrl(workingSrc);
+    const sourceIsTs = isTsUrl(workingSrc);
+    const sourceFormat = sourceIsHls ? "hls" : sourceIsTs ? "ts" : "auto";
     // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
+    // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
+    // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      (isLive && !!liveHostProfile.disableHlsConversion) ||
+      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -609,8 +627,9 @@ export function VideoPlayer({
         ? directCandidates.flatMap((url) => Array.from(new Set([url, proxiedX(url, kind)])))
         : directCandidates.map((url) => proxiedX(url, kind));
 
-    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
-    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ?? "-"}`);
+    pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
+    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy}`);
+    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 
 
