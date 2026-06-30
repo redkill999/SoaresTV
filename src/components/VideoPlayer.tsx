@@ -643,6 +643,9 @@ export function VideoPlayer({
     let currentHlsUrl: string | null = null;
     let detachStallListeners: (() => void) | null = null;
     let lastLiveError: string | null = null;
+    const triedUrls = new Set<string>();
+    const normUrl = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
