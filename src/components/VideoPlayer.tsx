@@ -630,8 +630,6 @@ export function VideoPlayer({
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
-    let hlsProxied: string | null = null;
-
     // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
     // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
     const vodCandidates: string[] = [];
@@ -1228,17 +1226,6 @@ export function VideoPlayer({
     void isNativeApp().then((native) => {
       if (cancelled) return;
       nativeDirect = native;
-      // Para HLS ao vivo: mesmo em nativo (APK = casca https), o fetch do
-      // hls.js para URL http é bloqueado pelo WebView por mixed content.
-      // Roteamos pelo proxy /api/stream (mesma origem https) quando preciso.
-      // forceProxy: sempre proxy; forceDirect: sempre direto (mesmo na web).
-      hlsProxied = hlsCandidate
-        ? forceProxy
-          ? proxiedX(hlsCandidate, kind)
-          : forceDirect || (isLive && liveBypassProxy)
-            ? hlsCandidate
-            : proxiedX(hlsCandidate, kind)
-        : null;
        if (native && forceDirect) {
         // APK/TV com transporte direto forçado: tenta direto primeiro e mantém
         // proxy como último recurso. No modo automático usamos proxy primeiro
@@ -1251,8 +1238,11 @@ export function VideoPlayer({
       } else if (native && forceProxy) {
         playbackCandidates.splice(0, playbackCandidates.length, ...orderLiveCandidates(directCandidates.map((u) => proxiedX(u, kind))));
       }
-      if (hlsProxied) attachHls(hlsProxied);
-      else playDirect();
+      // CRÍTICO: sempre iniciar pelo ciclo único de candidates. O bootstrap HLS
+      // antigo chamava attachHls(hlsCandidate) por fora da lista; quando falhava,
+      // o índice avançava e pulava o candidate correto via proxy. Isso quebrava
+      // LIVE Web Desktop, especialmente em páginas HTTPS com host em bypass.
+      playDirect();
     });
 
     return () => {
