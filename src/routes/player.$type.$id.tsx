@@ -15,9 +15,9 @@ const isPlayerType = (t: string): t is PlayerType =>
   (VALID_TYPES as readonly string[]).includes(t);
 
 export const Route = createFileRoute("/player/$type/$id")({
-  validateSearch: (s: Record<string, unknown>) => ({
-    name: (s.name as string) ?? "",
-    src: (s.src as string) ?? "",
+  validateSearch: (s: Record<string, unknown>): { name?: string; src?: string } => ({
+    name: typeof s.name === "string" ? s.name : undefined,
+    src: typeof s.src === "string" ? s.src : undefined,
   }),
   head: ({ params }) => ({ meta: [{ title: `Player — ${params.id}` }] }),
   component: PlayerPage,
@@ -39,7 +39,7 @@ type MovieInfo = {
 
 function PlayerPage() {
   const { type: rawType, id } = Route.useParams();
-  const { name, src: customSrc } = Route.useSearch();
+  const { name = "", src: customSrc = "" } = Route.useSearch();
   const navigate = useNavigate();
 
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
