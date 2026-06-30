@@ -191,6 +191,20 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
           if (ev === "jeepCapVideoPlayerExit" || ev === "jeepCapVideoPlayerEnded") {
             hasActivePlayer = false;
           }
+          // FIX D: ao receber Ready, reaplicar displayMode após pequeno delay
+          // força o plugin a redesenhar os controles nativos com as dimensões
+          // finais já estabilizadas — corrige a barra de progresso deslocada
+          // que aparecia no primeiro toque.
+          if (ev === "jeepCapVideoPlayerReady") {
+            setTimeout(() => {
+              try {
+                const m = mod as unknown as {
+                  setDisplayMode?: (a: { mode: string; playerId: string }) => unknown;
+                };
+                m.setDisplayMode?.({ mode: "all", playerId: PLAYER_ID });
+              } catch { /* método pode não existir nesta versão do plugin */ }
+            }, 200);
+          }
           evCb?.(ev, data);
         });
         debugHandles.push(h);
