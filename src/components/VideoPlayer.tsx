@@ -229,6 +229,25 @@ function httpsVariant(url: string): string | null {
   }
 }
 
+/**
+ * Reescreve uma URL HTTP para HTTPS na porta oficial do provedor (vinda de
+ * server_info.https_port). Usado APENAS em LIVE quando o host tem `httpsPort`
+ * no perfil — permite o navegador conectar direto sem proxy nem mixed-content.
+ */
+function httpsVariantWithPort(url: string, httpsPort: number): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" && Number(parsed.port || 443) === httpsPort) {
+      return parsed.toString();
+    }
+    parsed.protocol = "https:";
+    parsed.port = String(httpsPort);
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 // Detecção automática do formato pela extensão da URL.
 //   .m3u8 / .m3u  → "hls"   (hls.js no web, ExoPlayer nativo no APK)
 //   .ts           → "ts"    (mpegts.js no web, ExoPlayer nativo no APK)
