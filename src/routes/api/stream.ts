@@ -132,7 +132,11 @@ async function handle(request: Request) {
 
   if (!upstream) {
     const msg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
-    return jsonError(msg, lastStatus === 401 || lastStatus === 403 ? lastStatus : 502);
+    // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
+    // recoverable fallback as a blank-screen crash. The player already
+    // walks to the next candidate on any non-OK response.
+    const status = lastStatus === 401 || lastStatus === 403 ? lastStatus : 424;
+    return jsonError(msg, status);
   }
 
   const ct = upstream.headers.get("content-type") || "";
