@@ -206,7 +206,8 @@ async function handle(request: Request) {
       }
       const loopCt = lastContentType;
       const loopIsPlaylist = /mpegurl/i.test(loopCt) || isPlaylistPath(upstreamUrl.pathname);
-      if (!loopIsPlaylist && (isProbe || isLive || isProbablyText(loopCt) || !res.ok)) {
+      const loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
+      if (!loopIsPlaylist && (isProbe || isProbablyText(loopCt) || !res.ok || !loopPlayable)) {
         const preview = await bodyPreview(res);
         if (preview) lastPreview = preview;
         if (AUTH_FAIL_RE.test(preview)) {
@@ -222,7 +223,6 @@ async function handle(request: Request) {
         continue;
       }
       if ((isProbe || isLive) && res.ok) {
-        const loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
         if (!loopPlayable) {
           lastNonPlayableReason = "Resposta upstream não parece vídeo.";
           try { await res.body?.cancel(); } catch { /* noop */ }
@@ -285,7 +285,7 @@ async function handle(request: Request) {
   // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
   // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
   const looksTextual = isProbablyText(ct);
-  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || isLive || looksTextual || !upstream.ok);
+  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok || !isProbablyPlayable(ct, upstreamUrl.pathname));
   let preview = lastPreview;
   if (needsPreview) {
     try {
@@ -309,6 +309,7 @@ async function handle(request: Request) {
 
   const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname)) && !(looksTextual && !isPlaylist);
   if (isProbe) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
     return jsonData({
       ok: playable,
       status: upstream.status,
