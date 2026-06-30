@@ -13,11 +13,23 @@ const CORS = {
 };
 
 const UA_LIST = [
+  "VLC/3.0.20 LibVLC/3.0.20",
   "XCIPTV/7.0 (Linux; Android 13)",
   "TiviMate/5.1.0",
   "IPTV Smarters Pro/4.0",
-  "VLC/3.0.20 LibVLC/3.0.20",
+  "okhttp/4.12.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 ];
+
+// Padrões que indicam recusa de autenticação devolvida como corpo (em vez de
+// 401/403 HTTP). Painéis Xtream tipicamente devolvem 200 + texto.
+const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|max\s+connections|Banned|forbidden/i;
+
+function maskUrlForLog(u: string): string {
+  return u
+    .replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4")
+    .replace(/([?&](?:username|password)=)[^&]+/gi, "$1***");
+}
 
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
@@ -94,12 +106,16 @@ async function handle(request: Request) {
   const forcedUA = url.searchParams.get("ua");
   const uaCandidates = forcedUA ? Array.from(new Set([forcedUA, ...UA_LIST])) : UA_LIST;
 
+  const upstreamOrigin = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
   const buildHeaders = (ua: string) => {
     const h = new Headers();
     h.set("User-Agent", ua);
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
+    // Alguns painéis verificam Referer/Origin para liberar o stream.
+    h.set("Referer", `${upstreamOrigin}/`);
+    h.set("Origin", upstreamOrigin);
     if (clientRange) h.set("Range", clientRange);
     return h;
   };
@@ -131,12 +147,16 @@ async function handle(request: Request) {
   }
 
   if (!upstream) {
-    const msg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
+    const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
+    const msg = maskUrlForLog(rawMsg);
+    // 401/403 explícito do upstream: propaga com mensagem clara.
+    if (lastStatus === 401 || lastStatus === 403) {
+      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", lastStatus);
+    }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
-    const status = lastStatus === 401 || lastStatus === 403 ? lastStatus : 424;
-    return jsonError(msg, status);
+    return jsonError(msg, 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
@@ -145,6 +165,29 @@ async function handle(request: Request) {
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
     /\.m3u(\?|$)/i.test(upstreamUrl.pathname) ||
     playlistPath;
+
+  // Sniff: alguns provedores devolvem 200 + corpo de texto com mensagem de
+  // recusa ("UnauthorizedUser") em vez de 401. Sem isso, esse texto é
+  // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
+  // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
+  const looksTextual = /^(text\/|application\/(json|xml|xhtml))/i.test(ct);
+  if (
+    upstream.ok &&
+    !isPlaylist &&
+    looksTextual &&
+    request.method !== "HEAD"
+  ) {
+    try {
+      const bodyText = await upstream.clone().text();
+      if (AUTH_FAIL_RE.test(bodyText)) {
+        try { await upstream.body?.cancel(); } catch { /* noop */ }
+        return jsonError(
+          "Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.",
+          401,
+        );
+      }
+    } catch { /* noop */ }
+  }
 
   const respHeaders = new Headers(CORS);
 

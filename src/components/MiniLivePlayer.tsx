@@ -11,11 +11,14 @@ export function MiniLivePlayer({
   streamId,
   name,
   logo,
+  src: customSrc,
 }: {
   creds: XtreamCreds | null;
   streamId: number | string | null;
   name?: string;
   logo?: string;
+  /** URL real do canal (vinda da M3U) — quando presente, evita reconstrução. */
+  src?: string;
 }) {
   const navigate = useNavigate();
   const [muted, setMuted] = useState(true);
@@ -34,7 +37,7 @@ export function MiniLivePlayer({
     if (v) v.muted = muted;
   }, [muted, streamId]);
 
-  const src = creds && streamId ? streamUrl.live(creds, streamId) : "";
+  const src = customSrc || (creds && streamId ? streamUrl.live(creds, streamId) : "");
 
   const now = Math.floor(Date.now() / 1000);
   const current = epgQ.data?.find((e: EpgListing) => {
@@ -49,7 +52,7 @@ export function MiniLivePlayer({
     navigate({
       to: "/player/$type/$id",
       params: { type: "live", id: String(streamId) },
-      search: { name: name ?? "Canal" },
+      search: { name: name ?? "Canal", src: customSrc ?? "" },
     });
   };
 

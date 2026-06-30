@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import { PictureInPicture2, PictureInPicture } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
-import { getHostProfile, hostOf } from "@/lib/host-profile";
+import { getHostProfile, hostOf, rememberHlsUnsupported } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 
@@ -944,6 +944,13 @@ export function VideoPlayer({
                 // mpegts.js), que é o que a maioria dos painéis Xtream serve.
                 const httpCode = (data as { response?: { code?: number } }).response?.code ?? 0;
                 const hardFail = httpCode >= 400 && httpCode < 500;
+                const isAuthFail = httpCode === 401 || httpCode === 403;
+                // 404/410 no .m3u8 = host não fornece HLS. Memoriza para
+                // próximos canais desse provedor pularem a conversão.
+                if ((httpCode === 404 || httpCode === 410) && hlsCandidate) {
+                  const h = hostOf(workingSrc);
+                  if (h) rememberHlsUnsupported(h);
+                }
                 if (hardFail || netRetries++ >= MAX_NET_RETRIES) {
                   if (!hardFail && nativeDirect && hlsCandidate && currentHlsUrl === hlsCandidate) {
                     detachStallListeners?.();
@@ -955,8 +962,12 @@ export function VideoPlayer({
                   detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
+                  if (isAuthFail) {
+                    setError("Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.");
+                    return;
+                  }
                   if (!triedDirect) playDirect();
-                  else setError("Conexão instável com o canal. Tente novamente.");
+                  else setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
                   return;
                 }
                 const delay = Math.min(500 * 2 ** (netRetries - 1), 8000);

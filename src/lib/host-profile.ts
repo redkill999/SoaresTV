@@ -83,6 +83,13 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
+  // flipex.pro: painel só serve LIVE em .ts. A variante .m3u8 retorna 404 em
+  // todos os UAs e o hls.js gasta retries antes de desistir. Pula a conversão
+  // HLS e vai direto pro mpegts.js no caminho web.
+  "flipex.pro": {
+    disableHlsConversion: true,
+    preferTs: true,
+  },
 };
 
 
@@ -249,4 +256,10 @@ export function rememberHttpsFailure(host: string): void {
 
 export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy): void {
   updateHostProfile(host, { preferPlayer: strategy });
+}
+
+/** Marca o host como incompatível com a variante HLS (.m3u8 404/410):
+ *  futuros canais desse provedor pulam direto pro .ts via mpegts.js. */
+export function rememberHlsUnsupported(host: string): void {
+  updateHostProfile(host, { disableHlsConversion: true, preferTs: true });
 }
