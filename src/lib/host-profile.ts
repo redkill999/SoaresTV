@@ -91,14 +91,10 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // flipex.pro: painel só serve LIVE em .ts. A variante .m3u8 retorna 404 em
-  // todos os UAs e o hls.js gasta retries antes de desistir. Pula a conversão
-  // HLS e vai direto pro mpegts.js no caminho web.
-  // flipex.pro também bloqueia o IP do datacenter do proxy /api/stream para
-  // LIVE (todas as variantes retornam 404). Pulamos o proxy direto.
+  // flipex.pro: validado com lista real. Muitos canais mortos retornam 404/503,
+  // mas canais ativos expõem playlist HLS em /live/...m3u8; no Web Desktop esse
+  // deve ser o caminho principal via proxy same-origin (CORS/mixed-content safe).
   "flipex.pro": {
-    disableHlsConversion: true,
-    preferTs: true,
     bypassProxyForLive: true,
     // server_info.https_port retornado pelo player_api do flipex.pro.
     // Quando o navegador HTTPS consegue abrir essa porta, joga LIVE sem
@@ -196,6 +192,16 @@ if (memory["athra.sbs"]) {
     writeStorage(memory);
     console.log("[HOST PROFILE] limpou flags quebradas de athra.sbs");
   }
+}
+// Limpeza pontual: versões anteriores marcaram flipex.pro como TS-only. Teste
+// real mostrou que canais ativos desse host tocam via HLS; manter essas flags
+// persistidas faz o Web Desktop cair em MPEG-TS antes da playlist funcional.
+if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs) {
+  const cur = memory["flipex.pro"];
+  const { disableHlsConversion: _dh, preferTs: _pt, ...rest } = cur;
+  memory["flipex.pro"] = rest;
+  writeStorage(memory);
+  console.log("[HOST PROFILE] limpou flags TS-only quebradas de flipex.pro");
 }
 // Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
 // sobrescrevendo: preset → storage → updateHostProfile.
