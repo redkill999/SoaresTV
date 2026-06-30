@@ -70,7 +70,19 @@ function isProbablyPlayable(contentType: string, path: string): boolean {
   return /video\/|mpegurl|mp2t|octet-stream|binary/i.test(contentType) || /\.(ts|m3u8?|mp4|m4v|mov|mkv|webm)(\?|$)/i.test(path);
 }
 
-async function bodyPreview(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<string> {
+function looksBinary(bytes: Uint8Array): boolean {
+  if (!bytes.length) return false;
+  // MPEG-TS packets normally start with sync byte 0x47 every 188 bytes.
+  if (bytes[0] === 0x47 && (bytes.length < 189 || bytes[188] === 0x47)) return true;
+  let control = 0;
+  for (const b of bytes) {
+    const isWhitespace = b === 9 || b === 10 || b === 13;
+    if ((b < 32 && !isWhitespace) || b === 127) control++;
+  }
+  return control / bytes.length > 0.05;
+}
+
+async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<{ preview: string; binaryLike: boolean }> {
   const clone = res.clone();
   const timeout = new Promise<Uint8Array[]>((resolve) => setTimeout(() => resolve([]), timeoutMs));
   const read = (async () => {
@@ -101,10 +113,17 @@ async function bodyPreview(res: Response, maxBytes = 512, timeoutMs = 1_500): Pr
     if (offset >= bytes.length) break;
   }
   try {
-    return new TextDecoder().decode(bytes).replace(/\s+/g, " ").trim().slice(0, 240);
+    return {
+      preview: new TextDecoder().decode(bytes).replace(/\s+/g, " ").trim().slice(0, 240),
+      binaryLike: looksBinary(bytes),
+    };
   } catch {
-    return "";
+    return { preview: "", binaryLike: looksBinary(bytes) };
   }
+}
+
+async function bodyPreview(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<string> {
+  return (await sniffBody(res, maxBytes, timeoutMs)).preview;
 }
 
 function reasonForStatus(status: number): string | undefined {
@@ -185,6 +204,7 @@ async function handle(request: Request) {
   let lastPreview = "";
   let lastContentType = "";
   let lastNonPlayableReason = "";
+  let acceptedLooksBinary = false;
   let authRejected = false;
   for (const ua of uaCandidates) {
     try {
@@ -206,15 +226,21 @@ async function handle(request: Request) {
       }
       const loopCt = lastContentType;
       const loopIsPlaylist = /mpegurl/i.test(loopCt) || isPlaylistPath(upstreamUrl.pathname);
-      const loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
+      let loopBodyLooksBinary = false;
+      let loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
       if (!loopIsPlaylist && (isProbe || isProbablyText(loopCt) || !res.ok || !loopPlayable)) {
-        const preview = await bodyPreview(res);
+        const sniff = await sniffBody(res);
+        const preview = sniff.preview;
+        loopBodyLooksBinary = sniff.binaryLike;
         if (preview) lastPreview = preview;
         if (AUTH_FAIL_RE.test(preview)) {
           authRejected = true;
           lastStatus = 401;
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
+        }
+        if (res.ok && sniff.binaryLike && /\.ts(\?|$)/i.test(upstreamUrl.pathname)) {
+          loopPlayable = true;
         }
       }
       if ((isProbe || isLive) && !res.ok) {
@@ -230,6 +256,7 @@ async function handle(request: Request) {
         }
       }
       upstream = res;
+      acceptedLooksBinary = loopBodyLooksBinary;
       break;
     } catch (e) {
       lastError = e;
@@ -287,9 +314,12 @@ async function handle(request: Request) {
   const looksTextual = isProbablyText(ct);
   const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok);
   let preview = lastPreview;
+  let bodyLooksBinary = acceptedLooksBinary;
   if (needsPreview) {
     try {
-      if (!preview) preview = await bodyPreview(upstream);
+      const sniff = preview ? { preview, binaryLike: bodyLooksBinary } : await sniffBody(upstream);
+      preview = sniff.preview;
+      bodyLooksBinary = bodyLooksBinary || sniff.binaryLike;
       if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
         if (isProbe) {
@@ -307,7 +337,7 @@ async function handle(request: Request) {
     } catch { /* noop */ }
   }
 
-  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname)) && !(looksTextual && !isPlaylist);
+  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname) || (bodyLooksBinary && /\.ts(\?|$)/i.test(upstreamUrl.pathname))) && !(looksTextual && !isPlaylist && !bodyLooksBinary);
   if (isProbe) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
     return jsonData({
@@ -325,7 +355,7 @@ async function handle(request: Request) {
     return jsonError(reasonForStatus(upstream.status) || `Stream upstream HTTP ${upstream.status}`, upstream.status);
   }
 
-  if (isLive && upstream.ok && !isPlaylist && looksTextual) {
+  if (isLive && upstream.ok && !isPlaylist && looksTextual && !bodyLooksBinary) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
     return jsonError("Resposta upstream não parece vídeo.", 424);
   }
