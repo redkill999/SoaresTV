@@ -16,6 +16,7 @@ export const XciptvTile = memo(function XciptvTile({
   name,
   image,
   progress,
+  src,
 }: {
   type: FavItem["type"];
   id: string;
@@ -23,6 +24,8 @@ export const XciptvTile = memo(function XciptvTile({
   image?: string;
   /** 0–1: mostra barra fina de "continue assistindo" na base do tile. */
   progress?: number;
+  /** URL real do stream (vinda da M3U) — preservada quando disponível. */
+  src?: string;
 }) {
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
@@ -36,9 +39,9 @@ export const XciptvTile = memo(function XciptvTile({
     <Link
       to="/player/$type/$id"
       params={{ type, id }}
-      search={{ name }}
+      search={{ name, src: src ?? "" }}
       onClick={() => {
-        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image });
+        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image, src });
       }}
       className="group block focus:outline-none"
     >
