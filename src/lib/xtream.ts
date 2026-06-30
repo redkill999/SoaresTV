@@ -315,8 +315,9 @@ export function extractLiveStreamIdFromUrl(url: string): number | null {
   try {
     const pathname = new URL(url).pathname;
     const match = /\/live\/[^/]+\/[^/]+\/([^/?#]+?)(?:\.[a-z0-9]+)?$/i.exec(pathname);
-    if (!match) return null;
-    const id = Number(match[1]);
+    const shortMatch = match ?? /\/[^/]+\/[^/]+\/([^/?#]+?)(?:\.[a-z0-9]+)?$/i.exec(pathname);
+    if (!shortMatch) return null;
+    const id = Number(shortMatch[1]);
     return Number.isFinite(id) ? id : null;
   } catch {
     return null;
