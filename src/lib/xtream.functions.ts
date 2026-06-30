@@ -444,11 +444,12 @@ function mapXtreamLiveStreams(
     const liveUrl = (() => {
       try {
         const host = new URL(access.origin).hostname.toLowerCase();
-        // flipex.pro entrega a M3U real (output=ts) no formato curto
-        // /usuario/senha/id. Usar /live/...id.ts aqui recriava uma URL que
-        // não é exatamente a da lista e quebra parte dos canais no Web Desktop.
+        // flipex.pro foi validado com a lista real no terminal: o formato que
+        // entrega playlist reproduzível no Web Desktop é /live/.../<id>.m3u8
+        // via /api/stream. Evita abrir pelo formato curto TS, que depende de
+        // mpegts.js e vinha falhando no desktop.
         if (host === "flipex.pro" || host.endsWith(".flipex.pro")) {
-          return `${access.origin}/${access.username}/${access.password}/${String(id)}`;
+          return `${access.origin}/live/${access.username}/${access.password}/${String(id)}.m3u8`;
         }
       } catch { /* mantém padrão Xtream */ }
       return `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`;
