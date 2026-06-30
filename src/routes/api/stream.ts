@@ -13,11 +13,23 @@ const CORS = {
 };
 
 const UA_LIST = [
+  "VLC/3.0.20 LibVLC/3.0.20",
   "XCIPTV/7.0 (Linux; Android 13)",
   "TiviMate/5.1.0",
   "IPTV Smarters Pro/4.0",
-  "VLC/3.0.20 LibVLC/3.0.20",
+  "okhttp/4.12.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 ];
+
+// Padrões que indicam recusa de autenticação devolvida como corpo (em vez de
+// 401/403 HTTP). Painéis Xtream tipicamente devolvem 200 + texto.
+const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|max\s+connections|Banned|forbidden/i;
+
+function maskUrlForLog(u: string): string {
+  return u
+    .replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4")
+    .replace(/([?&](?:username|password)=)[^&]+/gi, "$1***");
+}
 
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
