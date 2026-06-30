@@ -213,6 +213,20 @@ function liveDirectCandidates(src: string): string[] {
     add(src.replace(/\.m3u8(\?|$)/i, ".ts$1"));
   } else if (isTsUrl(src)) {
     add(src.replace(/\.ts(\?|$)/i, ".m3u8$1"));
+  } else {
+    // M3U Xtream pode vir sem extensão (/usuario/senha/id). Mantém a URL real
+    // primeiro e só depois tenta os sufixos conhecidos, sem reconstruir caminho.
+    try {
+      const parsed = new URL(src);
+      if (!/\.[a-z0-9]+$/i.test(parsed.pathname)) {
+        const base = src.replace(/([?#].*)$/, "");
+        const tail = src.slice(base.length);
+        add(`${base}.ts${tail}`);
+        add(`${base}.m3u8${tail}`);
+      }
+    } catch {
+      // mantém apenas a URL original
+    }
   }
   return out;
 }
@@ -580,7 +594,11 @@ export function VideoPlayer({
     // tem prioridade absoluta; só caímos na auto-detect quando ele não fixou.
     const auto = detectFormat(workingSrc);
     const isVod = kind === "vod" || /\/movie\/[^/]+\/[^/]+\//i.test(workingSrc) || /\/series\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const isLive = /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
+    // CRÍTICO: listas M3U de alguns painéis (ex.: flipex.pro) entregam LIVE no
+    // formato curto /usuario/senha/id, sem /live/ e sem extensão. A rota passa
+    // kind="live"; portanto a decisão do player deve respeitar o kind explícito
+    // e não depender só do padrão Xtream /live/... .ts.
+    const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
