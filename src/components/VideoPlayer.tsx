@@ -6,6 +6,7 @@ import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
+import { maskIptvUrl } from "@/lib/iptv-url";
 
 // Module-level cache do mpegts.js: a 1ª troca de canal paga o import, as
 // seguintes reusam a mesma referência (sem reparse de bundle nem nova Promise).
@@ -78,24 +79,36 @@ function proxied(url: string, kind?: "live" | "vod"): string {
   return `/api/stream?u=${encodeURIComponent(url)}${k}&v=6`;
 }
 
-function maskIptvUrl(url: string): string {
+type StreamProbeResult = {
+  ok: boolean;
+  status: number;
+  contentType: string;
+  finalUrlHost: string;
+  reason?: string;
+  bodyPreview?: string;
+};
+
+function probeUrlForCandidate(url: string): string | null {
   try {
-    const isRelative = /^\//.test(url);
-    const parsed = new URL(url, "http://local");
-    const proxiedTarget = parsed.searchParams.get("u");
-    if (proxiedTarget) {
-      parsed.searchParams.set("u", maskIptvUrl(proxiedTarget));
-    }
-    parsed.username = "";
-    parsed.password = "";
-    parsed.pathname = parsed.pathname.replace(
-      /(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i,
-      "$1***USER***/***PASS***$4",
-    );
-    return isRelative ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString();
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.pathname !== "/api/stream") return null;
+    parsed.searchParams.set("probe", "1");
+    parsed.searchParams.set("kind", "live");
+    return `${parsed.pathname}${parsed.search}`;
   } catch {
-    return url.replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4");
+    return null;
   }
+}
+
+function messageForProbeStatus(status: number): string {
+  if (status === 401 || status === 403) {
+    return "Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.";
+  }
+  if (status === 404) return "Stream não encontrado no servidor. A URL do canal pode estar errada.";
+  if (status === 424 || status === 502 || status === 503 || status === 504) {
+    return "Proxy não conseguiu abrir o stream. O servidor pode estar bloqueando o IP do Web Desktop.";
+  }
+  return "Não foi possível reproduzir este canal.";
 }
 
 async function probeNativeLiveStream(
@@ -610,6 +623,7 @@ export function VideoPlayer({
     let nativeDirect = false;
     let currentHlsUrl: string | null = null;
     let detachStallListeners: (() => void) | null = null;
+    let lastLiveError: string | null = null;
 
     const clearWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
@@ -633,8 +647,8 @@ export function VideoPlayer({
       }
       destroyTsPlayer();
       vodIdx += 1;
-      if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); playDirect(); }
-      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? "Não foi possível reproduzir este canal." : "Não foi possível reproduzir esta mídia."); }
+      if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); setError(null); playDirect(); }
+      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? (lastLiveError ?? "Não foi possível reproduzir este canal.") : "Não foi possível reproduzir esta mídia."); }
     };
 
     const armVodWatchdog = () => {
@@ -669,6 +683,25 @@ export function VideoPlayer({
     const playMpegTs = async (url: string) => {
       if (!isLive) return false;
       try {
+        const probeUrl = probeUrlForCandidate(url);
+        if (probeUrl) {
+          try {
+            pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
+            const probeRes = await fetch(probeUrl, { cache: "no-store" });
+            const probe = (await probeRes.json()) as StreamProbeResult;
+            pushDbg(`PROBE status=${probe.status} ok=${probe.ok} ct=${probe.contentType || "-"} host=${probe.finalUrlHost || "-"}${probe.reason ? ` reason=${probe.reason}` : ""}`);
+            if (!probe.ok) {
+              const msg = messageForProbeStatus(probe.status);
+              lastLiveError = msg;
+              setError(msg);
+              if (!cancelled) tryNextVod();
+              return true;
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            pushDbg(`PROBE erro=${msg.slice(0, 160)}`);
+          }
+        }
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
         destroyTsPlayer();
