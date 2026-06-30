@@ -219,10 +219,23 @@ function liveDirectCandidates(src: string): string[] {
     try {
       const parsed = new URL(src);
       if (!/\.[a-z0-9]+$/i.test(parsed.pathname)) {
-        const base = src.replace(/([?#].*)$/, "");
-        const tail = src.slice(base.length);
-        add(`${base}.ts${tail}`);
-        add(`${base}.m3u8${tail}`);
+        const parts = parsed.pathname.split("/").filter(Boolean);
+        const tail = `${parsed.search}${parsed.hash}`;
+        // Xtream output=ts frequentemente vem no formato curto
+        //   /usuario/senha/id
+        // O fallback correto NÃO é /usuario/senha/id.ts (404 em flipex.pro),
+        // e sim /live/usuario/senha/id.ts. Mantém a URL curta original como
+        // primeira tentativa e adiciona as variantes Xtream reais depois.
+        if (parts.length === 3 && /^\d+$/.test(parts[2])) {
+          // Web Desktop lida melhor com HLS; TS segue como fallback, sem afetar
+          // a URL original que continua sempre em primeiro lugar.
+          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.m3u8${tail}`);
+          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.ts${tail}`);
+        } else {
+          const base = src.replace(/([?#].*)$/, "");
+          add(`${base}.ts${tail}`);
+          add(`${base}.m3u8${tail}`);
+        }
       }
     } catch {
       // mantém apenas a URL original
@@ -650,6 +663,15 @@ export function VideoPlayer({
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
     // bloquear IPs do Cloudflare Worker.
     const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
+    const liveCandidatePair = (url: string) => {
+      const proxy = proxiedX(url, kind);
+      // Web Desktop em HTTPS não consegue abrir http:// direto (mixed content).
+      // Mesmo que o host esteja marcado como bypass para APK/TV, no browser o
+      // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
+      // tendo prioridade quando existir (httpsPortCandidates acima).
+      if (pageIsHttps && /^http:\/\//i.test(url)) return [proxy, url];
+      return liveBypassProxy ? [url, proxy] : [proxy, url];
+    };
     const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
       ? directCandidates
           .map((u) => httpsVariantWithPort(u, liveHostProfile.httpsPort!))
@@ -674,9 +696,7 @@ export function VideoPlayer({
           // 1º) HTTPS direto na porta do provedor (sem proxy, sem mixed-content)
           ...httpsPortCandidates,
           // 2º) Demais candidatos LIVE
-          ...(liveBypassProxy
-            ? directCandidates.flatMap((url) => [url, proxiedX(url, kind)])
-            : directCandidates.flatMap((url) => [proxiedX(url, kind), url])),
+          ...directCandidates.flatMap(liveCandidatePair),
         ]));
         // ^ LIVE web (sem bypass): proxy primeiro (CORS-safe / mixed-content);
         //   se TODAS as variantes via proxy esgotarem (ex.: flipex.pro 404),
@@ -883,7 +903,11 @@ export function VideoPlayer({
         attachHls(url);
         return;
       }
-      if (/\.ts(\?|&|$)/i.test(decodedUrl)) {
+      // LIVE MPEG-TS de M3U pode não ter extensão visível (ex.: /user/pass/id)
+      // ou estar dentro do /api/stream?u=... sem .ts no path. Nesses casos o
+      // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
+      // precisa passar pelo mpegts.js. VOD continua intocado.
+      if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
@@ -1152,7 +1176,20 @@ export function VideoPlayer({
                   detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
-                  if (!triedDirect) playDirect();
+                  // MEDIA_ERROR também precisa avançar de candidato. Antes, se
+                  // uma variante HLS direta (.m3u8) falhasse depois de já termos
+                  // tentado candidatos diretos/proxy anteriores, o player parava
+                  // aqui e nunca chegava ao próximo fallback (ex.: .m3u8 via
+                  // /api/stream). Isso quebrava LIVE no Web Desktop.
+                  const cur = playbackCandidates[vodIdx];
+                  if (cur && currentHlsUrl) {
+                    const norm = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+                    if (norm(cur) === norm(currentHlsUrl) || /\.m3u8(\?|&|$)/i.test(norm(cur))) {
+                      vodIdx += 1;
+                      pushDbg(`ETAPA 8.5 hls-media→next idx=${vodIdx} (advance from failed .m3u8)`);
+                    }
+                  }
+                  if (vodIdx < playbackCandidates.length) playDirect();
                   else setError("Erro de mídia no canal. Tente novamente.");
                   return;
                 }
