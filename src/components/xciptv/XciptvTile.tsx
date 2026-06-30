@@ -39,7 +39,7 @@ export const XciptvTile = memo(function XciptvTile({
     <Link
       to="/player/$type/$id"
       params={{ type, id }}
-      search={{ name, src: src ?? "" }}
+      search={type === "live" && src ? { name, src } : { name }}
       onClick={() => {
         if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image, src });
       }}

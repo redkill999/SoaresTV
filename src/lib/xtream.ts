@@ -1,5 +1,6 @@
 import { discoverPanelXtreamServer, xtreamApi, fetchM3U } from "./xtream.functions";
-import type { XtreamCreds } from "./storage";
+import { store, type XtreamCreds } from "./storage";
+import { m3uCache } from "./m3u-cache";
 import { getUAHint, setUAHint } from "./ua-hint";
 
 export type LiveCategory = { category_id: string; category_name: string };
@@ -12,6 +13,7 @@ export type LiveStream = {
   epg_channel_id?: string;
   tv_archive?: number;
   tv_archive_duration?: number | string;
+  url?: string;
 };
 export type VodStream = {
   num: number;
@@ -56,6 +58,8 @@ const NATIVE_FALLBACK_UAS = [
 ];
 
 type NativeHttpResponse = { status: number; data: unknown };
+
+const isBrowser = () => typeof window !== "undefined";
 
 function hasWindowNativeBridge(): boolean {
   if (typeof window === "undefined") return false;
@@ -278,7 +282,7 @@ export async function api<T = unknown>(
       timeoutMs: 5_000,
       totalTimeoutMs: 20_000,
     });
-    if (native) return native.data;
+    if (native) return maybePreserveLiveUrls(c, action, native.data as T);
   } catch {
     // segue para o fallback do server-fn
   }
@@ -295,7 +299,106 @@ export async function api<T = unknown>(
   }
   // Persistir UA vencedor para acelerar próxima chamada ao mesmo servidor.
   if ("ua" in r && typeof r.ua === "string") setUAHint(c.server, r.ua);
-  return r.data as T;
+  return maybePreserveLiveUrls(c, action, r.data as T);
+}
+
+async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
+  if (action !== "get_live_streams" || !Array.isArray(data)) return data;
+  try {
+    return (await preserveOriginalLiveUrls(c, data as LiveStream[])) as T;
+  } catch {
+    return data;
+  }
+}
+
+export function extractLiveStreamIdFromUrl(url: string): number | null {
+  try {
+    const pathname = new URL(url).pathname;
+    const match = /\/live\/[^/]+\/[^/]+\/([^/?#]+?)(?:\.[a-z0-9]+)?$/i.exec(pathname);
+    if (!match) return null;
+    const id = Number(match[1]);
+    return Number.isFinite(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLiveM3UEntry(entry: M3UEntry): boolean {
+  if (/\/live\/[^/]+\/[^/]+\//i.test(entry.url)) return true;
+  return !/movie|filme|vod|serie|série|series/i.test(entry.group || "");
+}
+
+function m3uEntriesToLiveStreams(entries: M3UEntry[]): LiveStream[] {
+  const out: LiveStream[] = [];
+  entries.forEach((entry, idx) => {
+    if (!isLiveM3UEntry(entry)) return;
+    const id = extractLiveStreamIdFromUrl(entry.url);
+    if (id == null) return;
+    out.push({
+      num: idx + 1,
+      name: entry.name,
+      stream_id: id,
+      stream_icon: entry.logo || "",
+      category_id: entry.group || "",
+      url: entry.url,
+    });
+  });
+  return out;
+}
+
+function mergeLiveStreamsWithM3UUrls(streams: LiveStream[], entries: M3UEntry[]): LiveStream[] {
+  const byId = new Map<number, LiveStream>();
+  for (const m3uStream of m3uEntriesToLiveStreams(entries)) byId.set(m3uStream.stream_id, m3uStream);
+  if (!byId.size) return streams;
+
+  const seen = new Set<number>();
+  const merged = streams.map((stream) => {
+    const fromM3U = byId.get(Number(stream.stream_id));
+    seen.add(Number(stream.stream_id));
+    return fromM3U?.url ? { ...stream, url: fromM3U.url } : stream;
+  });
+
+  for (const [id, fromM3U] of byId) {
+    if (!seen.has(id)) merged.push(fromM3U);
+  }
+  return merged;
+}
+
+function sameXtreamAccount(a: XtreamCreds | null, b: XtreamCreds): boolean {
+  if (!a) return false;
+  try {
+    return new URL(normalizeServer(a.server)).host.toLowerCase() ===
+      new URL(normalizeServer(b.server)).host.toLowerCase() && a.username === b.username;
+  } catch {
+    return a.server === b.server && a.username === b.username;
+  }
+}
+
+async function loadSavedM3UEntriesForCreds(creds: XtreamCreds): Promise<M3UEntry[]> {
+  if (!isBrowser()) return [];
+  const lists = store.getM3U().filter((list) => sameXtreamAccount(xtreamCredsFromUrl(list.url, list.username, list.password), creds));
+  for (const list of lists) {
+    const cached = m3uCache.get();
+    if (cached?.url === list.url && cached.entries.length) return cached.entries;
+    const hydrated = await m3uCache.loadPersisted(list.url);
+    const persisted = hydrated ? m3uCache.get() : null;
+    if (persisted?.url === list.url && persisted.entries.length) return persisted.entries;
+    try {
+      const entries = await loadM3U(list.url, list.username, list.password);
+      if (entries.length) {
+        m3uCache.set(list.url, list.name, entries);
+        return entries;
+      }
+    } catch {
+      // Mantém player_api.php funcionando se a M3U falhar.
+    }
+  }
+  return [];
+}
+
+export async function preserveOriginalLiveUrls(creds: XtreamCreds, streams: LiveStream[]): Promise<LiveStream[]> {
+  const entries = await loadSavedM3UEntriesForCreds(creds);
+  return entries.length ? mergeLiveStreamsWithM3UUrls(streams, entries) : streams;
 }
 
 export async function login(c: XtreamCreds) {

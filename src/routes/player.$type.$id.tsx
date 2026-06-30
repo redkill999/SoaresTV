@@ -116,11 +116,16 @@ function PlayerPage() {
     },
   });
 
-  const isCatchup = !!customSrc;
+  const validCustomSrc = customSrc && /^https?:\/\//i.test(customSrc) ? customSrc : "";
+  const isCatchup = !!validCustomSrc;
   const url = useMemo(() => {
-    if (customSrc) return customSrc;
+    if (type === "live") {
+      if (validCustomSrc) return validCustomSrc;
+      if (!creds) return "";
+      return streamUrl.live(creds, id);
+    }
+    if (validCustomSrc) return validCustomSrc;
     if (!creds) return "";
-    if (type === "live") return streamUrl.live(creds, id);
     if (type === "movie") {
       // id may include ".ext"
       const [sid, ext] = id.split(".");
@@ -142,7 +147,7 @@ function PlayerPage() {
     }
     if (type === "series") return episodeUrl ?? "";
     return "";
-  }, [creds, type, id, episodeUrl, movieQ.data, customSrc]);
+  }, [creds, type, id, episodeUrl, movieQ.data, validCustomSrc]);
 
   // Mantém o título atual em ref para evitar duplicar histórico quando
   // só `activeTitle` muda (mas a URL não).

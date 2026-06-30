@@ -61,6 +61,7 @@ function LivePage() {
   const listCacheKey = `live-streams:${acct}:all`;
   const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
   const listPersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(listCacheKey) : null), [listCacheKey, acct]);
+  const listInitialData = listPersisted?.data?.some((s) => !!s.url) ? listPersisted.data : undefined;
   const categoriesQ = useQuery({
     queryKey: ["live-cats", acct],
     enabled: !!creds,
@@ -73,8 +74,8 @@ function LivePage() {
     queryKey: ["live-streams", acct, "all"],
     enabled: !!creds,
     queryFn: withPersist(listCacheKey, () => api<LiveStream[]>(creds!, "get_live_streams")),
-    initialData: listPersisted?.data,
-    initialDataUpdatedAt: listPersisted?.updatedAt,
+    initialData: listInitialData,
+    initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
   });
 
@@ -170,6 +171,7 @@ function LiveGrid({ filtered }: { filtered: LiveStream[] }) {
             id={String(s.stream_id)}
             name={s.name}
             image={s.stream_icon}
+            src={s.url}
           />
         ))}
       </div>
