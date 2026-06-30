@@ -368,7 +368,8 @@ function buildM3UCandidateUrls(raw: string, username?: string, password?: string
     }
 
     for (const origin of origins) {
-      for (const output of ["m3u8", "ts"]) {
+      const outputs = preferredM3UOutput(u.hostname) === "ts" ? ["ts", "m3u8"] : ["m3u8", "ts"];
+      for (const output of outputs) {
         const out = new URL(`${origin}/get.php`);
         out.searchParams.set("username", user);
         out.searchParams.set("password", pass);
