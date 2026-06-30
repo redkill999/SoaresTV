@@ -227,8 +227,10 @@ function liveDirectCandidates(src: string): string[] {
         // e sim /live/usuario/senha/id.ts. Mantém a URL curta original como
         // primeira tentativa e adiciona as variantes Xtream reais depois.
         if (parts.length === 3 && /^\d+$/.test(parts[2])) {
-          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.ts${tail}`);
+          // Web Desktop lida melhor com HLS; TS segue como fallback, sem afetar
+          // a URL original que continua sempre em primeiro lugar.
           add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.m3u8${tail}`);
+          add(`${parsed.origin}/live/${parts[0]}/${parts[1]}/${parts[2]}.ts${tail}`);
         } else {
           const base = src.replace(/([?#].*)$/, "");
           add(`${base}.ts${tail}`);
