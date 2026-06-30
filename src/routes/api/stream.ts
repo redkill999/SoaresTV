@@ -29,7 +29,7 @@ const AUTH_REASON = "Servidor recusou autenticação ou autorização.";
 
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=7${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
