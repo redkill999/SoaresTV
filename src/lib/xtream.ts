@@ -577,6 +577,12 @@ export function parseM3U(text: string): M3UEntry[] {
   return out;
 }
 
+function preferredM3UOutput(hostname: string): "ts" | "m3u8" {
+  const h = (hostname || "").toLowerCase();
+  if (h === "flipex.pro" || h.endsWith(".flipex.pro")) return "ts";
+  return "ts";
+}
+
 function buildClientM3UUrl(raw: string, username?: string, password?: string): string {
   let target = (raw || "").trim().replace(/\s+/g, "").replace(/^(https?):\/{0,1}(?!\/)/i, "$1://");
   if (!target) throw new Error("URL vazia");
@@ -588,7 +594,7 @@ function buildClientM3UUrl(raw: string, username?: string, password?: string): s
     if (username && !u.searchParams.get("username")) u.searchParams.set("username", username);
     if (password && !u.searchParams.get("password")) u.searchParams.set("password", password);
     if (!u.searchParams.get("type")) u.searchParams.set("type", "m3u_plus");
-    if (!u.searchParams.get("output")) u.searchParams.set("output", "m3u8");
+    if (!u.searchParams.get("output")) u.searchParams.set("output", preferredM3UOutput(u.hostname));
     return u.toString();
   }
 
@@ -600,7 +606,7 @@ function buildClientM3UUrl(raw: string, username?: string, password?: string): s
     out.searchParams.set("username", user);
     out.searchParams.set("password", pass);
     out.searchParams.set("type", "m3u_plus");
-    out.searchParams.set("output", "m3u8");
+    out.searchParams.set("output", preferredM3UOutput(u.hostname));
     return out.toString();
   }
 
