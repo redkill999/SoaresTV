@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, PlayCircle, Eye, EyeOff } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl } from "@/lib/xtream";
+import { api, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl, type LiveStream } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -182,7 +182,7 @@ function LoginPage() {
     }
     const creds = { server, username, password };
     try {
-      const streams = await api<Array<{ stream_id: number }>>(creds, "get_live_streams");
+      const streams = await api<LiveStream[]>(creds, "get_live_streams");
       const first = streams?.[0];
       if (!first) {
         toast.error("Nenhum canal encontrado");
@@ -192,7 +192,7 @@ function LoginPage() {
       navigate({
         to: "/player/$type/$id",
         params: { type: "live", id: String(first.stream_id) },
-        search: { name: "Canal" },
+        search: first.url ? { name: first.name || "Canal", src: first.url } : { name: first.name || "Canal" },
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro");

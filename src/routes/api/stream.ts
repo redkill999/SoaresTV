@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { maskIptvUrl } from "@/lib/iptv-url";
 
 // Proxy upstream IPTV streams so the browser doesn't hit CORS / mixed-content
 // issues. LIVE keeps the playlist-rewrite + Range-strip path. VOD uses a
@@ -13,27 +14,22 @@ const CORS = {
 };
 
 const UA_LIST = [
-  "VLC/3.0.20 LibVLC/3.0.20",
   "XCIPTV/7.0 (Linux; Android 13)",
-  "TiviMate/5.1.0",
   "IPTV Smarters Pro/4.0",
+  "TiviMate/5.1.0",
+  "VLC/3.0.20 LibVLC/3.0.20",
   "okhttp/4.12.0",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0",
 ];
 
 // Padrões que indicam recusa de autenticação devolvida como corpo (em vez de
 // 401/403 HTTP). Painéis Xtream tipicamente devolvem 200 + texto.
-const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|max\s+connections|Banned|forbidden/i;
-
-function maskUrlForLog(u: string): string {
-  return u
-    .replace(/(\/(?:live|movie|series)\/)([^/]+)\/([^/]+)(\/)/i, "$1***USER***/***PASS***$4")
-    .replace(/([?&](?:username|password)=)[^&]+/gi, "$1***");
-}
+const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|Not\s+allowed|Max\s+connections|Blocked|Banned|forbidden/i;
+const AUTH_REASON = "Servidor recusou autenticação ou autorização.";
 
 function proxyUrl(absolute: string, ua?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=6${uaPart}`;
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=7${uaPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -52,11 +48,87 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jsonError(error: string, status: number): Response {
+function jsonError(error: string, status: number, responseStatus = status): Response {
   return new Response(JSON.stringify({ error, status }), {
+    status: responseStatus >= 500 ? 424 : responseStatus,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
+function jsonData(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
+}
+
+function isProbablyText(contentType: string): boolean {
+  return /^(text\/|application\/(json|xml|xhtml))/i.test(contentType);
+}
+
+function isProbablyPlayable(contentType: string, path: string): boolean {
+  return /video\/|mpegurl|mp2t|octet-stream|binary/i.test(contentType) || /\.(ts|m3u8?|mp4|m4v|mov|mkv|webm)(\?|$)/i.test(path);
+}
+
+function looksBinary(bytes: Uint8Array): boolean {
+  if (!bytes.length) return false;
+  // MPEG-TS packets normally start with sync byte 0x47 every 188 bytes.
+  if (bytes[0] === 0x47 && (bytes.length < 189 || bytes[188] === 0x47)) return true;
+  let control = 0;
+  for (const b of bytes) {
+    const isWhitespace = b === 9 || b === 10 || b === 13;
+    if ((b < 32 && !isWhitespace) || b === 127) control++;
+  }
+  return control / bytes.length > 0.05;
+}
+
+async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<{ preview: string; binaryLike: boolean }> {
+  const clone = res.clone();
+  const timeout = new Promise<Uint8Array[]>((resolve) => setTimeout(() => resolve([]), timeoutMs));
+  const read = (async () => {
+    const chunks: Uint8Array[] = [];
+    const reader = clone.body?.getReader();
+    if (!reader) return chunks;
+    let total = 0;
+    try {
+      while (total < maxBytes) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        chunks.push(value);
+        total += value.byteLength;
+        if (value.byteLength === 0) break;
+      }
+    } finally {
+      try { await reader.cancel(); } catch { /* noop */ }
+    }
+    return chunks;
+  })();
+  const chunks = await Promise.race([read, timeout]);
+  const bytes = new Uint8Array(Math.min(maxBytes, chunks.reduce((sum, c) => sum + c.byteLength, 0)));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const slice = chunk.slice(0, Math.max(0, bytes.length - offset));
+    bytes.set(slice, offset);
+    offset += slice.byteLength;
+    if (offset >= bytes.length) break;
+  }
+  try {
+    return {
+      preview: new TextDecoder().decode(bytes).replace(/\s+/g, " ").trim().slice(0, 240),
+      binaryLike: looksBinary(bytes),
+    };
+  } catch {
+    return { preview: "", binaryLike: looksBinary(bytes) };
+  }
+}
+
+function reasonForStatus(status: number): string | undefined {
+  if (status === 401 || status === 403) return AUTH_REASON;
+  if (status === 404) return "Stream não encontrado no servidor.";
+  if (status === 424 || status === 502 || status === 503 || status === 504 || status >= 500) {
+    return "Proxy não conseguiu abrir o stream. O servidor pode estar bloqueando o IP do Web Desktop.";
+  }
+  return undefined;
 }
 
 function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
@@ -87,6 +159,7 @@ async function handle(request: Request) {
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
   if (!target) return jsonError("missing ?u", 400);
+  const isProbe = url.searchParams.get("probe") === "1";
 
   let upstreamUrl: URL;
   try {
@@ -113,6 +186,7 @@ async function handle(request: Request) {
     h.set("Accept", "*/*");
     h.set("Accept-Encoding", "identity");
     h.set("Icy-MetaData", "0");
+    try { h.set("Connection", "keep-alive"); } catch { /* forbidden in some fetch runtimes */ }
     // Alguns painéis verificam Referer/Origin para liberar o stream.
     h.set("Referer", `${upstreamOrigin}/`);
     h.set("Origin", upstreamOrigin);
@@ -123,23 +197,62 @@ async function handle(request: Request) {
   let upstream: Response | null = null;
   let lastError: unknown = null;
   let lastStatus = 0;
+  let lastPreview = "";
+  let lastContentType = "";
+  let lastNonPlayableReason = "";
+  let acceptedLooksBinary = false;
+  let authRejected = false;
   for (const ua of uaCandidates) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
       const res = await fetch(upstreamUrl.toString(), {
-        method: request.method === "HEAD" ? "HEAD" : "GET",
+        method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
         headers: buildHeaders(ua),
         redirect: "follow",
         signal: controller.signal,
       });
       clearTimeout(timeout);
       lastStatus = res.status;
+      lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
+        authRejected = true;
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
+      const loopCt = lastContentType;
+      const loopIsPlaylist = /mpegurl/i.test(loopCt) || isPlaylistPath(upstreamUrl.pathname);
+      let loopBodyLooksBinary = false;
+      let loopPlayable = (loopIsPlaylist || isProbablyPlayable(loopCt, upstreamUrl.pathname)) && !(isProbablyText(loopCt) && !loopIsPlaylist);
+      if (!loopIsPlaylist && (isProbe || isProbablyText(loopCt) || !res.ok || !loopPlayable)) {
+        const sniff = await sniffBody(res);
+        const preview = sniff.preview;
+        loopBodyLooksBinary = sniff.binaryLike;
+        if (preview) lastPreview = preview;
+        if (AUTH_FAIL_RE.test(preview)) {
+          authRejected = true;
+          lastStatus = 401;
+          try { await res.body?.cancel(); } catch { /* noop */ }
+          continue;
+        }
+        if (res.ok && sniff.binaryLike && /\.ts$/i.test(upstreamUrl.pathname)) {
+          loopPlayable = true;
+        }
+      }
+      if ((isProbe || isLive) && !res.ok) {
+        lastNonPlayableReason = reasonForStatus(res.status) || `Stream upstream HTTP ${res.status}`;
+        try { await res.body?.cancel(); } catch { /* noop */ }
+        continue;
+      }
+      if ((isProbe || isLive) && res.ok) {
+        if (!loopPlayable) {
+          lastNonPlayableReason = "Resposta upstream não parece vídeo.";
+          try { await res.body?.cancel(); } catch { /* noop */ }
+          continue;
+        }
+      }
       upstream = res;
+      acceptedLooksBinary = loopBodyLooksBinary;
       break;
     } catch (e) {
       lastError = e;
@@ -148,18 +261,42 @@ async function handle(request: Request) {
 
   if (!upstream) {
     const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
-    const msg = maskUrlForLog(rawMsg);
+    const msg = maskIptvUrl(rawMsg);
     // 401/403 explícito do upstream: propaga com mensagem clara.
-    if (lastStatus === 401 || lastStatus === 403) {
-      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", lastStatus);
+    if (authRejected || lastStatus === 401 || lastStatus === 403) {
+      const status = lastStatus === 403 ? 403 : 401;
+      if (isProbe) {
+        return jsonData({
+          ok: false,
+          status,
+          contentType: "",
+          finalUrlHost: upstreamUrl.host,
+          reason: AUTH_REASON,
+          bodyPreview: maskIptvUrl(lastPreview),
+        });
+      }
+      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
     }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
-    return jsonError(msg, 424);
+    if (isProbe) {
+      return jsonData({
+        ok: false,
+        status: lastStatus || 424,
+          contentType: lastContentType,
+        finalUrlHost: upstreamUrl.host,
+          reason: lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg,
+          bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
+      });
+    }
+    return jsonError(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
+  const finalUrlHost = (() => {
+    try { return new URL(upstream?.url || upstreamUrl.toString()).host; } catch { return upstreamUrl.host; }
+  })();
   const isPlaylist =
     /mpegurl/i.test(ct) ||
     /\.m3u8(\?|$)/i.test(upstreamUrl.pathname) ||
@@ -170,23 +307,53 @@ async function handle(request: Request) {
   // recusa ("UnauthorizedUser") em vez de 401. Sem isso, esse texto é
   // entregue como se fosse vídeo e o mpegts.js quebra de forma opaca.
   // Só sniffamos quando o Content-Type sugere texto/HTML/JSON (não vídeo).
-  const looksTextual = /^(text\/|application\/(json|xml|xhtml))/i.test(ct);
-  if (
-    upstream.ok &&
-    !isPlaylist &&
-    looksTextual &&
-    request.method !== "HEAD"
-  ) {
+  const looksTextual = isProbablyText(ct);
+  const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok);
+  let preview = lastPreview;
+  let bodyLooksBinary = acceptedLooksBinary;
+  if (needsPreview) {
     try {
-      const bodyText = await upstream.clone().text();
-      if (AUTH_FAIL_RE.test(bodyText)) {
+      const sniff = preview ? { preview, binaryLike: bodyLooksBinary } : await sniffBody(upstream);
+      preview = sniff.preview;
+      bodyLooksBinary = bodyLooksBinary || sniff.binaryLike;
+      if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
-        return jsonError(
-          "Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.",
-          401,
-        );
+        if (isProbe) {
+          return jsonData({
+            ok: false,
+            status: 401,
+            contentType: ct,
+            finalUrlHost,
+            reason: AUTH_REASON,
+            bodyPreview: maskIptvUrl(preview),
+          });
+        }
+        return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
       }
     } catch { /* noop */ }
+  }
+
+  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname) || (bodyLooksBinary && /\.ts$/i.test(upstreamUrl.pathname))) && !(looksTextual && !isPlaylist && !bodyLooksBinary);
+  if (isProbe) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return jsonData({
+      ok: playable,
+      status: upstream.status,
+      contentType: ct,
+      finalUrlHost,
+      reason: playable ? undefined : reasonForStatus(upstream.status) || "Resposta upstream não parece vídeo.",
+      bodyPreview: !playable && preview ? maskIptvUrl(preview) : undefined,
+    });
+  }
+
+  if (isLive && !upstream.ok) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return jsonError(reasonForStatus(upstream.status) || `Stream upstream HTTP ${upstream.status}`, upstream.status);
+  }
+
+  if (isLive && upstream.ok && !isPlaylist && looksTextual && !bodyLooksBinary) {
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    return jsonError("Resposta upstream não parece vídeo.", 424);
   }
 
   const respHeaders = new Headers(CORS);

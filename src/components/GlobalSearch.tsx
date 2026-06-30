@@ -26,7 +26,7 @@ function getCreds(): XtreamCreds | null {
 }
 
 type Result =
-  | { kind: "live"; id: string; name: string; logo?: string }
+  | { kind: "live"; id: string; name: string; logo?: string; url?: string }
   | { kind: "movie"; id: string; name: string; logo?: string }
   | { kind: "series"; id: string; name: string; logo?: string };
 
@@ -44,6 +44,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const vodKey = `vod-list:${acct}:all`;
   const seriesKey = `series-list:${acct}:all`;
   const livePersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(liveKey) : null), [liveKey, acct]);
+  const liveInitialData = livePersisted?.data?.some((s) => !!s.url) ? livePersisted.data : undefined;
   const vodPersisted = useMemo(() => (acct ? loadPersisted<VodStream[]>(vodKey) : null), [vodKey, acct]);
   const seriesPersisted = useMemo(() => (acct ? loadPersisted<Series[]>(seriesKey) : null), [seriesKey, acct]);
 
@@ -51,8 +52,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
     queryKey: ["live-streams", acct, "all"],
     enabled: open && !!creds,
     queryFn: withPersist(liveKey, () => api<LiveStream[]>(creds!, "get_live_streams")),
-    initialData: livePersisted?.data,
-    initialDataUpdatedAt: livePersisted?.updatedAt,
+    initialData: liveInitialData,
+    initialDataUpdatedAt: liveInitialData ? livePersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
   });
   const vodQ = useQuery({
@@ -79,7 +80,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
     if (!enabled || !liveQ.data) return [];
     return filterBySearch(liveQ.data, (s) => s.name, trimmed)
       .slice(0, MAX_PER_SECTION)
-      .map((s) => ({ kind: "live", id: String(s.stream_id), name: s.name, logo: s.stream_icon }));
+      .map((s) => ({ kind: "live", id: String(s.stream_id), name: s.name, logo: s.stream_icon, url: s.url }));
   }, [enabled, liveQ.data, trimmed]);
 
   const movieResults: Result[] = useMemo(() => {
@@ -114,8 +115,12 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const handleSelect = (r: Result) => {
     onOpenChange(false);
     if (r.kind === "live") {
-      miniPlayerStore.set({ streamId: r.id, name: r.name, logo: r.logo });
-      void navigate({ to: "/live" });
+      miniPlayerStore.set({ streamId: r.id, name: r.name, logo: r.logo, src: r.url });
+      void navigate({
+        to: "/player/$type/$id",
+        params: { type: "live", id: r.id },
+        search: r.url ? { name: r.name, src: r.url } : { name: r.name },
+      });
     } else if (r.kind === "movie") {
       void navigate({ to: "/player/$type/$id", params: { type: "movie", id: r.id }, search: { name: r.name } });
     } else {
