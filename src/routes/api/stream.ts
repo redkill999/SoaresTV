@@ -333,7 +333,7 @@ async function handle(request: Request) {
     } catch { /* noop */ }
   }
 
-  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname) || (bodyLooksBinary && /\.ts(\?|$)/i.test(upstreamUrl.pathname))) && !(looksTextual && !isPlaylist && !bodyLooksBinary);
+  const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname) || (bodyLooksBinary && /\.ts$/i.test(upstreamUrl.pathname))) && !(looksTextual && !isPlaylist && !bodyLooksBinary);
   if (isProbe) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
     return jsonData({
