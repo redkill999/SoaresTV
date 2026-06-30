@@ -122,10 +122,6 @@ async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Prom
   }
 }
 
-async function bodyPreview(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<string> {
-  return (await sniffBody(res, maxBytes, timeoutMs)).preview;
-}
-
 function reasonForStatus(status: number): string | undefined {
   if (status === 401 || status === 403) return AUTH_REASON;
   if (status === 404) return "Stream não encontrado no servidor.";
