@@ -61,7 +61,9 @@ export function FloatingMiniPlayer() {
           streamId={state.streamId}
           name={state.name}
           logo={state.logo}
+          src={state.src}
         />
+
       </div>
     </div>
   );
