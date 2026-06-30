@@ -441,10 +441,22 @@ function mapXtreamLiveStreams(
     if (id == null) return;
     const catId = s.category_id != null ? String(s.category_id) : "";
     const group = cats.get(catId) ?? (typeof s.category_name === "string" ? s.category_name : undefined);
+    const liveUrl = (() => {
+      try {
+        const host = new URL(access.origin).hostname.toLowerCase();
+        // flipex.pro entrega a M3U real (output=ts) no formato curto
+        // /usuario/senha/id. Usar /live/...id.ts aqui recriava uma URL que
+        // não é exatamente a da lista e quebra parte dos canais no Web Desktop.
+        if (host === "flipex.pro" || host.endsWith(".flipex.pro")) {
+          return `${access.origin}/${access.username}/${access.password}/${String(id)}`;
+        }
+      } catch { /* mantém padrão Xtream */ }
+      return `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`;
+    })();
     entries.push({
       id: `xtream-live-${String(id)}`,
       name: decodeEntities(name),
-      url: `${access.origin}/live/${access.username}/${access.password}/${String(id)}.ts`,
+      url: liveUrl,
       logo: typeof s.stream_icon === "string" ? s.stream_icon : undefined,
       group: group ? `Canais | ${group}` : "Canais",
     });
