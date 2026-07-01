@@ -159,7 +159,7 @@ function LivePage() {
             totalCount={streamsQ.data?.length ?? 0}
           />
           <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
-            {!creds || streamsQ.isLoading ? (
+            {!creds || (streamsQ.isLoading && !streamsQ.data && !perCatQ.data) || (perCatEnabled && perCatQ.isLoading && !perCatQ.data) ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                 {Array.from({ length: 18 }).map((_, i) => (
                   <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
@@ -168,7 +168,9 @@ function LivePage() {
             ) : filtered.length === 0 ? (
               <div className="py-16 text-center text-white/60">
                 <Tv className="size-10 mx-auto mb-3 opacity-40" />
-                Nenhum canal encontrado.
+                {cat === "all" && !streamsQ.data
+                  ? "Lista muito grande para carregar tudo. Selecione uma categoria à esquerda."
+                  : "Nenhum canal encontrado."}
               </div>
             ) : (
               <LiveGrid filtered={filtered} />
