@@ -74,6 +74,22 @@ function MoviesPage() {
     initialData: listPersisted?.data,
     initialDataUpdatedAt: listPersisted?.updatedAt,
     staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  // Fallback per-category (painéis grandes falham no "all" no APK TV).
+  const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
+  const perCatKey = `vod-list:${acct}:cat:${cat}`;
+  const perCatPersisted = useMemo(
+    () => (perCatEnabled ? loadPersisted<VodStream[]>(perCatKey) : null),
+    [perCatEnabled, perCatKey],
+  );
+  const perCatQ = useQuery({
+    queryKey: ["vod-list", acct, "cat", cat],
+    enabled: perCatEnabled,
+    queryFn: withPersist(perCatKey, () => api<VodStream[]>(creds!, "get_vod_streams", { category_id: cat })),
+    initialData: perCatPersisted?.data,
+    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
