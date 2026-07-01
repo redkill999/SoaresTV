@@ -65,20 +65,29 @@ function LoadingPage() {
       setStatus((p) => ({ ...p, [k]: s }));
     };
 
+    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+      new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("timeout")), ms);
+        p.then((v) => { clearTimeout(t); resolve(v); },
+               (e) => { clearTimeout(t); reject(e); });
+      });
+
     const runXtream = async () => {
       if (!creds) return false;
-      const tests: { k: TestKey; action: string }[] = [
-        { k: "live",   action: "get_live_categories" },
-        { k: "vod",    action: "get_vod_categories" },
-        { k: "series", action: "get_series_categories" },
-        { k: "epg",    action: "get_live_streams" },
+      const tests: { k: TestKey; action: string; timeout: number }[] = [
+        { k: "live",   action: "get_live_categories",   timeout: 15000 },
+        { k: "vod",    action: "get_vod_categories",    timeout: 15000 },
+        { k: "series", action: "get_series_categories", timeout: 15000 },
+        // get_live_streams pode ser muito pesado em painéis grandes (60MB+)
+        // e travar o APK indefinidamente. Timeout curto + não bloqueia navegação.
+        { k: "epg",    action: "get_live_streams",      timeout: 20000 },
       ];
       const result: Record<TestKey, Status> = {
         live: "pending", vod: "pending", series: "pending", epg: "pending",
       };
       await Promise.all(tests.map(async (t) => {
         try {
-          const data = await api<unknown[]>(creds, t.action);
+          const data = await withTimeout(api<unknown[]>(creds, t.action), t.timeout);
           result[t.k] = Array.isArray(data) ? "ok" : "fail";
         } catch {
           result[t.k] = "fail";
@@ -112,10 +121,6 @@ function LoadingPage() {
         if (creds) {
           const xtreamStatus = await runXtream();
           const xtreamOk = xtreamStatus && Object.values(xtreamStatus).every((s) => s === "ok");
-          // Alguns painéis deixam o get.php/M3U funcionar no APK, mas bloqueiam
-          // player_api.php em uma ou mais probes do loading. Se já existe a lista
-          // salva, validamos por ela antes de declarar falha — sem trocar lista,
-          // sem mexer nas credenciais e sem impactar listas que já passam no Xtream.
           if (!xtreamOk && lists.length > 0) await runM3U();
         } else await runM3U();
       } catch {
@@ -123,17 +128,20 @@ function LoadingPage() {
       }
       await wait(700);
       if (!mountedRef.current) return;
-      // navigate fora do setStatus para evitar trigger duplo via re-render.
       setStatus((p) => {
-        const allOk = (Object.keys(p) as TestKey[]).every((k) => p[k] === "ok");
-        if (allOk && mountedRef.current) navigate({ to: "/home", replace: true });
+        // Navega para /home se live+vod+series estiverem OK — o EPG (get_live_streams)
+        // é opcional: em painéis grandes ele pode falhar/timeout, mas o app funciona.
+        // Isso desbloqueia o APK que ficava travado em "Esperando..." no card do Guia.
+        const coreOk = p.live === "ok" && p.vod === "ok" && p.series === "ok";
+        if (coreOk && mountedRef.current) navigate({ to: "/home", replace: true });
         return p;
       });
     })();
   }, [navigate]);
 
-  const anyFail = (Object.keys(status) as TestKey[]).some((k) => status[k] === "fail");
-  const anyPending = (Object.keys(status) as TestKey[]).some((k) => status[k] === "pending");
+  const anyFail = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "fail");
+  const anyPending = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "pending");
+
   const finishedWithFailure = !anyPending && anyFail;
 
   return (
