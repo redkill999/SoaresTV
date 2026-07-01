@@ -120,8 +120,15 @@ function LoadingPage() {
       try {
         if (creds) {
           const xtreamStatus = await runXtream();
-          const xtreamOk = xtreamStatus && Object.values(xtreamStatus).every((s) => s === "ok");
-          if (!xtreamOk && lists.length > 0) await runM3U();
+          // Fallback M3U só se o NÚCLEO (live/vod/series) falhar. O Guia
+          // (get_live_streams) falhando sozinho NÃO dispara o fallback —
+          // baixar a M3U bruta (60MB+) trava o APK da TV indefinidamente.
+          const coreOk =
+            xtreamStatus &&
+            xtreamStatus.live === "ok" &&
+            xtreamStatus.vod === "ok" &&
+            xtreamStatus.series === "ok";
+          if (!coreOk && lists.length > 0) await runM3U();
         } else await runM3U();
       } catch {
         /* runXtream/runM3U já tratam internamente — try/catch defensivo */
