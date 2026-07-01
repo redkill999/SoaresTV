@@ -50,8 +50,15 @@ export type HostProfile = {
    * provedor) e ao mesmo tempo respeitando a política de mixed-content do browser.
    */
   httpsPort?: number;
+  /**
+   * APENAS LIVE/Web: provedor comprovadamente incompatível com reprodução via
+   * navegador desktop — o CDN redireciona para host sem CORS e/ou bloqueia IPs
+   * do proxy edge. Web mostra aviso claro; APK ignora (ExoPlayer funciona).
+   */
+  webIncompatibleLive?: boolean;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
+
 };
 
 /**
