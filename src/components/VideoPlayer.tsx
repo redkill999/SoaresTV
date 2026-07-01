@@ -1163,9 +1163,25 @@ export function VideoPlayer({
                   advanceIfHlsMatches();
                   if (vodIdx >= playbackCandidates.length) {
                     pushDbg(`ETAPA 10 FIM sem candidatos restantes (hls fatal http=${httpCode})`);
-                    setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    // Padrão típico de host incompatível com Web: proxy 404/424
+                    // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
+                    // Marca o host para futuras sessões pularem o loop de tentativas.
+                    if (isLive && triedDirect) {
+                      const h = hostOf(workingSrc);
+                      if (h) {
+                        rememberWebIncompatibleLive(h);
+                        pushDbg(`ETAPA 10 host ${h} marcado webIncompatibleLive`);
+                      }
+                      setError(
+                        "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
+                        "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
+                      );
+                    } else {
+                      setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    }
                     return;
                   }
+
                   triedDirect = true;
                   playDirect();
                   return;
