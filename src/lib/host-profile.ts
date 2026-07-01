@@ -50,8 +50,15 @@ export type HostProfile = {
    * provedor) e ao mesmo tempo respeitando a política de mixed-content do browser.
    */
   httpsPort?: number;
+  /**
+   * APENAS LIVE/Web: provedor comprovadamente incompatível com reprodução via
+   * navegador desktop — o CDN redireciona para host sem CORS e/ou bloqueia IPs
+   * do proxy edge. Web mostra aviso claro; APK ignora (ExoPlayer funciona).
+   */
+  webIncompatibleLive?: boolean;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
+
 };
 
 /**
@@ -91,13 +98,16 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // flipex.pro: validado com lista real. Muitos canais mortos retornam 404/503,
-  // mas canais ativos expõem playlist HLS em /live/...m3u8; no Web Desktop esse
-  // deve ser o caminho principal via proxy same-origin (CORS/mixed-content safe).
+  // flipex.pro: origem OK mas os canais LIVE redirecionam (302) para um CDN
+  // (eagflix.lat) que bloqueia IPs de datacenter/edge (404 no proxy) e não
+  // envia CORS (bloqueio direto no browser). Confirmadamente NÃO reproduz no
+  // Web Desktop; funciona normalmente no APK via ExoPlayer nativo.
   "flipex.pro": {
     forceHttp: true,
     bypassProxyForLive: true,
+    webIncompatibleLive: true,
   },
+
 };
 
 
@@ -285,3 +295,9 @@ export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy
 export function rememberHlsUnsupported(host: string): void {
   updateHostProfile(host, { disableHlsConversion: true, preferTs: true });
 }
+
+/** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
+export function rememberWebIncompatibleLive(host: string): void {
+  updateHostProfile(host, { webIncompatibleLive: true });
+}
+

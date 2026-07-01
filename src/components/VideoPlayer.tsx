@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import { PictureInPicture2, PictureInPicture } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
-import { getHostProfile, hostOf, rememberHlsUnsupported, updateHostProfile } from "@/lib/host-profile";
+import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
@@ -619,6 +619,18 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    // Early guard: se este host já foi marcado como incompatível com Web Desktop
+    // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
+    // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
+    if (isLive && liveHostProfile.webIncompatibleLive) {
+      pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
+      setError(
+        "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
+        "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
+      );
+      return;
+    }
+
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
     const sourceFormat = sourceIsHls ? "hls" : sourceIsTs ? "ts" : "auto";
@@ -1151,9 +1163,25 @@ export function VideoPlayer({
                   advanceIfHlsMatches();
                   if (vodIdx >= playbackCandidates.length) {
                     pushDbg(`ETAPA 10 FIM sem candidatos restantes (hls fatal http=${httpCode})`);
-                    setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    // Padrão típico de host incompatível com Web: proxy 404/424
+                    // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
+                    // Marca o host para futuras sessões pularem o loop de tentativas.
+                    if (isLive && triedDirect) {
+                      const h = hostOf(workingSrc);
+                      if (h) {
+                        rememberWebIncompatibleLive(h);
+                        pushDbg(`ETAPA 10 host ${h} marcado webIncompatibleLive`);
+                      }
+                      setError(
+                        "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
+                        "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
+                      );
+                    } else {
+                      setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
+                    }
                     return;
                   }
+
                   triedDirect = true;
                   playDirect();
                   return;
