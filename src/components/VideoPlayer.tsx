@@ -594,8 +594,13 @@ export function VideoPlayer({
     // ---- Compatibilidade por lista ----------------------------------------
     // Resolve overrides salvos para o host desta URL (UA, transporte, formato,
     // upgrade HTTPS). Esses ajustes substituem o comportamento default.
+    const baseHostProfile = getHostProfile(hostOf(src));
     const compat: ListCompat = getCompatForUrl(src);
-    const httpsSrc = compat.forceHttps ? httpsVariant(src) : null;
+    // CRÍTICO: alguns provedores IPTV (ex.: flipex.pro) não têm HTTPS válido
+    // no painel/stream. Se o perfil do host diz forceHttp, qualquer override
+    // salvo de "forçar HTTPS" deve ser ignorado para não quebrar canais/VOD.
+    const mayUseHttpsVariant = !baseHostProfile.forceHttp;
+    const httpsSrc = compat.forceHttps && mayUseHttpsVariant ? httpsVariant(src) : null;
     const workingSrc = httpsSrc ?? src;
     const forcedUA = compat.userAgent && compat.userAgent !== "auto"
       ? USER_AGENT_STRINGS[compat.userAgent]
@@ -694,7 +699,7 @@ export function VideoPlayer({
 
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
-          const secure = httpsVariant(url);
+          const secure = mayUseHttpsVariant ? httpsVariant(url) : null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
           // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
           let candidates: (string | null)[];
@@ -767,16 +772,11 @@ export function VideoPlayer({
     const armVodWatchdog = () => {
       if (!isVod) return;
       clearWatchdog();
-      watchdog = setTimeout(() => {
-        if (cancelled) return;
-        // Só dispara fallback se nem metadata chegou. HAVE_METADATA já indica
-        // que o servidor respondeu — esperar mais 6s evita falso negativo em
-        // VOD de painel lento que demorou pra começar a entregar bytes.
-        if (video.readyState < HTMLMediaElement.HAVE_METADATA) tryNextVod();
-        else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-          watchdog = setTimeout(() => { if (!cancelled) tryNextVod(); }, 6_000);
-        }
-      }, 12_000);
+      // VOD progressivo (filmes/séries) pode demorar para ler o índice `moov`
+      // no fim de arquivos grandes. Trocar de candidato por timeout antes do
+      // erro real do <video> causava regressão: o player abandonava um MP4 bom
+      // e pulava para extensões alternativas inexistentes. Para VOD, fallback
+      // agora ocorre apenas em erro explícito do elemento de vídeo/HLS.
     };
 
     const bufferedAhead = () => {

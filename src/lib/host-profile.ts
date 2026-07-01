@@ -95,6 +95,7 @@ const HOST_PRESETS: Record<string, HostProfile> = {
   // mas canais ativos expõem playlist HLS em /live/...m3u8; no Web Desktop esse
   // deve ser o caminho principal via proxy same-origin (CORS/mixed-content safe).
   "flipex.pro": {
+    forceHttp: true,
     bypassProxyForLive: true,
   },
 };
@@ -204,6 +205,10 @@ if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
 }
+// flipex.pro não responde HTTPS no host do painel. Overrides antigos/salvos de
+// forceHttps/forceHttp=false quebram LIVE e VOD no Web Desktop; este preset é
+// intencionalmente mandatório para restaurar o comportamento HTTP funcional.
+memory["flipex.pro"] = { ...memory["flipex.pro"], forceHttp: true, bypassProxyForLive: true };
 if (Object.keys(memory).length) {
   console.log("[HOST PROFILE] perfis carregados", {
     hosts: Object.keys(memory),
