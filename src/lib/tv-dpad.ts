@@ -192,17 +192,21 @@ function handleKey(e: KeyboardEvent) {
   const key = e.key;
   const code = (e as KeyboardEvent & { keyCode?: number }).keyCode ?? 0;
 
-  // Keycodes de remotos Smart TV (alguns não setam e.key)
-  const isUp     = key === "ArrowUp"    || code === 38;
-  const isDown   = key === "ArrowDown"  || code === 40;
-  const isLeft   = key === "ArrowLeft"  || code === 37;
-  const isRight  = key === "ArrowRight" || code === 39;
+  // Keycodes de remotos Smart TV (alguns não setam e.key).
+  // Android TV / TCL / MiBox entregam os KEYCODE_* brutos do Android
+  // via Capacitor WebView: 19/20/21/22 (D-pad), 23/66 (OK), 4 (Back).
+  const isUp     = key === "ArrowUp"    || code === 38 || code === 19;
+  const isDown   = key === "ArrowDown"  || code === 40 || code === 20;
+  const isLeft   = key === "ArrowLeft"  || code === 37 || code === 21;
+  const isRight  = key === "ArrowRight" || code === 39 || code === 22;
   // Space (32) NÃO é mapeado como OK fora de Smart TVs — quebra <select>, <details>, etc.
-  const isEnter  = key === "Enter"      || code === 13 || (code === 32 && isSmartTvEnv());
+  const isEnter  = key === "Enter"      || code === 13 || code === 23 /* Android DPAD_CENTER */ ||
+                   code === 66 /* Android ENTER */ || (code === 32 && isSmartTvEnv());
   const isBack   =
     key === "Backspace" || key === "GoBack" || key === "BrowserBack" ||
-    code === 8 /* Backspace */ || code === 10009 /* Tizen Return */ ||
-    code === 461 /* WebOS Back */ || code === 27 /* Esc */;
+    code === 8 /* Backspace */ || code === 4 /* Android BACK */ ||
+    code === 10009 /* Tizen Return */ || code === 461 /* WebOS Back */ ||
+    code === 27 /* Esc */;
 
   // Teclas de mídia comuns em remotos
   const isMediaPlayPause = key === "MediaPlayPause" || code === 179 || code === 10252;
