@@ -295,3 +295,9 @@ export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy
 export function rememberHlsUnsupported(host: string): void {
   updateHostProfile(host, { disableHlsConversion: true, preferTs: true });
 }
+
+/** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
+export function rememberWebIncompatibleLive(host: string): void {
+  updateHostProfile(host, { webIncompatibleLive: true });
+}
+
