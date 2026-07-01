@@ -132,18 +132,20 @@ function SeriesPage() {
   );
 
   const filtered = useMemo(() => {
-    let list: Series[] = listQ.data ?? [];
+    const source: Series[] =
+      perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
+    let list: Series[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((s) => order.has(String(s.series_id))).sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
-    } else if (cat !== "all") {
+    } else if (cat !== "all" && !perCatQ.data) {
       list = list.filter((s) => String(s.category_id) === cat);
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
     <PremiumChrome>
