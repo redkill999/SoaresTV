@@ -77,6 +77,24 @@ function LivePage() {
     initialData: listInitialData,
     initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  // Fallback per-category: painéis grandes (60MB+) muitas vezes falham no
+  // get_live_streams "all" no APK TV. Ao selecionar uma categoria, buscamos
+  // só ela — muito mais leve — para o app funcionar mesmo sem a lista total.
+  const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
+  const perCatKey = `live-streams:${acct}:cat:${cat}`;
+  const perCatPersisted = useMemo(
+    () => (perCatEnabled ? loadPersisted<LiveStream[]>(perCatKey) : null),
+    [perCatEnabled, perCatKey],
+  );
+  const perCatQ = useQuery({
+    queryKey: ["live-streams", acct, "cat", cat],
+    enabled: perCatEnabled,
+    queryFn: withPersist(perCatKey, () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat })),
+    initialData: perCatPersisted?.data,
+    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
