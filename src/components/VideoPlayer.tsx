@@ -635,27 +635,11 @@ export function VideoPlayer({
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
-    // Fallbacks de VOD: alguns provedores Xtream entregam o mesmo filme
-    // em containers diferentes. Se o original falhar, tentamos .mp4 e .mkv.
-    const vodCandidates: string[] = [];
-    const vodMatch = workingSrc.match(/^(.*)\.([a-z0-9]+)(\?.*)?$/i);
-    if (vodMatch && (!hlsCandidate || isVod)) {
-      const [, base, ext, qs = ""] = vodMatch;
-      const currentExt = ext.toLowerCase();
-      // Quando o usuário força "mp4", prioriza containers progressivos.
-      const preferred = compat.streamFormat === "mp4"
-        ? ["mp4", "m4v", "mkv", currentExt]
-        : isVod
-          ? currentExt === "m3u8"
-            ? ["m3u8", "mp4", "m4v", "mkv"]
-            : [currentExt, "mp4", "m4v", "mkv", "m3u8"]
-          : [currentExt, "mp4", "m4v", "mkv"];
-      for (const alt of preferred) {
-        const candidate = `${base}.${alt}${qs}`;
-        if (!vodCandidates.includes(candidate)) vodCandidates.push(candidate);
-      }
-    }
-    if (!vodCandidates.length) vodCandidates.push(workingSrc);
+    // VOD (filmes/séries) deve ser conservador: usa exatamente a URL resolvida
+    // pelo catálogo/API. Inventar extensões alternativas (.m4v/.mkv/.m3u8)
+    // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
+    // parecia que filmes/séries também tinham quebrado.
+    const vodCandidates: string[] = [workingSrc];
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
