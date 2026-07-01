@@ -98,13 +98,16 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // flipex.pro: validado com lista real. Muitos canais mortos retornam 404/503,
-  // mas canais ativos expõem playlist HLS em /live/...m3u8; no Web Desktop esse
-  // deve ser o caminho principal via proxy same-origin (CORS/mixed-content safe).
+  // flipex.pro: origem OK mas os canais LIVE redirecionam (302) para um CDN
+  // (eagflix.lat) que bloqueia IPs de datacenter/edge (404 no proxy) e não
+  // envia CORS (bloqueio direto no browser). Confirmadamente NÃO reproduz no
+  // Web Desktop; funciona normalmente no APK via ExoPlayer nativo.
   "flipex.pro": {
     forceHttp: true,
     bypassProxyForLive: true,
+    webIncompatibleLive: true,
   },
+
 };
 
 
