@@ -117,19 +117,23 @@ function LivePage() {
   );
 
   const filtered = useMemo(() => {
-    let list: LiveStream[] = streamsQ.data ?? [];
-    // Search first so the cached lowercase index on the full array can be reused.
+    // Se uma categoria específica está selecionada e temos dados do
+    // per-cat query, usamos ele. Senão, cai no streamsQ "all".
+    const source: LiveStream[] =
+      perCatEnabled && perCatQ.data ? perCatQ.data : (streamsQ.data ?? []);
+    let list: LiveStream[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((x) => favIds.has(String(x.stream_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((x) => order.has(String(x.stream_id))).sort((a, b) => order.get(String(a.stream_id))! - order.get(String(b.stream_id))!);
-    } else if (cat !== "all") {
+    } else if (cat !== "all" && !perCatQ.data) {
+      // Só filtra pelo streamsQ se não veio do per-cat (que já vem filtrado).
       list = list.filter((x) => String(x.category_id) === cat);
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [streamsQ.data, deferredSearch, cat, favIds, recentIds, sort]);
+  }, [streamsQ.data, perCatQ.data, perCatEnabled, deferredSearch, cat, favIds, recentIds, sort]);
 
   const parental = store.getParental();
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
