@@ -183,7 +183,7 @@ function SeriesPage() {
               </div>
             </section>
           )}
-          {!creds || (listQ.isLoading && filtered.length === 0) ? (
+          {!creds || (listQ.isLoading && !listQ.data && !perCatQ.data) || (perCatEnabled && perCatQ.isLoading && !perCatQ.data) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (
                 <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
@@ -192,7 +192,9 @@ function SeriesPage() {
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-white/60">
               <Clapperboard className="size-10 mx-auto mb-3 opacity-40" />
-              Nenhuma série encontrada.
+              {cat === "all" && !listQ.data
+                ? "Lista muito grande para carregar tudo. Selecione uma categoria à esquerda."
+                : "Nenhuma série encontrada."}
             </div>
           ) : (
             <SeriesGrid filtered={filtered} progressMap={progressMap} />
