@@ -133,19 +133,21 @@ function MoviesPage() {
   );
 
   const filtered = useMemo(() => {
-    let list: VodStream[] = listQ.data ?? [];
+    const source: VodStream[] =
+      perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
+    let list: VodStream[] = source;
     const idOf = (m: VodStream) => `${m.stream_id}.${m.container_extension || "mp4"}`;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((m) => favIds.has(idOf(m)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((m) => order.has(idOf(m))).sort((a, b) => order.get(idOf(a))! - order.get(idOf(b))!);
-    } else if (cat !== "all") {
+    } else if (cat !== "all" && !perCatQ.data) {
       list = list.filter((m) => String(m.category_id) === cat);
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
     <PremiumChrome>
