@@ -74,6 +74,22 @@ function MoviesPage() {
     initialData: listPersisted?.data,
     initialDataUpdatedAt: listPersisted?.updatedAt,
     staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  // Fallback per-category (painéis grandes falham no "all" no APK TV).
+  const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
+  const perCatKey = `vod-list:${acct}:cat:${cat}`;
+  const perCatPersisted = useMemo(
+    () => (perCatEnabled ? loadPersisted<VodStream[]>(perCatKey) : null),
+    [perCatEnabled, perCatKey],
+  );
+  const perCatQ = useQuery({
+    queryKey: ["vod-list", acct, "cat", cat],
+    enabled: perCatEnabled,
+    queryFn: withPersist(perCatKey, () => api<VodStream[]>(creds!, "get_vod_streams", { category_id: cat })),
+    initialData: perCatPersisted?.data,
+    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
@@ -117,19 +133,21 @@ function MoviesPage() {
   );
 
   const filtered = useMemo(() => {
-    let list: VodStream[] = listQ.data ?? [];
+    const source: VodStream[] =
+      perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
+    let list: VodStream[] = source;
     const idOf = (m: VodStream) => `${m.stream_id}.${m.container_extension || "mp4"}`;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((m) => favIds.has(idOf(m)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((m) => order.has(idOf(m))).sort((a, b) => order.get(idOf(a))! - order.get(idOf(b))!);
-    } else if (cat !== "all") {
+    } else if (cat !== "all" && !perCatQ.data) {
       list = list.filter((m) => String(m.category_id) === cat);
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds]);
 
   return (
     <PremiumChrome>
@@ -167,7 +185,7 @@ function MoviesPage() {
               </div>
             </section>
           )}
-          {!creds || (listQ.isLoading && filtered.length === 0) ? (
+          {!creds || (listQ.isLoading && !listQ.data && !perCatQ.data) || (perCatEnabled && perCatQ.isLoading && !perCatQ.data) ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {Array.from({ length: 18 }).map((_, i) => (
                 <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
@@ -176,7 +194,9 @@ function MoviesPage() {
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-white/60">
               <Film className="size-10 mx-auto mb-3 opacity-40" />
-              Nenhum filme encontrado.
+              {cat === "all" && !listQ.data
+                ? "Lista muito grande para carregar tudo. Selecione uma categoria à esquerda."
+                : "Nenhum filme encontrado."}
             </div>
           ) : (
             <MovieGrid filtered={filtered} progressMap={progressMap} />

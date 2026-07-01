@@ -77,6 +77,24 @@ function LivePage() {
     initialData: listInitialData,
     initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  // Fallback per-category: painéis grandes (60MB+) muitas vezes falham no
+  // get_live_streams "all" no APK TV. Ao selecionar uma categoria, buscamos
+  // só ela — muito mais leve — para o app funcionar mesmo sem a lista total.
+  const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
+  const perCatKey = `live-streams:${acct}:cat:${cat}`;
+  const perCatPersisted = useMemo(
+    () => (perCatEnabled ? loadPersisted<LiveStream[]>(perCatKey) : null),
+    [perCatEnabled, perCatKey],
+  );
+  const perCatQ = useQuery({
+    queryKey: ["live-streams", acct, "cat", cat],
+    enabled: perCatEnabled,
+    queryFn: withPersist(perCatKey, () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat })),
+    initialData: perCatPersisted?.data,
+    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    staleTime: 10 * 60_000,
   });
 
   const favs = useFavorites();
@@ -99,19 +117,23 @@ function LivePage() {
   );
 
   const filtered = useMemo(() => {
-    let list: LiveStream[] = streamsQ.data ?? [];
-    // Search first so the cached lowercase index on the full array can be reused.
+    // Se uma categoria específica está selecionada e temos dados do
+    // per-cat query, usamos ele. Senão, cai no streamsQ "all".
+    const source: LiveStream[] =
+      perCatEnabled && perCatQ.data ? perCatQ.data : (streamsQ.data ?? []);
+    let list: LiveStream[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((x) => favIds.has(String(x.stream_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((x) => order.has(String(x.stream_id))).sort((a, b) => order.get(String(a.stream_id))! - order.get(String(b.stream_id))!);
-    } else if (cat !== "all") {
+    } else if (cat !== "all" && !perCatQ.data) {
+      // Só filtra pelo streamsQ se não veio do per-cat (que já vem filtrado).
       list = list.filter((x) => String(x.category_id) === cat);
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [streamsQ.data, deferredSearch, cat, favIds, recentIds, sort]);
+  }, [streamsQ.data, perCatQ.data, perCatEnabled, deferredSearch, cat, favIds, recentIds, sort]);
 
   const parental = store.getParental();
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
@@ -137,7 +159,7 @@ function LivePage() {
             totalCount={streamsQ.data?.length ?? 0}
           />
           <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
-            {!creds || streamsQ.isLoading ? (
+            {!creds || (streamsQ.isLoading && !streamsQ.data && !perCatQ.data) || (perCatEnabled && perCatQ.isLoading && !perCatQ.data) ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                 {Array.from({ length: 18 }).map((_, i) => (
                   <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
@@ -146,7 +168,9 @@ function LivePage() {
             ) : filtered.length === 0 ? (
               <div className="py-16 text-center text-white/60">
                 <Tv className="size-10 mx-auto mb-3 opacity-40" />
-                Nenhum canal encontrado.
+                {cat === "all" && !streamsQ.data
+                  ? "Lista muito grande para carregar tudo. Selecione uma categoria à esquerda."
+                  : "Nenhum canal encontrado."}
               </div>
             ) : (
               <LiveGrid filtered={filtered} />
