@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { SUPPORTED_LANGS, getStoredLang, setLang, type LangCode } from "@/lib/i18n";
 import homeBg from "@/assets/home-bg.png.asset.json";
+import { maskIptvUrl } from "@/lib/iptv-url";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
@@ -561,7 +562,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
             <>
               <InfoRow label="Modo" value="Lista M3U" />
               <InfoRow label="Lista" value={lists[0].name} />
-              <InfoRow label="URL" value={lists[0].url} mono />
+              <InfoRow label="URL" value={maskIptvUrl(lists[0].url)} mono />
             </>
           ) : (
             <p className="text-white/60">Sem conta conectada.</p>
