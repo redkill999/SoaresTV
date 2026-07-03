@@ -74,14 +74,13 @@ export const xtreamApi = createServerFn({ method: "POST" })
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), perAttemptTimeout);
       try {
-        const res = await fetch(url.toString(), {
+        const res = await safeFetch(url, {
           headers: {
             "User-Agent": uas[attempt],
             Accept: "*/*",
             "Accept-Encoding": "identity",
             Connection: "keep-alive",
           },
-          redirect: "follow",
           signal: controller.signal,
         });
         if (res.ok) {
