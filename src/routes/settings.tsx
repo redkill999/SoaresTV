@@ -1113,9 +1113,45 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const importFile = async (f: File) => {
     try {
       const txt = await f.text();
-      const data = JSON.parse(txt) as Record<string, string>;
-      Object.entries(data).forEach(([k, v]) => { if (typeof v === "string") localStorage.setItem(k, v); });
-      toast.success("Restauração concluída — recarregue o app");
+      const parsed = JSON.parse(txt);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        toast.error("Arquivo de backup inválido");
+        return;
+      }
+      const ALLOWED_PREFIX = "soarestv:";
+      let accepted = 0;
+      let skipped = 0;
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v !== "string") { skipped++; continue; }
+        if (!k.startsWith(ALLOWED_PREFIX)) { skipped++; continue; }
+        // Se o valor parece JSON (começa com {, [ ou "), exigimos que faça
+        // parse sem erro e resulte em objeto/array/primitivo — nunca gravamos
+        // string arbitrária que corrompa o estado do app.
+        const t = v.trim();
+        if (t.startsWith("{") || t.startsWith("[") || t.startsWith("\"")) {
+          try {
+            const inner = JSON.parse(v);
+            const ok =
+              inner === null ||
+              typeof inner === "string" ||
+              typeof inner === "number" ||
+              typeof inner === "boolean" ||
+              Array.isArray(inner) ||
+              (typeof inner === "object");
+            if (!ok) { skipped++; continue; }
+          } catch { skipped++; continue; }
+        }
+        try { localStorage.setItem(k, v); accepted++; } catch { skipped++; }
+      }
+      if (!accepted) {
+        toast.error("Nenhuma chave válida no backup");
+        return;
+      }
+      toast.success(
+        skipped > 0
+          ? `Restauração concluída (${accepted} itens, ${skipped} ignorados) — recarregue o app`
+          : "Restauração concluída — recarregue o app",
+      );
       setTimeout(() => location.reload(), 800);
     } catch { toast.error("Arquivo inválido"); }
   };
