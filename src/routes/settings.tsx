@@ -562,7 +562,7 @@ function ContaDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
             <>
               <InfoRow label="Modo" value="Lista M3U" />
               <InfoRow label="Lista" value={lists[0].name} />
-              <InfoRow label="URL" value={lists[0].url} mono />
+              <InfoRow label="URL" value={maskIptvUrl(lists[0].url)} mono />
             </>
           ) : (
             <p className="text-white/60">Sem conta conectada.</p>
