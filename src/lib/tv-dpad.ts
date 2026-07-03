@@ -67,16 +67,29 @@ function isVisible(el: HTMLElement): boolean {
   if (r.width === 0 || r.height === 0) return false;
   if (r.bottom < 0 || r.top > window.innerHeight + 200) return false;
   if (r.right < 0 || r.left > window.innerWidth + 200) return false;
-  const style = window.getComputedStyle(el);
-  if (style.visibility === "hidden" || style.display === "none") return false;
-  if (style.pointerEvents === "none") return false;
+  // getComputedStyle é caro (força reflow) — evitamos aqui. Elementos com
+  // display:none/visibility:hidden já retornam rect zerado no filtro acima.
+  // pointer-events:none em focusable real é raríssimo; se ocorrer, aceita.
   return true;
 }
 
-function visibleFocusables(): HTMLElement[] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+/** Retorna o container "scope" mais próximo do elemento — usado para
+ *  limitar a busca de focusables em grids gigantes (Filmes/Séries com
+ *  milhares de tiles). Se nenhum ancestral marca [data-tv-scope], usa
+ *  a rota atual (main/section) ou o document como fallback. */
+function scopeFor(el: HTMLElement | null): ParentNode {
+  if (!el) return document;
+  const scoped = el.closest<HTMLElement>("[data-tv-scope]");
+  if (scoped) return scoped;
+  const main = document.querySelector("main");
+  return main ?? document;
+}
+
+function visibleFocusables(root: ParentNode = document): HTMLElement[] {
+  const all = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   return all.filter(isVisible);
 }
+
 
 type Dir = "up" | "down" | "left" | "right";
 
