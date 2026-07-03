@@ -28,24 +28,21 @@ function isPlayerLink(el: HTMLElement | null): el is HTMLAnchorElement {
 }
 
 function showConfirmHint(el: HTMLElement) {
-  // Marca visualmente o item como "armado" para confirmação.
+  // Marca visualmente o item como "armado". O visual real vem de CSS
+  // (regra [data-tv-arming="1"] em styles.css) — usar classe/atributo
+  // garante que a regra !important do foco TV não sobrescreva.
   el.setAttribute("data-tv-arming", "1");
-  el.style.outline = "3px solid #1FB6FF";
-  el.style.outlineOffset = "2px";
   window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
   (el as HTMLElement & { __armT?: number }).__armT = window.setTimeout(() => {
     el.removeAttribute("data-tv-arming");
-    el.style.outline = "";
-    el.style.outlineOffset = "";
   }, CONFIRM_WINDOW_MS) as unknown as number;
 }
 
 function clearConfirmHint(el: HTMLElement) {
   el.removeAttribute("data-tv-arming");
-  el.style.outline = "";
-  el.style.outlineOffset = "";
   window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
 }
+
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -70,16 +67,29 @@ function isVisible(el: HTMLElement): boolean {
   if (r.width === 0 || r.height === 0) return false;
   if (r.bottom < 0 || r.top > window.innerHeight + 200) return false;
   if (r.right < 0 || r.left > window.innerWidth + 200) return false;
-  const style = window.getComputedStyle(el);
-  if (style.visibility === "hidden" || style.display === "none") return false;
-  if (style.pointerEvents === "none") return false;
+  // getComputedStyle é caro (força reflow) — evitamos aqui. Elementos com
+  // display:none/visibility:hidden já retornam rect zerado no filtro acima.
+  // pointer-events:none em focusable real é raríssimo; se ocorrer, aceita.
   return true;
 }
 
-function visibleFocusables(): HTMLElement[] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+/** Retorna o container "scope" mais próximo do elemento — usado para
+ *  limitar a busca de focusables em grids gigantes (Filmes/Séries com
+ *  milhares de tiles). Se nenhum ancestral marca [data-tv-scope], usa
+ *  a rota atual (main/section) ou o document como fallback. */
+function scopeFor(el: HTMLElement | null): ParentNode {
+  if (!el) return document;
+  const scoped = el.closest<HTMLElement>("[data-tv-scope]");
+  if (scoped) return scoped;
+  const main = document.querySelector("main");
+  return main ?? document;
+}
+
+function visibleFocusables(root: ParentNode = document): HTMLElement[] {
+  const all = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   return all.filter(isVisible);
 }
+
 
 type Dir = "up" | "down" | "left" | "right";
 
@@ -93,63 +103,69 @@ function pickNearest(current: HTMLElement, dir: Dir): HTMLElement | null {
   const cx = cr.left + cr.width / 2;
   const cy = cr.top + cr.height / 2;
 
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
+  const scan = (candidates: HTMLElement[]): HTMLElement | null => {
+    let best: HTMLElement | null = null;
+    let bestScore = Infinity;
+    for (const el of candidates) {
+      if (el === current) continue;
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const dx = x - cx;
+      const dy = y - cy;
 
-  for (const el of visibleFocusables()) {
-    if (el === current) continue;
-    const r = el.getBoundingClientRect();
-    const x = r.left + r.width / 2;
-    const y = r.top + r.height / 2;
-    const dx = x - cx;
-    const dy = y - cy;
+      let inDir = false;
+      let primary = 0;
+      let perpDist = 0;
+      let overlap = 0;
 
-    let inDir = false;
-    let primary = 0;
-    let perpDist = 0;
-    let overlap = 0;
+      switch (dir) {
+        case "up":
+          inDir = r.bottom <= cr.top + 4;
+          primary = cr.top - r.bottom;
+          perpDist = Math.abs(dx);
+          overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
+          break;
+        case "down":
+          inDir = r.top >= cr.bottom - 4;
+          primary = r.top - cr.bottom;
+          perpDist = Math.abs(dx);
+          overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
+          break;
+        case "left":
+          inDir = r.right <= cr.left + 4;
+          primary = cr.left - r.right;
+          perpDist = Math.abs(dy);
+          overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
+          break;
+        case "right":
+          inDir = r.left >= cr.right - 4;
+          primary = r.left - cr.right;
+          perpDist = Math.abs(dy);
+          overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
+          break;
+      }
 
-    switch (dir) {
-      case "up":
-        inDir = r.bottom <= cr.top + 4;
-        primary = cr.top - r.bottom;
-        perpDist = Math.abs(dx);
-        overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
-        break;
-      case "down":
-        inDir = r.top >= cr.bottom - 4;
-        primary = r.top - cr.bottom;
-        perpDist = Math.abs(dx);
-        overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
-        break;
-      case "left":
-        inDir = r.right <= cr.left + 4;
-        primary = cr.left - r.right;
-        perpDist = Math.abs(dy);
-        overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
-        break;
-      case "right":
-        inDir = r.left >= cr.right - 4;
-        primary = r.left - cr.right;
-        perpDist = Math.abs(dy);
-        overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
-        break;
+      if (!inDir) continue;
+      const overlapBonus = overlap > 0 ? -1000 : 0;
+      const score = Math.max(0, primary) + perpDist * 2 + overlapBonus;
+      if (score < bestScore) { bestScore = score; best = el; }
     }
+    return best;
+  };
 
-    if (!inDir) continue;
-
-    // Score: distância na direção + penalidade perpendicular, com bônus
-    // grande para sobreposição (mantém na mesma linha/coluna).
-    const overlapBonus = overlap > 0 ? -1000 : 0;
-    const score = Math.max(0, primary) + perpDist * 2 + overlapBonus;
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = el;
-    }
-  }
-  return best;
+  // 1ª passada: apenas dentro do container [data-tv-scope] — grids gigantes
+  // (Filmes/Séries com scroll infinito) não pagam getBoundingClientRect em
+  // milhares de tiles a cada seta.
+  const scope = scopeFor(current);
+  const scopedBest = scan(visibleFocusables(scope));
+  if (scopedBest) return scopedBest;
+  // 2ª passada: se não achou nada no scope (borda do grid), procura no
+  // documento inteiro para permitir sair para menu lateral, tabs, etc.
+  if (scope !== document) return scan(visibleFocusables(document));
+  return null;
 }
+
 
 function focusFirst(): boolean {
   // 1) Respeita um alvo explícito marcado pela página (ex.: tile principal da home)
@@ -211,7 +227,10 @@ function handleKey(e: KeyboardEvent) {
   // Teclas de mídia comuns em remotos
   const isMediaPlayPause = key === "MediaPlayPause" || code === 179 || code === 10252;
   const isMediaPlay = key === "MediaPlay" || code === 415;
-  const isMediaPause = key === "MediaPause" || code === 19;
+  // ATENÇÃO: keyCode 19 é KEYCODE_DPAD_UP no Android — não confundir com
+  // pausa. Só tratamos MediaPause via key === "MediaPause" (nunca por code cru).
+  const isMediaPause = key === "MediaPause";
+
   const isMediaStop = key === "MediaStop" || code === 413;
 
   // Marca interação por teclado para o estilo de foco
