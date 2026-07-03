@@ -378,7 +378,7 @@ async function handle(request: Request) {
     return jerr("Resposta upstream não parece vídeo.", 424);
   }
 
-  const respHeaders = new Headers(CORS);
+  const respHeaders = new Headers(cors);
 
   // Pass through useful upstream headers.
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
