@@ -133,6 +133,15 @@ function SeriesPage() {
     [catsQ.data, counts],
   );
 
+  const parental = store.getParental();
+  const lockedCats = useMemo(
+    () => new Set(parental.lockedCategories.map(String)),
+    [parental.lockedCategories],
+  );
+  const parentalActive = !!parental.pin && lockedCats.size > 0;
+  const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
+  const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
+
   const filtered = useMemo(() => {
     const source: Series[] =
       perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
@@ -145,9 +154,12 @@ function SeriesPage() {
     } else if (cat !== "all" && !perCatQ.data) {
       list = list.filter((s) => String(s.category_id) === cat);
     }
+    if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
+      list = list.filter((s) => !lockedCats.has(String(s.category_id)));
+    }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
 
   return (
     <PremiumChrome>
