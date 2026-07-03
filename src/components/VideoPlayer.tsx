@@ -1694,11 +1694,15 @@ function CustomControls({
                 if (v && Number.isFinite(t)) v.currentTime = t;
                 setSeeking(false);
               }}
-              onKeyUp={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                  e.preventDefault();
                   const v = videoRef.current;
-                  const t = parseFloat((e.currentTarget as HTMLInputElement).value);
-                  if (v && Number.isFinite(t)) v.currentTime = t;
+                  if (!v) return;
+                  const delta = e.key === "ArrowRight" ? 10 : -10;
+                  const next = Math.min(duration, Math.max(0, (v.currentTime || 0) + delta));
+                  v.currentTime = next;
+                  setSeekValue(next);
                 }
               }}
               className="flex-1 h-1.5 accent-primary cursor-pointer"
