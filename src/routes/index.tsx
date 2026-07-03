@@ -397,7 +397,7 @@ function LoginPage() {
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                      tabIndex={-1}
+                      tabIndex={0}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
