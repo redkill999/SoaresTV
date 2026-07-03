@@ -106,7 +106,11 @@ function pickNearest(current: HTMLElement, dir: Dir): HTMLElement | null {
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
 
-  for (const el of visibleFocusables()) {
+  // Escopa a busca no container ativo — reduz de milhares para dezenas
+  // de tiles em grids grandes (Filmes/Séries com scroll infinito).
+  const scope = scopeFor(current);
+  for (const el of visibleFocusables(scope)) {
+
     if (el === current) continue;
     const r = el.getBoundingClientRect();
     const x = r.left + r.width / 2;
