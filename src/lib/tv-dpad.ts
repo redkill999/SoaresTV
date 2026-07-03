@@ -225,7 +225,10 @@ function handleKey(e: KeyboardEvent) {
   // Teclas de mídia comuns em remotos
   const isMediaPlayPause = key === "MediaPlayPause" || code === 179 || code === 10252;
   const isMediaPlay = key === "MediaPlay" || code === 415;
-  const isMediaPause = key === "MediaPause" || code === 19;
+  // ATENÇÃO: keyCode 19 é KEYCODE_DPAD_UP no Android — não confundir com
+  // pausa. Só tratamos MediaPause via key === "MediaPause" (nunca por code cru).
+  const isMediaPause = key === "MediaPause";
+
   const isMediaStop = key === "MediaStop" || code === 413;
 
   // Marca interação por teclado para o estilo de foco
