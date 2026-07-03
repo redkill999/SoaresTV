@@ -351,6 +351,7 @@ function LoginPage() {
                   <Label htmlFor="server" className="text-xs tracking-wider text-muted-foreground">{t("auth.server")}</Label>
                   <Input
                     id="server"
+                    data-tv-default-focus
                     required
                     autoComplete="url"
                     inputMode="url"
