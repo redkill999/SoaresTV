@@ -165,11 +165,14 @@ function SeriesPage() {
     <PremiumChrome>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="SERIES" />
+      {needGate && !unlocked ? (
+        <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
+      ) : (
       <div className="flex-1 min-h-0 flex flex-col items-stretch sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
         <XciptvCategoryList
           categories={sidebarCats}
           value={cat}
-          onChange={setCat}
+          onChange={handleCatChange}
           loading={!creds || (catsQ.isLoading && !catsQ.data)}
           favCount={favIds.size}
           recentCount={recentIds.length}
