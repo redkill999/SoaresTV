@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
+import { ParentalGate } from "@/components/ParentalGate";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { findCategoryIdFor, isItemLocked } from "@/lib/parental";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
