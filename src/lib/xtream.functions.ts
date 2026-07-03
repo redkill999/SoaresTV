@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 
 // Proxy fetch for Xtream/M3U/XMLTV to bypass CORS.
 // No DB, no auth — pure passthrough. Credentials live in the user's browser.
@@ -30,6 +31,9 @@ export const xtreamApi = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const base = normalizeServer(data.server);
+    try { assertSafeUpstreamUrl(base); } catch (e) {
+      return { ok: false as const, raw: e instanceof Error ? e.message : "blocked host" };
+    }
     const url = new URL(`${base}/player_api.php`);
     url.searchParams.set("username", data.username);
     url.searchParams.set("password", data.password);
@@ -70,14 +74,13 @@ export const xtreamApi = createServerFn({ method: "POST" })
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), perAttemptTimeout);
       try {
-        const res = await fetch(url.toString(), {
+        const res = await safeFetch(url, {
           headers: {
             "User-Agent": uas[attempt],
             Accept: "*/*",
             "Accept-Encoding": "identity",
             Connection: "keep-alive",
           },
-          redirect: "follow",
           signal: controller.signal,
         });
         if (res.ok) {
@@ -131,6 +134,9 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     if (!/^https?:\/\//i.test(target)) target = `https://${target}`;
 
     const inputUrl = new URL(target);
+    try { assertSafeUpstreamUrl(inputUrl); } catch {
+      return { server: normalizeServer(target) };
+    }
     const origin = inputUrl.origin;
     const loginUrl = new URL("/login", origin).toString();
     const dashboardUrl = new URL("/dashboard", origin).toString();
@@ -139,6 +145,9 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort(), 15_000);
     try {
+      // Login precisa de redirect:"manual" (o handler lê o Location depois),
+      // então validamos o próprio loginUrl e não delegamos hops aqui.
+      assertSafeUpstreamUrl(loginUrl);
       const loginRes = await fetch(loginUrl, {
         method: "POST",
         headers: {
@@ -161,13 +170,12 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
         : "";
       const location = loginRes.headers.get("location");
       const nextUrl = location ? new URL(location, origin).toString() : dashboardUrl;
-      const pageRes = await fetch(nextUrl, {
+      const pageRes = await safeFetch(nextUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
           Accept: "text/html,*/*",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-        redirect: "follow",
         signal: ctrl.signal,
       });
       const html = await pageRes.text();
@@ -391,9 +399,8 @@ async function fetchJson(url: string, timeoutMs = 30_000): Promise<unknown> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
-      redirect: "follow",
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
@@ -566,12 +573,11 @@ export const fetchM3U = createServerFn({ method: "POST" })
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 60_000);
       try {
-        const res = await fetch(target, {
+        const res = await safeFetch(target, {
           headers: {
             "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
             Accept: "*/*",
           },
-          redirect: "follow",
           signal: controller.signal,
         });
         const text = await res.text();
@@ -590,7 +596,7 @@ export const fetchM3U = createServerFn({ method: "POST" })
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const res = await fetch(url, {
+        const res = await safeFetch(url, {
           method: "GET",
           headers: {
             "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
@@ -598,7 +604,6 @@ export const fetchM3U = createServerFn({ method: "POST" })
             "Accept-Encoding": "identity",
             "Icy-MetaData": "0",
           },
-          redirect: "follow",
           signal: ctrl.signal,
         });
         try { await res.body?.cancel(); } catch { /* noop */ }

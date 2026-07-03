@@ -1,17 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 
 // Proxy upstream IPTV streams so the browser doesn't hit CORS / mixed-content
 // issues. LIVE keeps the playlist-rewrite + Range-strip path. VOD uses a
 // simple fast-path: cycle a short UA list, follow redirects, pass-through
 // the client's Range header and the upstream status/headers verbatim.
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
-};
+// CORS: este endpoint só precisa responder ao próprio app. Em vez de
+// "*", ecoamos o Origin apenas quando bate com o host da própria
+// requisição (same-origin) ou com hosts liberados explicitamente via env.
+const EXTRA_ALLOWED_ORIGINS = (process.env.STREAM_PROXY_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function corsHeadersFor(request: Request): Record<string, string> {
+  const base: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
+    Vary: "Origin",
+  };
+  const reqOrigin = request.headers.get("origin");
+  if (!reqOrigin) return base; // same-origin fetch / non-CORS: nada a ecoar
+  let selfOrigin = "";
+  try { selfOrigin = new URL(request.url).origin; } catch { /* noop */ }
+  if (reqOrigin === selfOrigin || EXTRA_ALLOWED_ORIGINS.includes(reqOrigin)) {
+    base["Access-Control-Allow-Origin"] = reqOrigin;
+  }
+  return base;
+}
 
 const UA_LIST = [
   "XCIPTV/7.0 (Linux; Android 13)",
@@ -48,17 +67,17 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jsonError(error: string, status: number, responseStatus = status): Response {
+function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status): Response {
   return new Response(JSON.stringify({ error, status }), {
     status: responseStatus >= 500 ? 424 : responseStatus,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
 }
 
-function jsonData(data: unknown, status = 200): Response {
+function jsonData(cors: Record<string, string>, data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
 }
 
@@ -156,19 +175,22 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
 }
 
 async function handle(request: Request) {
+  const cors = corsHeadersFor(request);
+  const jerr = (e: string, s: number, rs?: number) => jsonError(cors, e, s, rs);
+  const jdata = (d: unknown, s?: number) => jsonData(cors, d, s);
+
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
-  if (!target) return jsonError("missing ?u", 400);
+  if (!target) return jerr("missing ?u", 400);
   const isProbe = url.searchParams.get("probe") === "1";
 
   let upstreamUrl: URL;
   try {
-    upstreamUrl = new URL(target);
-  } catch {
-    return jsonError("invalid url", 400);
-  }
-  if (!/^https?:$/.test(upstreamUrl.protocol)) {
-    return jsonError("bad protocol", 400);
+    upstreamUrl = assertSafeUpstreamUrl(target);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "invalid url";
+    // "blocked host" / "blocked ip" / "bad protocol" / "invalid url" → 400
+    return jerr(msg, 400);
   }
 
   const isLive = url.searchParams.get("kind") === "live";
@@ -206,10 +228,9 @@ async function handle(request: Request) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
-      const res = await fetch(upstreamUrl.toString(), {
+      const res = await safeFetch(upstreamUrl, {
         method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
         headers: buildHeaders(ua),
-        redirect: "follow",
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -266,7 +287,7 @@ async function handle(request: Request) {
     if (authRejected || lastStatus === 401 || lastStatus === 403) {
       const status = lastStatus === 403 ? 403 : 401;
       if (isProbe) {
-        return jsonData({
+        return jdata({
           ok: false,
           status,
           contentType: "",
@@ -275,13 +296,13 @@ async function handle(request: Request) {
           bodyPreview: maskIptvUrl(lastPreview),
         });
       }
-      return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
+      return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
     }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
     if (isProbe) {
-      return jsonData({
+      return jdata({
         ok: false,
         status: lastStatus || 424,
           contentType: lastContentType,
@@ -290,7 +311,7 @@ async function handle(request: Request) {
           bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
       });
     }
-    return jsonError(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
+    return jerr(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
   }
 
   const ct = upstream.headers.get("content-type") || "";
@@ -319,7 +340,7 @@ async function handle(request: Request) {
       if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
         if (isProbe) {
-          return jsonData({
+          return jdata({
             ok: false,
             status: 401,
             contentType: ct,
@@ -328,7 +349,7 @@ async function handle(request: Request) {
             bodyPreview: maskIptvUrl(preview),
           });
         }
-        return jsonError("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
+        return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
       }
     } catch { /* noop */ }
   }
@@ -336,7 +357,7 @@ async function handle(request: Request) {
   const playable = upstream.ok && (isPlaylist || isProbablyPlayable(ct, upstreamUrl.pathname) || (bodyLooksBinary && /\.ts$/i.test(upstreamUrl.pathname))) && !(looksTextual && !isPlaylist && !bodyLooksBinary);
   if (isProbe) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
-    return jsonData({
+    return jdata({
       ok: playable,
       status: upstream.status,
       contentType: ct,
@@ -348,15 +369,15 @@ async function handle(request: Request) {
 
   if (isLive && !upstream.ok) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
-    return jsonError(reasonForStatus(upstream.status) || `Stream upstream HTTP ${upstream.status}`, upstream.status);
+    return jerr(reasonForStatus(upstream.status) || `Stream upstream HTTP ${upstream.status}`, upstream.status);
   }
 
   if (isLive && upstream.ok && !isPlaylist && looksTextual && !bodyLooksBinary) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
-    return jsonError("Resposta upstream não parece vídeo.", 424);
+    return jerr("Resposta upstream não parece vídeo.", 424);
   }
 
-  const respHeaders = new Headers(CORS);
+  const respHeaders = new Headers(cors);
 
   // Pass through useful upstream headers.
   for (const h of ["content-length", "content-range", "accept-ranges", "cache-control"]) {
@@ -397,7 +418,7 @@ async function handle(request: Request) {
 export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
-      OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
+      OPTIONS: async ({ request }) => new Response(null, { status: 204, headers: corsHeadersFor(request) }),
       GET: async ({ request }) => handle(request),
       HEAD: async ({ request }) => handle(request),
     },
