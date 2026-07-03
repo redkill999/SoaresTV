@@ -220,12 +220,64 @@ if (isBrowser()) {
 const sameItem = (a: FavItem, b: { type: FavItem["type"]; id: string }) =>
   a.type === b.type && a.id === b.id;
 
-export const store = {
-  getCreds: () => read<XtreamCreds | null>(K.creds, null),
-  setCreds: (c: XtreamCreds | null) => write(K.creds, c),
+// --- Ofuscação de credenciais Xtream ---------------------------------------
+// Não é criptografia forte (a chave vive no bundle); apenas evita expor
+// usuário/senha em texto puro para quem inspecionar localStorage/DevTools.
+// Prefix "obf:v1:" identifica valores já ofuscados — permite migração
+// suave dos registros legados salvos em texto puro.
+const OBF_PREFIX = "obf:v1:";
+const OBF_KEY = "soarestv-obf-2026";
+function xorStr(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    out += String.fromCharCode(s.charCodeAt(i) ^ OBF_KEY.charCodeAt(i % OBF_KEY.length));
+  }
+  return out;
+}
+function obfuscate(s: string | undefined | null): string | undefined {
+  if (s === undefined || s === null || s === "") return s ?? undefined;
+  if (typeof s !== "string") return s;
+  if (s.startsWith(OBF_PREFIX)) return s;
+  try {
+    // btoa aceita apenas Latin-1 — encodeURIComponent garante compatibilidade
+    // com qualquer caractere que a senha possa ter (acentos, emoji, etc).
+    return OBF_PREFIX + btoa(xorStr(unescape(encodeURIComponent(s))));
+  } catch {
+    return s;
+  }
+}
+function deobfuscate(s: string | undefined | null): string | undefined {
+  if (s === undefined || s === null || s === "") return s ?? undefined;
+  if (typeof s !== "string") return s;
+  if (!s.startsWith(OBF_PREFIX)) return s; // legado em texto puro
+  try {
+    return decodeURIComponent(escape(xorStr(atob(s.slice(OBF_PREFIX.length)))));
+  } catch {
+    return s;
+  }
+}
+function obfuscateCreds(c: XtreamCreds | null): XtreamCreds | null {
+  if (!c) return c;
+  return { ...c, username: obfuscate(c.username) ?? "", password: obfuscate(c.password) ?? "" };
+}
+function deobfuscateCreds(c: XtreamCreds | null): XtreamCreds | null {
+  if (!c) return c;
+  return { ...c, username: deobfuscate(c.username) ?? "", password: deobfuscate(c.password) ?? "" };
+}
+function obfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
+  return l.map((p) => ({ ...p, username: obfuscate(p.username), password: obfuscate(p.password) }));
+}
+function deobfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
+  return l.map((p) => ({ ...p, username: deobfuscate(p.username), password: deobfuscate(p.password) }));
+}
 
-  getM3U: () => read<M3UPlaylist[]>(K.m3u, []),
-  setM3U: (l: M3UPlaylist[]) => write(K.m3u, l),
+export const store = {
+  getCreds: () => deobfuscateCreds(read<XtreamCreds | null>(K.creds, null)),
+  setCreds: (c: XtreamCreds | null) => write(K.creds, obfuscateCreds(c)),
+
+  getM3U: () => deobfuscateList(read<M3UPlaylist[]>(K.m3u, [])),
+  setM3U: (l: M3UPlaylist[]) => write(K.m3u, obfuscateList(l)),
+
 
   getFavs: () => read<FavItem[]>(K.favs, []),
   toggleFav: (item: FavItem) => {
