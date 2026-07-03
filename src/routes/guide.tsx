@@ -399,6 +399,20 @@ function GuidePage() {
         </div>
       )}
       </div>
+      {pendingNav && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPendingNav(null)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <ParentalGate
+              categoryId={pendingNav.categoryId}
+              onUnlock={() => {
+                const run = pendingNav.run;
+                setPendingNav(null);
+                run();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </PremiumChrome>
   );
 }
