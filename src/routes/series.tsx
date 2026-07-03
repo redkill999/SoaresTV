@@ -218,6 +218,7 @@ function SeriesPage() {
           )}
         </div>
       </div>
+      )}
       </div>
     </PremiumChrome>
   );
