@@ -1499,13 +1499,11 @@ export function VideoPlayer({
       <video
         ref={videoRef}
         poster={poster}
-        controls={controlsVisible}
+        controls={false}
         autoPlay
         playsInline
         style={{
           ['--cue-scale' as never]: settings.subtitleScale,
-          // Realce visual estilo "HDR" (apenas CSS — não é HDR real).
-          // Suave pra não estourar pele/branco. Se incomodar, é só reverter.
           filter: 'saturate(1.15) contrast(1.08) brightness(1.02)',
         }}
         className={videoClass}
@@ -1583,17 +1581,163 @@ export function VideoPlayer({
           ▶
         </button>
       )}
-      {pipSupported && playerMode === "web" && !error && (
-        <button
-          type="button"
-          onClick={() => { void togglePip(); }}
-          aria-label={pipActive ? "Sair do Picture-in-Picture" : "Picture-in-Picture"}
-          title="Picture-in-Picture"
-          className={`absolute bottom-3 right-3 z-20 size-10 rounded-full bg-black/60 backdrop-blur grid place-items-center hover:bg-black/80 transition-opacity ${controlsVisible || pipActive ? "opacity-100" : "opacity-0 pointer-events-none"} ${pipActive ? "text-primary" : "text-white"}`}
-        >
-          {pipActive ? <PictureInPicture className="size-5" /> : <PictureInPicture2 className="size-5" />}
-        </button>
+      {playerMode === "web" && !error && (
+        <CustomControls
+          videoRef={videoRef}
+          visible={controlsVisible}
+          pipSupported={pipSupported}
+          pipActive={pipActive}
+          onTogglePip={() => { void togglePip(); }}
+          onInteract={revealNativeControls}
+        />
       )}
     </div>
   );
 }
+
+// ============================================================================
+// Custom controls bar — substitui os controles nativos do <video>. Motivos:
+// (1) uniformidade visual entre Android/APK/desktop, (2) navegável pelo D-pad
+// (todos os botões e o slider são elementos focusable padrão), (3) o botão
+// de PiP entra na barra e não sobrepõe mais nada. Usar flex simples com
+// gap-* garante alinhamento consistente sem posicionamento absoluto solto.
+// ============================================================================
+function CustomControls({
+  videoRef,
+  visible,
+  pipSupported,
+  pipActive,
+  onTogglePip,
+  onInteract,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  visible: boolean;
+  pipSupported: boolean;
+  pipActive: boolean;
+  onTogglePip: () => void;
+  onInteract: () => void;
+}) {
+  const [paused, setPaused] = useState(true);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [seeking, setSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPlay = () => setPaused(false);
+    const onPause = () => setPaused(true);
+    const onTime = () => { if (!seeking) setCurrent(v.currentTime || 0); };
+    const onMeta = () => setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("timeupdate", onTime);
+    v.addEventListener("durationchange", onMeta);
+    v.addEventListener("loadedmetadata", onMeta);
+    setPaused(v.paused);
+    setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+    setCurrent(v.currentTime || 0);
+    return () => {
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("durationchange", onMeta);
+      v.removeEventListener("loadedmetadata", onMeta);
+    };
+  }, [videoRef, seeking]);
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => undefined);
+    else v.pause();
+  }, [videoRef]);
+
+  const hasSeek = duration > 0 && Number.isFinite(duration);
+  const shown = seeking ? seekValue : current;
+
+  return (
+    <div
+      className={`absolute inset-x-0 bottom-0 z-20 px-3 py-2 sm:px-4 sm:py-3 bg-gradient-to-t from-black/80 via-black/50 to-transparent transition-opacity duration-200 ${
+        visible ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+      onClick={(e) => { e.stopPropagation(); onInteract(); }}
+      onMouseMove={onInteract}
+    >
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={paused ? "Reproduzir" : "Pausar"}
+          className="size-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center text-white"
+        >
+          {paused ? <Play className="size-5" /> : <Pause className="size-5" />}
+        </button>
+
+        {hasSeek ? (
+          <>
+            <span className="text-xs tabular-nums text-white/90 w-12 text-right">{fmtDur(shown)}</span>
+            <input
+              type="range"
+              min={0}
+              max={duration}
+              step={0.1}
+              value={shown}
+              aria-label="Barra de progresso"
+              onFocus={onInteract}
+              onPointerDown={() => setSeeking(true)}
+              onChange={(e) => setSeekValue(parseFloat(e.currentTarget.value))}
+              onPointerUp={(e) => {
+                const v = videoRef.current;
+                const t = parseFloat((e.currentTarget as HTMLInputElement).value);
+                if (v && Number.isFinite(t)) v.currentTime = t;
+                setSeeking(false);
+              }}
+              onKeyUp={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                  const v = videoRef.current;
+                  const t = parseFloat((e.currentTarget as HTMLInputElement).value);
+                  if (v && Number.isFinite(t)) v.currentTime = t;
+                }
+              }}
+              className="flex-1 h-1.5 accent-primary cursor-pointer"
+            />
+            <span className="text-xs tabular-nums text-white/70 w-12">{fmtDur(duration)}</span>
+          </>
+        ) : (
+          <>
+            <span className="flex-1 text-xs uppercase tracking-widest text-white/70">Ao vivo</span>
+            <span className="inline-flex items-center gap-1 text-xs text-red-400">
+              <span className="size-2 rounded-full bg-red-500 animate-pulse" />
+              LIVE
+            </span>
+          </>
+        )}
+
+        {pipSupported && (
+          <button
+            type="button"
+            onClick={onTogglePip}
+            aria-label={pipActive ? "Sair do Picture-in-Picture" : "Picture-in-Picture"}
+            title="Picture-in-Picture"
+            className={`size-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center ${pipActive ? "text-primary" : "text-white"}`}
+          >
+            {pipActive ? <PictureInPicture className="size-5" /> : <PictureInPicture2 className="size-5" />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtDur(s: number): string {
+  if (!Number.isFinite(s) || s < 0) return "0:00";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  const mm = String(m).padStart(h > 0 ? 2 : 1, "0");
+  const ss = String(sec).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
