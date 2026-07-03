@@ -43,6 +43,23 @@ function GuidePage() {
   const { state: miniPlayer } = useMiniPlayer();
   const activeStreamId = miniPlayer?.streamId ?? null;
   const { addAlert, removeAlert, hasAlert } = useEpgAlerts();
+  const parental = store.getParental();
+  const lockedCats = useMemo(
+    () => new Set(parental.lockedCategories.map(String)),
+    [parental.lockedCategories],
+  );
+  const [pendingNav, setPendingNav] = useState<{ categoryId: string; run: () => void } | null>(null);
+  const guardNav = useCallback(
+    (categoryId: string | number | undefined, run: () => void) => {
+      const cid = String(categoryId ?? "");
+      if (parental.pin && cid && lockedCats.has(cid)) {
+        setPendingNav({ categoryId: cid, run });
+      } else {
+        run();
+      }
+    },
+    [parental.pin, lockedCats],
+  );
 
   useEffect(() => setCreds(store.getCreds()), []);
   useEffect(() => {
