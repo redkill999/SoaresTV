@@ -65,7 +65,14 @@ function FavoritesPage() {
   }, [history]);
 
   const filtered = useMemo(() => {
-    let list = favs;
+    const lockedLive = getLockedIdSet("live");
+    const lockedMovie = getLockedIdSet("movie");
+    const lockedSeries = getLockedIdSet("series");
+    let list = favs.filter((f) => {
+      if (f.type === "live") return !lockedLive.has(String(f.id));
+      if (f.type === "movie") return !lockedMovie.has(String(f.id));
+      return !lockedSeries.has(String(f.id));
+    });
     if (tab !== "all") list = list.filter((f) => f.type === tab);
     if (search) {
       const s = search.toLowerCase();
