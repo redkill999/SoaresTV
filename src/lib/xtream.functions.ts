@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 
 // Proxy fetch for Xtream/M3U/XMLTV to bypass CORS.
 // No DB, no auth — pure passthrough. Credentials live in the user's browser.
