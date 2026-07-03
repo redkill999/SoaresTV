@@ -202,8 +202,9 @@ function handleKey(e: KeyboardEvent) {
   // Não interfere quando digitando em inputs/textarea/contenteditable
   const target = e.target as HTMLElement | null;
   const tag = target?.tagName;
+  const isRangeInput = tag === "INPUT" && (target as HTMLInputElement | null)?.type === "range";
   const typing =
-    tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable;
+    (tag === "INPUT" && !isRangeInput) || tag === "TEXTAREA" || target?.isContentEditable;
 
   const key = e.key;
   const code = (e as KeyboardEvent & { keyCode?: number }).keyCode ?? 0;
