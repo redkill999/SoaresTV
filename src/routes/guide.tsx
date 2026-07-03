@@ -16,6 +16,7 @@ import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import { toast } from "sonner";
 import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, History, Tv } from "lucide-react";
+import { ParentalGate } from "@/components/ParentalGate";
 
 export const Route = createFileRoute("/guide")({
   head: () => ({ meta: [{ title: "Guia EPG — SoaresTV" }] }),
@@ -42,6 +43,23 @@ function GuidePage() {
   const { state: miniPlayer } = useMiniPlayer();
   const activeStreamId = miniPlayer?.streamId ?? null;
   const { addAlert, removeAlert, hasAlert } = useEpgAlerts();
+  const parental = store.getParental();
+  const lockedCats = useMemo(
+    () => new Set(parental.lockedCategories.map(String)),
+    [parental.lockedCategories],
+  );
+  const [pendingNav, setPendingNav] = useState<{ categoryId: string; run: () => void } | null>(null);
+  const guardNav = useCallback(
+    (categoryId: string | number | undefined, run: () => void) => {
+      const cid = String(categoryId ?? "");
+      if (parental.pin && cid && lockedCats.has(cid)) {
+        setPendingNav({ categoryId: cid, run });
+      } else {
+        run();
+      }
+    },
+    [parental.pin, lockedCats],
+  );
 
   useEffect(() => setCreds(store.getCreds()), []);
   useEffect(() => {
@@ -227,7 +245,7 @@ function GuidePage() {
           </div>
 
           {/* Rows */}
-          <div className="flex flex-1 min-h-0 overflow-y-auto">
+          <div data-tv-scope className="flex flex-1 min-h-0 overflow-y-auto">
             {/* Channel column */}
             <div className="shrink-0 border-r border-white/10 bg-black/20" style={{ width: CHANNEL_COL }}>
               {visibleChannels.map((s) => {
@@ -239,11 +257,13 @@ function GuidePage() {
                   ref={(el) => registerRow(s.stream_id, el)}
                   data-stream-id={s.stream_id}
                   onClick={() =>
-                    navigate({
-                      to: "/player/$type/$id",
-                      params: { type: "live", id: String(s.stream_id) },
-                      search: s.url ? { name: s.name, src: s.url } : { name: s.name },
-                    })
+                    guardNav(s.category_id, () =>
+                      navigate({
+                        to: "/player/$type/$id",
+                        params: { type: "live", id: String(s.stream_id) },
+                        search: s.url ? { name: s.name, src: s.url } : { name: s.name },
+                      }),
+                    )
                   }
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
                     isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-white/5"
@@ -307,11 +327,13 @@ function GuidePage() {
                             if (!Number.isFinite(start) || !Number.isFinite(stop)) return;
                             const durationMin = Math.max(1, Math.ceil((stop - start) / 60));
                             const url = timeshiftUrl(creds, s.stream_id, start, durationMin);
-                            navigate({
-                              to: "/player/$type/$id",
-                              params: { type: "live", id: String(s.stream_id) },
-                              search: { name: `${s.name} — ${p.title}`, src: url },
-                            });
+                            guardNav(s.category_id, () =>
+                              navigate({
+                                to: "/player/$type/$id",
+                                params: { type: "live", id: String(s.stream_id) },
+                                search: { name: `${s.name} — ${p.title}`, src: url },
+                              }),
+                            );
                           }}
                           onToggleAlert={() => {
                             const ts = Number(p.start_timestamp);
@@ -329,11 +351,13 @@ function GuidePage() {
                             }
                           }}
                           onOpen={() =>
-                            navigate({
-                              to: "/player/$type/$id",
-                              params: { type: "live", id: String(s.stream_id) },
-                              search: s.url ? { name: s.name, src: s.url } : { name: s.name },
-                            })
+                            guardNav(s.category_id, () =>
+                              navigate({
+                                to: "/player/$type/$id",
+                                params: { type: "live", id: String(s.stream_id) },
+                                search: s.url ? { name: s.name, src: s.url } : { name: s.name },
+                              }),
+                            )
                           }
                         />
                       ))}
@@ -375,6 +399,20 @@ function GuidePage() {
         </div>
       )}
       </div>
+      {pendingNav && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPendingNav(null)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <ParentalGate
+              categoryId={pendingNav.categoryId}
+              onUnlock={() => {
+                const run = pendingNav.run;
+                setPendingNav(null);
+                run();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </PremiumChrome>
   );
 }
