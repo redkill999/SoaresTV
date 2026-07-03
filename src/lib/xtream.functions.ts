@@ -596,7 +596,7 @@ export const fetchM3U = createServerFn({ method: "POST" })
       const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const res = await fetch(url, {
+        const res = await safeFetch(url, {
           method: "GET",
           headers: {
             "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
@@ -604,7 +604,6 @@ export const fetchM3U = createServerFn({ method: "POST" })
             "Accept-Encoding": "identity",
             "Icy-MetaData": "0",
           },
-          redirect: "follow",
           signal: ctrl.signal,
         });
         try { await res.body?.cancel(); } catch { /* noop */ }
