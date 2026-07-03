@@ -175,19 +175,22 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
 }
 
 async function handle(request: Request) {
+  const cors = corsHeadersFor(request);
+  const jerr = (e: string, s: number, rs?: number) => jsonError(cors, e, s, rs);
+  const jdata = (d: unknown, s?: number) => jsonData(cors, d, s);
+
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
-  if (!target) return jsonError("missing ?u", 400);
+  if (!target) return jerr("missing ?u", 400);
   const isProbe = url.searchParams.get("probe") === "1";
 
   let upstreamUrl: URL;
   try {
-    upstreamUrl = new URL(target);
-  } catch {
-    return jsonError("invalid url", 400);
-  }
-  if (!/^https?:$/.test(upstreamUrl.protocol)) {
-    return jsonError("bad protocol", 400);
+    upstreamUrl = assertSafeUpstreamUrl(target);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "invalid url";
+    // "blocked host" / "blocked ip" / "bad protocol" / "invalid url" → 400
+    return jerr(msg, 400);
   }
 
   const isLive = url.searchParams.get("kind") === "live";
