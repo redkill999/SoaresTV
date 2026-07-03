@@ -87,6 +87,7 @@ function LoginPage() {
     void isNativeApp().then((native) => {
       if (cancelled) return;
       setIsNative(native);
+      setIsTv(isTvDevice());
       if (native) {
         setNativeSplash(true);
         if (autoLogin) {
