@@ -8,6 +8,7 @@ import { MediaGrid } from "@/components/MediaGrid";
 import { type TabKey } from "@/components/SectionTabs";
 import { useFavorites } from "@/hooks/use-favorites";
 import { store, type HistItem } from "@/lib/storage";
+import { getLockedIdSet } from "@/lib/parental";
 import { ArrowDownAZ, Clock, Flame, Heart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
