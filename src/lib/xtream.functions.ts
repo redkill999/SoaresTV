@@ -31,6 +31,9 @@ export const xtreamApi = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const base = normalizeServer(data.server);
+    try { assertSafeUpstreamUrl(base); } catch (e) {
+      return { ok: false as const, raw: e instanceof Error ? e.message : "blocked host" };
+    }
     const url = new URL(`${base}/player_api.php`);
     url.searchParams.set("username", data.username);
     url.searchParams.set("password", data.password);
