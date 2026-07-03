@@ -67,14 +67,14 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jerr(cors: Record<string, string>, error: string, status: number, responseStatus = status): Response {
+function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status): Response {
   return new Response(JSON.stringify({ error, status }), {
     status: responseStatus >= 500 ? 424 : responseStatus,
     headers: { ...cors, "Content-Type": "application/json" },
   });
 }
 
-function jdata(cors: Record<string, string>, data: unknown, status = 200): Response {
+function jsonData(cors: Record<string, string>, data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...cors, "Content-Type": "application/json" },
