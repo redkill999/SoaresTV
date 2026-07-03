@@ -220,6 +220,7 @@ function MoviesPage() {
           )}
         </div>
       </div>
+      )}
       </div>
     </PremiumChrome>
   );
