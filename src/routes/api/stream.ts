@@ -1,17 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 
 // Proxy upstream IPTV streams so the browser doesn't hit CORS / mixed-content
 // issues. LIVE keeps the playlist-rewrite + Range-strip path. VOD uses a
 // simple fast-path: cycle a short UA list, follow redirects, pass-through
 // the client's Range header and the upstream status/headers verbatim.
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
-};
+// CORS: este endpoint só precisa responder ao próprio app. Em vez de
+// "*", ecoamos o Origin apenas quando bate com o host da própria
+// requisição (same-origin) ou com hosts liberados explicitamente via env.
+const EXTRA_ALLOWED_ORIGINS = (process.env.STREAM_PROXY_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function corsHeadersFor(request: Request): Record<string, string> {
+  const base: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
+    Vary: "Origin",
+  };
+  const reqOrigin = request.headers.get("origin");
+  if (!reqOrigin) return base; // same-origin fetch / non-CORS: nada a ecoar
+  let selfOrigin = "";
+  try { selfOrigin = new URL(request.url).origin; } catch { /* noop */ }
+  if (reqOrigin === selfOrigin || EXTRA_ALLOWED_ORIGINS.includes(reqOrigin)) {
+    base["Access-Control-Allow-Origin"] = reqOrigin;
+  }
+  return base;
+}
 
 const UA_LIST = [
   "XCIPTV/7.0 (Linux; Android 13)",
