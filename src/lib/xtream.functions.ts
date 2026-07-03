@@ -573,12 +573,11 @@ export const fetchM3U = createServerFn({ method: "POST" })
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 60_000);
       try {
-        const res = await fetch(target, {
+        const res = await safeFetch(target, {
           headers: {
             "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
             Accept: "*/*",
           },
-          redirect: "follow",
           signal: controller.signal,
         });
         const text = await res.text();
