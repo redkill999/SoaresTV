@@ -176,8 +176,8 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
 
 async function handle(request: Request) {
   const cors = corsHeadersFor(request);
-  const jerr = (e: string, s: number, rs?: number) => jerr(cors, e, s, rs);
-  const jdata = (d: unknown, s?: number) => jdata(cors, d, s);
+  const jerr = (e: string, s: number, rs?: number) => jsonError(cors, e, s, rs);
+  const jdata = (d: unknown, s?: number) => jsonData(cors, d, s);
 
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
