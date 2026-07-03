@@ -116,6 +116,13 @@ function LivePage() {
     [categoriesQ.data, counts],
   );
 
+  const parental = store.getParental();
+  const lockedCats = useMemo(
+    () => new Set(parental.lockedCategories.map(String)),
+    [parental.lockedCategories],
+  );
+  const parentalActive = !!parental.pin && lockedCats.size > 0;
+
   const filtered = useMemo(() => {
     // Se uma categoria específica está selecionada e temos dados do
     // per-cat query, usamos ele. Senão, cai no streamsQ "all".
@@ -131,11 +138,16 @@ function LivePage() {
       // Só filtra pelo streamsQ se não veio do per-cat (que já vem filtrado).
       list = list.filter((x) => String(x.category_id) === cat);
     }
+    // Parental: em qualquer view não-específica (all/favorites/recent),
+    // esconde canais cuja category_id esteja bloqueada. A view específica
+    // (cat === category bloqueada) continua sendo protegida pelo ParentalGate.
+    if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
+      list = list.filter((x) => !lockedCats.has(String(x.category_id)));
+    }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [streamsQ.data, perCatQ.data, perCatEnabled, deferredSearch, cat, favIds, recentIds, sort]);
+  }, [streamsQ.data, perCatQ.data, perCatEnabled, deferredSearch, cat, favIds, recentIds, sort, parentalActive, lockedCats]);
 
-  const parental = store.getParental();
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
   // FIX (audit perf): handler estável evita re-render do XciptvCategoryList memoizado.
   const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
