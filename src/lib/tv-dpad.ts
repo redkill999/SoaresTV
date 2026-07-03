@@ -465,3 +465,14 @@ export function isSmartTvEnv(): boolean {
   const ua = navigator.userAgent || "";
   return /Tizen|Web0S|WebOS|SmartTV|SMART-TV|HbbTV|NetCast|VIDAA|AFT[A-Z]|AndroidTV|Android TV|GoogleTV|BRAVIA|Hisense|Roku|TCL|MiBOX|MiTV|Chromecast|CrKey|AOSP on IAT|Linux;\s?Android[^)]*;\s?(?:TV|ATV|MiBOX|TCL)/i.test(ua);
 }
+
+/**
+ * Detecta especificamente TV/TV Box (diferente de `data-tv-mode`, que também
+ * cobre celular). Usa UA de Smart TV OU ausência total de touch.
+ */
+export function isTvDevice(): boolean {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  if (isSmartTvEnv()) return true;
+  const noTouch = (navigator.maxTouchPoints ?? 0) === 0 && !("ontouchstart" in window);
+  return noTouch;
+}
