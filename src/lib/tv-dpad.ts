@@ -103,67 +103,69 @@ function pickNearest(current: HTMLElement, dir: Dir): HTMLElement | null {
   const cx = cr.left + cr.width / 2;
   const cy = cr.top + cr.height / 2;
 
-  let best: HTMLElement | null = null;
-  let bestScore = Infinity;
+  const scan = (candidates: HTMLElement[]): HTMLElement | null => {
+    let best: HTMLElement | null = null;
+    let bestScore = Infinity;
+    for (const el of candidates) {
+      if (el === current) continue;
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const dx = x - cx;
+      const dy = y - cy;
 
-  // Escopa a busca no container ativo — reduz de milhares para dezenas
-  // de tiles em grids grandes (Filmes/Séries com scroll infinito).
+      let inDir = false;
+      let primary = 0;
+      let perpDist = 0;
+      let overlap = 0;
+
+      switch (dir) {
+        case "up":
+          inDir = r.bottom <= cr.top + 4;
+          primary = cr.top - r.bottom;
+          perpDist = Math.abs(dx);
+          overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
+          break;
+        case "down":
+          inDir = r.top >= cr.bottom - 4;
+          primary = r.top - cr.bottom;
+          perpDist = Math.abs(dx);
+          overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
+          break;
+        case "left":
+          inDir = r.right <= cr.left + 4;
+          primary = cr.left - r.right;
+          perpDist = Math.abs(dy);
+          overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
+          break;
+        case "right":
+          inDir = r.left >= cr.right - 4;
+          primary = r.left - cr.right;
+          perpDist = Math.abs(dy);
+          overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
+          break;
+      }
+
+      if (!inDir) continue;
+      const overlapBonus = overlap > 0 ? -1000 : 0;
+      const score = Math.max(0, primary) + perpDist * 2 + overlapBonus;
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    return best;
+  };
+
+  // 1ª passada: apenas dentro do container [data-tv-scope] — grids gigantes
+  // (Filmes/Séries com scroll infinito) não pagam getBoundingClientRect em
+  // milhares de tiles a cada seta.
   const scope = scopeFor(current);
-  for (const el of visibleFocusables(scope)) {
-
-    if (el === current) continue;
-    const r = el.getBoundingClientRect();
-    const x = r.left + r.width / 2;
-    const y = r.top + r.height / 2;
-    const dx = x - cx;
-    const dy = y - cy;
-
-    let inDir = false;
-    let primary = 0;
-    let perpDist = 0;
-    let overlap = 0;
-
-    switch (dir) {
-      case "up":
-        inDir = r.bottom <= cr.top + 4;
-        primary = cr.top - r.bottom;
-        perpDist = Math.abs(dx);
-        overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
-        break;
-      case "down":
-        inDir = r.top >= cr.bottom - 4;
-        primary = r.top - cr.bottom;
-        perpDist = Math.abs(dx);
-        overlap = Math.max(0, Math.min(cr.right, r.right) - Math.max(cr.left, r.left));
-        break;
-      case "left":
-        inDir = r.right <= cr.left + 4;
-        primary = cr.left - r.right;
-        perpDist = Math.abs(dy);
-        overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
-        break;
-      case "right":
-        inDir = r.left >= cr.right - 4;
-        primary = r.left - cr.right;
-        perpDist = Math.abs(dy);
-        overlap = Math.max(0, Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top));
-        break;
-    }
-
-    if (!inDir) continue;
-
-    // Score: distância na direção + penalidade perpendicular, com bônus
-    // grande para sobreposição (mantém na mesma linha/coluna).
-    const overlapBonus = overlap > 0 ? -1000 : 0;
-    const score = Math.max(0, primary) + perpDist * 2 + overlapBonus;
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = el;
-    }
-  }
-  return best;
+  const scopedBest = scan(visibleFocusables(scope));
+  if (scopedBest) return scopedBest;
+  // 2ª passada: se não achou nada no scope (borda do grid), procura no
+  // documento inteiro para permitir sair para menu lateral, tabs, etc.
+  if (scope !== document) return scan(visibleFocusables(document));
+  return null;
 }
+
 
 function focusFirst(): boolean {
   // 1) Respeita um alvo explícito marcado pela página (ex.: tile principal da home)
