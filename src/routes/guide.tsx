@@ -327,11 +327,13 @@ function GuidePage() {
                             if (!Number.isFinite(start) || !Number.isFinite(stop)) return;
                             const durationMin = Math.max(1, Math.ceil((stop - start) / 60));
                             const url = timeshiftUrl(creds, s.stream_id, start, durationMin);
-                            navigate({
-                              to: "/player/$type/$id",
-                              params: { type: "live", id: String(s.stream_id) },
-                              search: { name: `${s.name} — ${p.title}`, src: url },
-                            });
+                            guardNav(s.category_id, () =>
+                              navigate({
+                                to: "/player/$type/$id",
+                                params: { type: "live", id: String(s.stream_id) },
+                                search: { name: `${s.name} — ${p.title}`, src: url },
+                              }),
+                            );
                           }}
                           onToggleAlert={() => {
                             const ts = Number(p.start_timestamp);
@@ -349,11 +351,13 @@ function GuidePage() {
                             }
                           }}
                           onOpen={() =>
-                            navigate({
-                              to: "/player/$type/$id",
-                              params: { type: "live", id: String(s.stream_id) },
-                              search: s.url ? { name: s.name, src: s.url } : { name: s.name },
-                            })
+                            guardNav(s.category_id, () =>
+                              navigate({
+                                to: "/player/$type/$id",
+                                params: { type: "live", id: String(s.stream_id) },
+                                search: s.url ? { name: s.name, src: s.url } : { name: s.name },
+                              }),
+                            )
                           }
                         />
                       ))}
