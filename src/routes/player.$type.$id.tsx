@@ -64,6 +64,19 @@ function PlayerPage() {
     if (hydrated && !creds) navigate({ to: "/" });
   }, [hydrated, creds, navigate]);
 
+  // Controle parental: se o item pertence a uma categoria bloqueada,
+  // exige o PIN antes de reproduzir. Essa é a camada final que cobre
+  // deep links, favoritos e histórico que passaram pelos filtros.
+  const [parentalUnlocked, setParentalUnlocked] = useState(false);
+  const parentalLocked = useMemo(() => {
+    if (!hydrated || !type) return false;
+    return isItemLocked(type === "movie" ? "movie" : type, id);
+  }, [hydrated, type, id]);
+  const parentalCatId = useMemo(() => {
+    if (!parentalLocked || !type) return "";
+    return findCategoryIdFor(type === "movie" ? "movie" : type, id) ?? "locked";
+  }, [parentalLocked, type, id]);
+
   const seriesQ = useQuery({
     queryKey: ["series-info", id],
     enabled: !!creds && type === "series",
