@@ -228,10 +228,9 @@ async function handle(request: Request) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
-      const res = await fetch(upstreamUrl.toString(), {
+      const res = await safeFetch(upstreamUrl, {
         method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
         headers: buildHeaders(ua),
-        redirect: "follow",
         signal: controller.signal,
       });
       clearTimeout(timeout);
