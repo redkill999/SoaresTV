@@ -245,7 +245,7 @@ function GuidePage() {
           </div>
 
           {/* Rows */}
-          <div className="flex flex-1 min-h-0 overflow-y-auto">
+          <div data-tv-scope className="flex flex-1 min-h-0 overflow-y-auto">
             {/* Channel column */}
             <div className="shrink-0 border-r border-white/10 bg-black/20" style={{ width: CHANNEL_COL }}>
               {visibleChannels.map((s) => {
@@ -257,11 +257,13 @@ function GuidePage() {
                   ref={(el) => registerRow(s.stream_id, el)}
                   data-stream-id={s.stream_id}
                   onClick={() =>
-                    navigate({
-                      to: "/player/$type/$id",
-                      params: { type: "live", id: String(s.stream_id) },
-                      search: s.url ? { name: s.name, src: s.url } : { name: s.name },
-                    })
+                    guardNav(s.category_id, () =>
+                      navigate({
+                        to: "/player/$type/$id",
+                        params: { type: "live", id: String(s.stream_id) },
+                        search: s.url ? { name: s.name, src: s.url } : { name: s.name },
+                      }),
+                    )
                   }
                   className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors border-b border-white/5 outline-none focus-visible:bg-primary/20 ${
                     isActive ? "bg-primary/15 hover:bg-primary/20" : "hover:bg-white/5"
