@@ -15,6 +15,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginBgWebAsset from "@/assets/login-web.png.asset.json";
+import { isTvDevice } from "@/lib/tv-dpad";
 
 function buildLoginPlaylistUrl(server: string, username: string, password: string): string {
   const base = server.replace(/\/+$/, "");
