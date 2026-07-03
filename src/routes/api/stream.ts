@@ -419,7 +419,7 @@ async function handle(request: Request) {
 export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
-      OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
+      OPTIONS: async ({ request }) => new Response(null, { status: 204, headers: corsHeadersFor(request) }),
       GET: async ({ request }) => handle(request),
       HEAD: async ({ request }) => handle(request),
     },
