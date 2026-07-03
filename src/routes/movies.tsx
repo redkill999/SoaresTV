@@ -163,7 +163,7 @@ function MoviesPage() {
           recentCount={recentIds.length}
           totalCount={listQ.data?.length ?? 0}
         />
-        <div className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
+        <div data-tv-scope className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
           {continueWatching.length > 0 && (
             <section className="mb-4">
               <h2 className="text-xs uppercase tracking-widest text-white/70 mb-2 px-0.5">
