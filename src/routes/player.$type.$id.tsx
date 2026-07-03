@@ -281,7 +281,9 @@ function PlayerPage() {
         onTouchStart={revealControls}
       >
         <div className="absolute inset-0 bg-player">
-          {url ? (
+          {parentalLocked && !parentalUnlocked ? (
+            <ParentalGate categoryId={parentalCatId} onUnlock={() => setParentalUnlocked(true)} />
+          ) : url ? (
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
