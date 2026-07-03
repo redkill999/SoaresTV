@@ -15,6 +15,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { NativeSplash } from "@/components/NativeSplash";
 import { useTranslation } from "react-i18next";
 import loginBgWebAsset from "@/assets/login-web.png.asset.json";
+import { isTvDevice } from "@/lib/tv-dpad";
 
 function buildLoginPlaylistUrl(server: string, username: string, password: string): string {
   const base = server.replace(/\/+$/, "");
@@ -47,6 +48,7 @@ function LoginPage() {
   const [nativeSplash, setNativeSplash] = useState(false);
   const [splashReady, setSplashReady] = useState(false);
   const [isNative, setIsNative] = useState(false);
+  const [isTv, setIsTv] = useState(false);
   const handleNativeSplashDone = useCallback(() => setNativeSplash(false), []);
 
   // Xtream state
@@ -85,6 +87,7 @@ function LoginPage() {
     void isNativeApp().then((native) => {
       if (cancelled) return;
       setIsNative(native);
+      setIsTv(isTvDevice());
       if (native) {
         setNativeSplash(true);
         if (autoLogin) {
@@ -286,7 +289,7 @@ function LoginPage() {
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
         {/* Left — brand panel: só no app nativo. Na web a imagem de fundo já mostra esse painel. */}
-        {isNative ? (
+        {isNative && !isTv ? (
           <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
             <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
               <div>
@@ -348,6 +351,7 @@ function LoginPage() {
                   <Label htmlFor="server" className="text-xs tracking-wider text-muted-foreground">{t("auth.server")}</Label>
                   <Input
                     id="server"
+                    data-tv-default-focus
                     required
                     autoComplete="url"
                     inputMode="url"
@@ -393,7 +397,7 @@ function LoginPage() {
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                      tabIndex={-1}
+                      tabIndex={0}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
