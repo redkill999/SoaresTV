@@ -289,7 +289,7 @@ function LoginPage() {
 
       <div className="w-full grid lg:grid-cols-2 gap-6">
         {/* Left — brand panel: só no app nativo. Na web a imagem de fundo já mostra esse painel. */}
-        {isNative ? (
+        {isNative && !isTv ? (
           <div className="hidden lg:flex relative overflow-hidden rounded-3xl bg-brand-gradient shadow-glow lg:min-h-[420px] xl:min-h-[460px]">
             <div className="p-6 md:p-8 xl:p-10 flex flex-col justify-between w-full">
               <div>
