@@ -399,9 +399,8 @@ async function fetchJson(url: string, timeoutMs = 30_000): Promise<unknown> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
-      redirect: "follow",
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
