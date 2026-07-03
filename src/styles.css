@@ -353,29 +353,36 @@ div[style*="Edit with Lovable"],
 }
 
 /* ===== Controle remoto / D-pad: foco visível APENAS para Smart TV / TV mode =====
-   Usa box-shadow INSET + outline negativo + mudança de fundo para que o destaque
-   apareça MESMO quando o pai usa overflow:hidden (caso dos grids/scrollers do
-   XCIPTV). Anéis externos seriam cortados pelo container e não apareceriam.   */
+   Usa box-shadow INSET + outline colorido para que o destaque apareça MESMO
+   quando o pai usa overflow:hidden (caso dos grids/scrollers do XCIPTV).
+   Anéis externos com box-shadow normal seriam cortados; o inset nunca é. */
 :where([data-tv-mode], [data-smart-tv]) {
   --tv-focus: #FFD60A;
-  --tv-focus-soft: rgba(255, 214, 10, 0.22);
+  --tv-focus-soft: rgba(255, 214, 10, 0.28);
+  --tv-arm: #FF5A1F;
+  --tv-arm-soft: rgba(255, 90, 31, 0.45);
 }
 
+/* Foco padrão em qualquer focusable — anel amarelo alto-contraste que
+   sobrevive a overflow:hidden graças ao inset. */
 [data-tv-mode] :focus,
 [data-tv-mode] :focus-visible,
 [data-smart-tv] :focus,
 [data-smart-tv] :focus-visible,
 .tv-focus :focus,
 .tv-focus :focus-visible {
-  /* Foco TV sem moldura amarela — feedback fica só no scale + brilho da imagem. */
-  outline: none !important;
-  box-shadow: none !important;
-  background-color: transparent !important;
+  outline: 3px solid var(--tv-focus, #FFD60A) !important;
+  outline-offset: 2px !important;
+  box-shadow:
+    inset 0 0 0 3px var(--tv-focus, #FFD60A),
+    0 0 20px var(--tv-focus-soft, rgba(255, 214, 10, 0.5)) !important;
+  border-radius: 10px;
+  z-index: 2;
+  position: relative;
+  transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
-
-/* Tiles principais e cards crescem um pouquinho quando focados na TV.
-   scale é mantido pois não é cortado por overflow do pai (apenas pelo viewport). */
+/* Tiles/cards focados também crescem levemente. */
 [data-tv-mode] button:focus,
 [data-tv-mode] button:focus-visible,
 [data-tv-mode] a:focus,
@@ -393,8 +400,7 @@ div[style*="Edit with Lovable"],
   transform: scale(1.04);
 }
 
-/* Imagens dentro de tiles focados ficam mais vivas — ajuda a "marcar" o card
-   mesmo quando ele é majoritariamente <img> (poster de filme/série/canal). */
+/* Imagens dentro de tiles focados ficam mais vivas. */
 [data-tv-mode] :focus img,
 [data-tv-mode] :focus-visible img,
 [data-smart-tv] :focus img,
@@ -403,7 +409,7 @@ div[style*="Edit with Lovable"],
   transition: filter 120ms ease;
 }
 
-/* Body/html/main não devem mostrar o anel */
+/* Body/html/main não devem mostrar o anel. */
 [data-tv-mode] :is(html, body, main, section, article):focus,
 [data-smart-tv] :is(html, body, main, section, article):focus,
 .tv-focus :is(html, body, main, section, article, div):focus:not([tabindex]) {
@@ -411,6 +417,54 @@ div[style*="Edit with Lovable"],
   box-shadow: none !important;
   transform: none !important;
 }
+
+/* ===== Confirmação dupla D-pad — item "armado" aguardando 2º OK =====
+   Visual bem distinto do foco normal (laranja pulsante + label overlay)
+   e imune ao !important do foco porque usa seletor mais específico. */
+@keyframes tv-arm-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 4px var(--tv-arm, #FF5A1F),
+      0 0 0 4px var(--tv-arm-soft, rgba(255, 90, 31, 0.45)),
+      0 0 32px var(--tv-arm-soft, rgba(255, 90, 31, 0.45));
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 4px var(--tv-arm, #FF5A1F),
+      0 0 0 8px var(--tv-arm-soft, rgba(255, 90, 31, 0.45)),
+      0 0 48px var(--tv-arm-soft, rgba(255, 90, 31, 0.45));
+  }
+}
+[data-tv-arming="1"],
+[data-tv-mode] [data-tv-arming="1"]:focus,
+[data-smart-tv] [data-tv-arming="1"]:focus,
+.tv-focus [data-tv-arming="1"]:focus {
+  outline: 4px solid var(--tv-arm, #FF5A1F) !important;
+  outline-offset: 3px !important;
+  animation: tv-arm-pulse 900ms ease-in-out infinite !important;
+  border-radius: 10px;
+  position: relative;
+  z-index: 3;
+}
+[data-tv-arming="1"]::after {
+  content: "Aperte OK de novo para abrir";
+  position: absolute;
+  left: 50%;
+  bottom: -34px;
+  transform: translateX(-50%);
+  background: var(--tv-arm, #FF5A1F);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 4;
+}
+
 
 /* Menu lateral / nav: destaque azul (mantém comportamento já validado para hover desktop) */
 [data-nav-item]:focus,
