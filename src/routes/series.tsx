@@ -43,6 +43,7 @@ function SeriesPage() {
   const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState("all");
   const [sort, setSort] = useState<"az" | "za" | "default">("default");
+  const [unlocked, setUnlocked] = useState(false);
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   useEffect(() => {
     const saved = store.getCreds();
