@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { PremiumChrome } from "@/components/PremiumChrome";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { ParentalGate } from "@/components/ParentalGate";
 import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
@@ -42,6 +43,7 @@ function MoviesPage() {
   const deferredSearch = useDeferredValue(search);
   const [cat, setCat] = useState("all");
   const [sort, setSort] = useState<"az" | "za" | "default">("default");
+  const [unlocked, setUnlocked] = useState(false);
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   useEffect(() => {
     const saved = store.getCreds();
@@ -132,6 +134,15 @@ function MoviesPage() {
     [catsQ.data, counts],
   );
 
+  const parental = store.getParental();
+  const lockedCats = useMemo(
+    () => new Set(parental.lockedCategories.map(String)),
+    [parental.lockedCategories],
+  );
+  const parentalActive = !!parental.pin && lockedCats.size > 0;
+  const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
+  const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
+
   const filtered = useMemo(() => {
     const source: VodStream[] =
       perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
@@ -145,19 +156,25 @@ function MoviesPage() {
     } else if (cat !== "all" && !perCatQ.data) {
       list = list.filter((m) => String(m.category_id) === cat);
     }
+    if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
+      list = list.filter((m) => !lockedCats.has(String(m.category_id)));
+    }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
 
   return (
     <PremiumChrome>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
+      {needGate && !unlocked ? (
+        <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
+      ) : (
       <div className="flex-1 min-h-0 flex flex-col items-stretch sm:flex-row gap-3 px-3 sm:px-5 pb-3 overflow-hidden">
         <XciptvCategoryList
           categories={sidebarCats}
           value={cat}
-          onChange={setCat}
+          onChange={handleCatChange}
           loading={!creds || (catsQ.isLoading && !catsQ.data)}
           favCount={favIds.size}
           recentCount={recentIds.length}
@@ -203,6 +220,7 @@ function MoviesPage() {
           )}
         </div>
       </div>
+      )}
       </div>
     </PremiumChrome>
   );

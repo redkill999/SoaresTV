@@ -716,10 +716,24 @@ function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
 function ParentalDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [parental, setParental] = useState<ParentalConfig>({ pin: null, lockedCategories: [] });
   const [pin, setPin] = useState("");
-  useEffect(() => { if (open) setParental(store.getParental()); }, [open]);
+  const [currentPin, setCurrentPin] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (open) {
+      setParental(store.getParental());
+      setPin("");
+      setCurrentPin("");
+      setErr("");
+    }
+  }, [open]);
+  const hasExistingPin = !!parental.pin;
   const savePin = () => {
+    if (hasExistingPin && currentPin !== parental.pin) {
+      setErr("PIN atual incorreto");
+      return;
+    }
     const next = { ...parental, pin: pin || null };
-    store.setParental(next); setParental(next); setPin("");
+    store.setParental(next); setParental(next); setPin(""); setCurrentPin(""); setErr("");
     toast.success(pin ? "PIN definido" : "PIN removido");
     onClose();
   };
@@ -729,17 +743,30 @@ function ParentalDialog({ open, onClose }: { open: boolean; onClose: () => void 
         <DialogHeader>
           <DialogTitle>Controle parental</DialogTitle>
           <DialogDescription>
-            {parental.pin ? "PIN definido." : "Nenhum PIN."} Deixe vazio para remover.
+            {hasExistingPin
+              ? "PIN definido. Digite o PIN atual para trocar ou remover."
+              : "Nenhum PIN definido. Deixe vazio para não configurar."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-2">
-          <Input
-            type="password" inputMode="numeric" maxLength={6}
-            placeholder="Novo PIN"
-            value={pin} onChange={(e) => setPin(e.target.value)}
-            className="bg-white/5 border-white/10"
-          />
-          <Button onClick={savePin} className="bg-brand-gradient">Salvar</Button>
+        <div className="space-y-2">
+          {hasExistingPin && (
+            <Input
+              type="password" inputMode="numeric" maxLength={6}
+              placeholder="PIN atual"
+              value={currentPin} onChange={(e) => { setCurrentPin(e.target.value); setErr(""); }}
+              className="bg-white/5 border-white/10"
+            />
+          )}
+          <div className="flex gap-2">
+            <Input
+              type="password" inputMode="numeric" maxLength={6}
+              placeholder={hasExistingPin ? "Novo PIN (vazio p/ remover)" : "Novo PIN"}
+              value={pin} onChange={(e) => setPin(e.target.value)}
+              className="bg-white/5 border-white/10"
+            />
+            <Button onClick={savePin} className="bg-brand-gradient">Salvar</Button>
+          </div>
+          {err && <p className="text-xs text-destructive">{err}</p>}
         </div>
       </DialogContent>
     </Dialog>

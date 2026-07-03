@@ -14,6 +14,7 @@ import {
 } from "@/lib/xtream";
 import { withPersist, loadPersisted } from "@/lib/query-persist";
 import { filterBySearch } from "@/lib/search-index";
+import { getLockedIdSet } from "@/lib/parental";
 
 const MAX_PER_SECTION = 5;
 const MIN_QUERY = 2;
@@ -76,26 +77,33 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const trimmed = q.trim();
   const enabled = trimmed.length >= MIN_QUERY;
 
+  const lockedLive = useMemo(() => (open ? getLockedIdSet("live") : new Set<string>()), [open]);
+  const lockedMovie = useMemo(() => (open ? getLockedIdSet("movie") : new Set<string>()), [open]);
+  const lockedSeries = useMemo(() => (open ? getLockedIdSet("series") : new Set<string>()), [open]);
+
   const liveResults: Result[] = useMemo(() => {
     if (!enabled || !liveQ.data) return [];
     return filterBySearch(liveQ.data, (s) => s.name, trimmed)
+      .filter((s) => !lockedLive.has(String(s.stream_id)))
       .slice(0, MAX_PER_SECTION)
       .map((s) => ({ kind: "live", id: String(s.stream_id), name: s.name, logo: s.stream_icon, url: s.url }));
-  }, [enabled, liveQ.data, trimmed]);
+  }, [enabled, liveQ.data, trimmed, lockedLive]);
 
   const movieResults: Result[] = useMemo(() => {
     if (!enabled || !vodQ.data) return [];
     return filterBySearch(vodQ.data, (s) => s.name, trimmed)
+      .filter((s) => !lockedMovie.has(String(s.stream_id)))
       .slice(0, MAX_PER_SECTION)
       .map((s) => ({ kind: "movie", id: String(s.stream_id), name: s.name, logo: s.stream_icon }));
-  }, [enabled, vodQ.data, trimmed]);
+  }, [enabled, vodQ.data, trimmed, lockedMovie]);
 
   const seriesResults: Result[] = useMemo(() => {
     if (!enabled || !seriesQ.data) return [];
     return filterBySearch(seriesQ.data, (s) => s.name, trimmed)
+      .filter((s) => !lockedSeries.has(String(s.series_id)))
       .slice(0, MAX_PER_SECTION)
       .map((s) => ({ kind: "series", id: String(s.series_id), name: s.name, logo: s.cover }));
-  }, [enabled, seriesQ.data, trimmed]);
+  }, [enabled, seriesQ.data, trimmed, lockedSeries]);
 
   const flat = useMemo(
     () => [...liveResults, ...movieResults, ...seriesResults],

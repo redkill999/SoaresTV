@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
+import { ParentalGate } from "@/components/ParentalGate";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { findCategoryIdFor, isItemLocked } from "@/lib/parental";
 import { ArrowLeft } from "lucide-react";
 
 const VALID_TYPES = ["live", "movie", "series"] as const;
@@ -61,6 +63,19 @@ function PlayerPage() {
   useEffect(() => {
     if (hydrated && !creds) navigate({ to: "/" });
   }, [hydrated, creds, navigate]);
+
+  // Controle parental: se o item pertence a uma categoria bloqueada,
+  // exige o PIN antes de reproduzir. Essa é a camada final que cobre
+  // deep links, favoritos e histórico que passaram pelos filtros.
+  const [parentalUnlocked, setParentalUnlocked] = useState(false);
+  const parentalLocked = useMemo(() => {
+    if (!hydrated || !type) return false;
+    return isItemLocked(type === "movie" ? "movie" : type, id);
+  }, [hydrated, type, id]);
+  const parentalCatId = useMemo(() => {
+    if (!parentalLocked || !type) return "";
+    return findCategoryIdFor(type === "movie" ? "movie" : type, id) ?? "locked";
+  }, [parentalLocked, type, id]);
 
   const seriesQ = useQuery({
     queryKey: ["series-info", id],
@@ -266,7 +281,9 @@ function PlayerPage() {
         onTouchStart={revealControls}
       >
         <div className="absolute inset-0 bg-player">
-          {url ? (
+          {parentalLocked && !parentalUnlocked ? (
+            <ParentalGate categoryId={parentalCatId} onUnlock={() => setParentalUnlocked(true)} />
+          ) : url ? (
             <VideoPlayer
               src={url}
               kind={type === "live" ? "live" : "vod"}
