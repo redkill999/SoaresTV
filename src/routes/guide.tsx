@@ -16,6 +16,7 @@ import { useMiniPlayer } from "@/hooks/use-mini-player";
 import { useEpgAlerts } from "@/hooks/use-epg-alerts";
 import { toast } from "sonner";
 import { Bell, BellRing, CalendarDays, ChevronLeft, ChevronRight, History, Tv } from "lucide-react";
+import { ParentalGate } from "@/components/ParentalGate";
 
 export const Route = createFileRoute("/guide")({
   head: () => ({ meta: [{ title: "Guia EPG — SoaresTV" }] }),
