@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { Button } from "@/components/ui/button";
 import { store } from "@/lib/storage";
 import { useHistory } from "@/hooks/use-favorites";
+import { getLockedIdSet } from "@/lib/parental";
 import { History as HistoryIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -14,8 +16,18 @@ export const Route = createFileRoute("/history")({
 });
 
 function HistoryPage() {
-  const items = useHistory();
+  const all = useHistory();
   const { t } = useTranslation();
+  const items = useMemo(() => {
+    const lockedLive = getLockedIdSet("live");
+    const lockedMovie = getLockedIdSet("movie");
+    const lockedSeries = getLockedIdSet("series");
+    return all.filter((it) => {
+      if (it.type === "live") return !lockedLive.has(String(it.id));
+      if (it.type === "movie") return !lockedMovie.has(String(it.id));
+      return !lockedSeries.has(String(it.id));
+    });
+  }, [all]);
 
   return (
     <AppShell>
