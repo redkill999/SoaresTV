@@ -28,24 +28,21 @@ function isPlayerLink(el: HTMLElement | null): el is HTMLAnchorElement {
 }
 
 function showConfirmHint(el: HTMLElement) {
-  // Marca visualmente o item como "armado" para confirmação.
+  // Marca visualmente o item como "armado". O visual real vem de CSS
+  // (regra [data-tv-arming="1"] em styles.css) — usar classe/atributo
+  // garante que a regra !important do foco TV não sobrescreva.
   el.setAttribute("data-tv-arming", "1");
-  el.style.outline = "3px solid #1FB6FF";
-  el.style.outlineOffset = "2px";
   window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
   (el as HTMLElement & { __armT?: number }).__armT = window.setTimeout(() => {
     el.removeAttribute("data-tv-arming");
-    el.style.outline = "";
-    el.style.outlineOffset = "";
   }, CONFIRM_WINDOW_MS) as unknown as number;
 }
 
 function clearConfirmHint(el: HTMLElement) {
   el.removeAttribute("data-tv-arming");
-  el.style.outline = "";
-  el.style.outlineOffset = "";
   window.clearTimeout((el as HTMLElement & { __armT?: number }).__armT);
 }
+
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
