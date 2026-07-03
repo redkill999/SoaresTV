@@ -170,13 +170,12 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
         : "";
       const location = loginRes.headers.get("location");
       const nextUrl = location ? new URL(location, origin).toString() : dashboardUrl;
-      const pageRes = await fetch(nextUrl, {
+      const pageRes = await safeFetch(nextUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36",
           Accept: "text/html,*/*",
           ...(cookies ? { Cookie: cookies } : {}),
         },
-        redirect: "follow",
         signal: ctrl.signal,
       });
       const html = await pageRes.text();
