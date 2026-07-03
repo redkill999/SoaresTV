@@ -48,6 +48,7 @@ function LoginPage() {
   const [nativeSplash, setNativeSplash] = useState(false);
   const [splashReady, setSplashReady] = useState(false);
   const [isNative, setIsNative] = useState(false);
+  const [isTv, setIsTv] = useState(false);
   const handleNativeSplashDone = useCallback(() => setNativeSplash(false), []);
 
   // Xtream state
