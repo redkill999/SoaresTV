@@ -14,6 +14,7 @@ import {
 } from "@/lib/xtream";
 import { withPersist, loadPersisted } from "@/lib/query-persist";
 import { filterBySearch } from "@/lib/search-index";
+import { getLockedIdSet } from "@/lib/parental";
 
 const MAX_PER_SECTION = 5;
 const MIN_QUERY = 2;
