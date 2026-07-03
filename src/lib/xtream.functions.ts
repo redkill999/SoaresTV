@@ -134,6 +134,9 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     if (!/^https?:\/\//i.test(target)) target = `https://${target}`;
 
     const inputUrl = new URL(target);
+    try { assertSafeUpstreamUrl(inputUrl); } catch {
+      return { server: normalizeServer(target) };
+    }
     const origin = inputUrl.origin;
     const loginUrl = new URL("/login", origin).toString();
     const dashboardUrl = new URL("/dashboard", origin).toString();
@@ -142,6 +145,9 @@ export const discoverPanelXtreamServer = createServerFn({ method: "POST" })
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort(), 15_000);
     try {
+      // Login precisa de redirect:"manual" (o handler lê o Location depois),
+      // então validamos o próprio loginUrl e não delegamos hops aqui.
+      assertSafeUpstreamUrl(loginUrl);
       const loginRes = await fetch(loginUrl, {
         method: "POST",
         headers: {
