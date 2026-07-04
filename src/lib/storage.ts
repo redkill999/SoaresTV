@@ -282,9 +282,90 @@ function deobfuscateCreds(c: XtreamCreds | null): XtreamCreds | null {
 function obfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
   return l.map((p) => ({ ...p, username: obfuscate(p.username), password: obfuscate(p.password) }));
 }
-function deobfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
-  return l.map((p) => ({ ...p, username: deobfuscate(p.username), password: deobfuscate(p.password) }));
+
+// ============================================================================
+//  Provider Identity + Migração de favoritos/histórico legados
+// ----------------------------------------------------------------------------
+//  Contexto em src/lib/content-ref.ts. Aqui só implementamos:
+//    - getCurrentProviderId(): resolve o provedor ATIVO agora.
+//    - migrateLegacyItems(): carimba favs/hist antigos com providerId+stableId
+//      UMA vez (flag persistida). Não apaga nada — só enriquece.
+// ============================================================================
+
+import {
+  providerIdFromXtream,
+  providerIdFromM3U,
+  stableIdFromLegacy,
+} from "./content-ref";
+
+const K_MIGRATION = "soarestv:migration:v1-content-ref";
+
+/** Provedor ATIVO agora. null se não há nenhum. */
+function getCurrentProviderIdInternal(): string | null {
+  const creds = deobfuscateCreds(read<XtreamCreds | null>(K.creds, null));
+  if (creds && creds.server && creds.username) {
+    return providerIdFromXtream(creds.server, creds.username);
+  }
+  const lists = deobfuscateList(read<M3UPlaylist[]>(K.m3u, []));
+  const first = lists[0];
+  if (first) return providerIdFromM3U(first.url, first.username);
+  return null;
 }
+
+/**
+ * Migração one-shot: carimba itens antigos com providerId+stableId derivados
+ * do provedor ATIVO. Se não houver provedor ativo, adia a migração.
+ * Rodada automaticamente pela store na primeira chamada relevante.
+ */
+function migrateLegacyItems(): void {
+  if (!isBrowser()) return;
+  try {
+    if (localStorage.getItem(K_MIGRATION) === "done") return;
+  } catch { return; }
+
+  const providerId = getCurrentProviderIdInternal();
+  if (!providerId) return; // adia — sem provedor não dá pra carimbar corretamente
+
+  let changed = 0;
+
+  // Favoritos
+  const favs = read<FavItem[]>(K.favs, []);
+  const migratedFavs = favs.map((f) => {
+    if (f.providerId && f.stableId) return f;
+    changed++;
+    const sid = stableIdFromLegacy(providerId, f.type, f.id);
+    return { ...f, providerId: f.providerId ?? providerId, stableId: f.stableId ?? sid };
+  });
+  if (changed > 0) write(K.favs, migratedFavs);
+
+  // Histórico
+  changed = 0;
+  const hist = read<HistItem[]>(K.hist, []);
+  const migratedHist = hist.map((h) => {
+    if (h.providerId && h.stableId) return h;
+    changed++;
+    const sid = stableIdFromLegacy(providerId, h.type, h.id);
+    return { ...h, providerId: h.providerId ?? providerId, stableId: h.stableId ?? sid };
+  });
+  if (changed > 0) write(K.hist, migratedHist);
+
+  try { localStorage.setItem(K_MIGRATION, "done"); } catch { /* noop */ }
+}
+
+/** Reseta a flag de migração — útil quando o usuário troca de conta e
+ *  queremos re-carimbar itens que foram salvos SEM providerId após a última
+ *  migração (defensivo). Não apaga favoritos, só a flag. */
+export function resetContentRefMigration(): void {
+  if (!isBrowser()) return;
+  try { localStorage.removeItem(K_MIGRATION); } catch { /* noop */ }
+}
+
+/** Retorna o providerId ATIVO. Roda migração pendente antes. */
+export function getCurrentProviderId(): string | null {
+  migrateLegacyItems();
+  return getCurrentProviderIdInternal();
+}
+
 
 export const store = {
   getCreds: () => deobfuscateCreds(read<XtreamCreds | null>(K.creds, null)),
