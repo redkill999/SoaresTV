@@ -44,13 +44,17 @@ const UA_LIST = [
 
 // Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
 // do relay" e tratamento imediato de erro no player).
+const RELAY_VERSION = "v6";
 const EXPOSED_HEADERS = [
+  "X-Live-Relay-Version",
   "X-Live-Relay-Error",
   "X-Live-Upstream-Status",
   "X-Live-First-Byte-Ms",
   "X-Live-First-Chunk-Bytes",
   "X-Live-Ts-Sync-Found",
+  "X-Live-Relay-Content-Type",
 ].join(", ");
+
 
 function corsHeaders(request: Request): Record<string, string> {
   const base: Record<string, string> = {
