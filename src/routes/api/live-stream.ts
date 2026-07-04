@@ -108,17 +108,24 @@ function relayError(
   code: string,
   cors: Record<string, string>,
   extra?: Record<string, number | boolean>,
+  extraHeaders?: Record<string, string>,
 ): Response {
   const h = new Headers(cors);
   h.set("Content-Type", "application/json");
   h.set("Cache-Control", "no-store");
   h.set("X-Live-Relay-Version", RELAY_VERSION);
   h.set("X-Live-Relay-Error", code);
-  return new Response(
-    JSON.stringify({ ok: false, errorCode: code, ...(extra ?? {}) }),
-    { status, headers: h },
-  );
+  if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) h.set(k, v);
+  const body: Record<string, unknown> = { ok: false, errorCode: code, ...(extra ?? {}) };
+  if (extraHeaders?.["X-Live-Upstream-Error-Class"]) {
+    body.upstreamErrorClass = extraHeaders["X-Live-Upstream-Error-Class"];
+  }
+  if (extraHeaders?.["X-Live-Upstream-Body-Length"]) {
+    body.upstreamBodyLength = Number(extraHeaders["X-Live-Upstream-Body-Length"]) || 0;
+  }
+  return new Response(JSON.stringify(body), { status, headers: h });
 }
+
 
 
 function sanitizedLog(event: string, fields: Record<string, unknown>) {
