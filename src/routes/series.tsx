@@ -162,14 +162,14 @@ function SeriesPage() {
 
   const filtered = useMemo(() => {
     const source: Series[] =
-      perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
+      perCatEnabled && hasPerCategoryData ? (perCatQ.data as Series[]) : (listQ.data ?? []);
     let list: Series[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((s) => order.has(String(s.series_id))).sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
-    } else if (cat !== "all" && !perCatQ.data) {
+    } else if (cat !== "all" && !hasPerCategoryData) {
       list = list.filter((s) => String(s.category_id) === cat);
     }
     if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
@@ -177,7 +177,11 @@ function SeriesPage() {
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, hasPerCategoryData, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
+
+  const activeError = perCatEnabled ? perCatQ.error : listQ.error;
+  const activeIsError = perCatEnabled ? perCatQ.isError : listQ.isError;
+  const retryActive = () => { if (perCatEnabled) void perCatQ.refetch(); else void listQ.refetch(); };
 
   return (
     <PremiumChrome>
