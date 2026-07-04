@@ -78,10 +78,13 @@ function relayHeaders(cors: Record<string, string>): Headers {
   h.set("Pragma", "no-cache");
   h.set("Expires", "0");
   h.set("X-Accel-Buffering", "no");
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("X-Live-Relay-Version", RELAY_VERSION);
   // Não encaminhamos: Content-Length, Content-Range, Accept-Ranges,
   // Content-Encoding, Transfer-Encoding, Connection, Keep-Alive.
   return h;
 }
+
 
 /** Resposta de erro do relay: SEMPRE com X-Live-Relay-Error + JSON sanitizado
  *  (apenas códigos e números — nunca URL, credenciais ou corpo do upstream). */
