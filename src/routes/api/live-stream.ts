@@ -44,7 +44,7 @@ const UA_LIST = [
 
 // Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
 // do relay" e tratamento imediato de erro no player).
-const RELAY_VERSION = "v6";
+const RELAY_VERSION = "v7";
 const EXPOSED_HEADERS = [
   "X-Live-Relay-Version",
   "X-Live-Relay-Error",
@@ -53,7 +53,12 @@ const EXPOSED_HEADERS = [
   "X-Live-First-Chunk-Bytes",
   "X-Live-Ts-Sync-Found",
   "X-Live-Relay-Content-Type",
+  "X-Live-Relay-First-Chunk-Read",
+  "X-Live-Relay-First-Chunk-Bytes",
+  "X-Live-Relay-Mpegts-Sync",
+  "X-Live-Relay-Body-Mode",
 ].join(", ");
+
 
 
 function corsHeaders(request: Request): Record<string, string> {
@@ -305,6 +310,13 @@ async function handle(request: Request): Promise<Response> {
   headers.set("X-Live-First-Chunk-Bytes", String(firstChunk.byteLength));
   headers.set("X-Live-Ts-Sync-Found", String(syncOffset >= 0));
   headers.set("X-Live-Relay-Content-Type", upstreamCT || "unknown");
+  // V7: prova, no próprio HTTP response, que o backend leu o primeiro chunk
+  // válido antes de retornar a Response. Se o navegador receber estes headers
+  // mas nenhum byte do corpo, o runtime está bloqueando streaming long-lived.
+  headers.set("X-Live-Relay-First-Chunk-Read", "true");
+  headers.set("X-Live-Relay-First-Chunk-Bytes", String(firstChunk.byteLength));
+  headers.set("X-Live-Relay-Mpegts-Sync", String(syncOffset >= 0));
+  headers.set("X-Live-Relay-Body-Mode", "readable-stream-pull");
   // NÃO chamamos cleanup em finally aqui — a Response continua viva.
   // firstPullAt fica visível nos logs após o primeiro pull do navegador.
   void firstPullAt;
