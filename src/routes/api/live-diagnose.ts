@@ -67,7 +67,6 @@ async function handle(request: Request): Promise<Response> {
   }
 
   const ua = url.searchParams.get("ua") || UA_DEFAULT;
-  const originHeader = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
 
   // Timeout real (spec V5 §3): AbortController + timer cobre fetch + 1º byte.
   const firstByteController = new AbortController();
@@ -81,17 +80,10 @@ async function handle(request: Request): Promise<Response> {
         redirect: "follow",
         cache: "no-store",
         signal: firstByteController.signal,
-        headers: {
-          "User-Agent": ua,
-          Accept: "*/*",
-          "Cache-Control": "no-cache",
-          "Accept-Encoding": "identity",
-          Referer: `${originHeader}/`,
-          Origin: originHeader,
-        },
+        // V8 §4 — mesmo construtor usado no relay: sem Origin/Referer.
+        headers: buildUpstreamRequestHeaders(ua),
       });
     } catch {
-      // Log sanitizado: apenas host, nunca URL completa/credenciais.
       // eslint-disable-next-line no-console
       console.log("[LIVE-DIAGNOSE] FETCH_ERROR", { host: upstreamUrl.host, elapsedMs: Date.now() - started });
       return json(502, buildLiveDiagnoseBody({
@@ -104,9 +96,35 @@ async function handle(request: Request): Promise<Response> {
 
     const upstreamStatus = upstream.status;
     const upstreamContentType = sanitizeContentType(upstream.headers.get("content-type"));
+    const safeHeaders = pickSafeResponseHeaders(upstream.headers);
 
     if (!upstream.ok) {
-      try { await upstream.body?.cancel(); } catch { /* noop */ }
+      // V8 §1 — classifica 403 (nunca loga/retorna o corpo original).
+      let upstreamErrorClass: "NONE" | ReturnType<typeof classify403Body> = "NONE";
+      let upstreamBodyLength = 0;
+      const isTextual = /^(text|application\/(json|xml|xhtml))/.test(upstreamContentType);
+      if (upstreamStatus === 403 && isTextual && upstream.body) {
+        try {
+          const s = await readUpstreamErrorSample(upstream.body.getReader());
+          upstreamBodyLength = s.byteLength;
+          upstreamErrorClass = classify403Body(s.text);
+        } catch { /* noop */ }
+      } else {
+        try { await upstream.body?.cancel(); } catch { /* noop */ }
+      }
+      // eslint-disable-next-line no-console
+      console.log("[LIVE-DIAGNOSE] HTTP_ERROR", {
+        host: upstreamUrl.host,
+        upstreamStatus,
+        upstreamContentType,
+        upstreamErrorClass,
+        upstreamBodyLength,
+        responseServer: safeHeaders.server,
+        responseCfRay: safeHeaders.cfRay,
+        responseVia: safeHeaders.via,
+        responseRetryAfter: safeHeaders.retryAfter,
+        responseLocationHost: safeHeaders.locationHost,
+      });
       return json(502, buildLiveDiagnoseBody({
         ok: false,
         errorCode: "LIVE_UPSTREAM_HTTP_ERROR",
@@ -114,8 +132,16 @@ async function handle(request: Request): Promise<Response> {
         upstreamContentType,
         firstByteReceived: false,
         elapsedMs: Date.now() - started,
+        upstreamErrorClass,
+        upstreamBodyLength,
+        responseServer: safeHeaders.server,
+        responseCfRay: safeHeaders.cfRay,
+        responseVia: safeHeaders.via,
+        responseRetryAfter: safeHeaders.retryAfter,
+        responseLocationHost: safeHeaders.locationHost,
       }));
     }
+
 
     const reader = upstream.body?.getReader();
     if (!reader) {
