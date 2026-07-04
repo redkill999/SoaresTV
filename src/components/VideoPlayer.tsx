@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
-import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
+import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 
 
@@ -42,6 +42,51 @@ type MpegTsPlayer = {
   play(): Promise<void> | void;
   on(event: string, listener: (...args: unknown[]) => void): void;
 };
+
+// ===== Escala do vídeo por plataforma (fill/fit/stretch) ====================
+// "fill"    => object-cover (web) / RESIZE_MODE_ZOOM (nativo): preenche a tela
+//              inteira sem distorcer (pequeno crop). PADRÃO em phone/tablet.
+// "fit"     => object-contain / RESIZE_MODE_FIT: sem crop (pode ter faixas).
+//              Padrão em TV e web desktop.
+// "stretch" => object-fill / RESIZE_MODE_FILL: estica (só por escolha manual).
+export type ScaleMode = "fill" | "fit" | "stretch";
+
+const SCALE_LABELS: Record<ScaleMode, string> = {
+  fill: "Preencher",
+  fit: "Ajustar",
+  stretch: "Esticar",
+};
+
+function playerDeviceType(): "phone" | "tablet" | "tv" | "web" {
+  if (typeof window === "undefined") return "web";
+  try {
+    const dt = (window as unknown as { __deviceType?: string }).__deviceType
+      ?? document.documentElement.getAttribute("data-device-type");
+    if (dt === "phone" || dt === "tablet" || dt === "tv") return dt;
+    if (document.documentElement.hasAttribute("data-tv-mode")) return "tv";
+  } catch { /* ignore */ }
+  return "web";
+}
+
+function scaleModeKey(platform: string): string {
+  return `player-scale-mode:${platform}`;
+}
+
+function resolveInitialScaleMode(aspect: AspectRatio): ScaleMode {
+  const platform = playerDeviceType();
+  try {
+    const saved = localStorage.getItem(scaleModeKey(platform));
+    if (saved === "fill" || saved === "fit" || saved === "stretch") return saved;
+  } catch { /* ignore */ }
+  // Preferência legada da tela Settings (quando não é "default").
+  if (aspect === "fill") return "fill";
+  if (aspect === "stretch") return "stretch";
+  if (aspect === "16:9" || aspect === "4:3") return "fit";
+  // Sem preferência salva ou inválida: fill no celular/tablet, fit em TV/web.
+  // Nunca deixar "fit" como fallback silencioso no celular.
+  return platform === "phone" || platform === "tablet" ? "fill" : "fit";
+}
+
 
 async function lockLandscape() {
   try {
@@ -573,25 +618,52 @@ export function VideoPlayer({
     };
   }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic]);
 
+  // ===== Modo de escala (Preencher/Ajustar/Esticar) =========================
+  // Padrão por plataforma: phone/tablet => "fill" (object-cover, sem faixas
+  // laterais criadas pelo player); tv/web => "fit" (object-contain).
+  // Preferência persistida por plataforma: player-scale-mode:<plataforma>.
+  const [scaleMode, setScaleMode] = useState<ScaleMode>(() =>
+    resolveInitialScaleMode(store.getAppSettings().aspectRatio),
+  );
+  const cycleScaleMode = useCallback(() => {
+    setScaleMode((prev) => {
+      const next: ScaleMode = prev === "fill" ? "fit" : prev === "fit" ? "stretch" : "fill";
+      try { localStorage.setItem(scaleModeKey(playerDeviceType()), next); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
-    // FIX (APK celular full-bleed): "default" no phone/tablet usa cover
-    // pra preencher toda a tela física (inclusive atrás do notch), sem
-    // deformar. TV/desktop mantém contain como antes.
-    let defaultFit = "object-contain";
-    try {
-      const dt = (window as unknown as { __deviceType?: string }).__deviceType
-        ?? document.documentElement.getAttribute("data-device-type");
-      if (dt === "phone" || dt === "tablet") defaultFit = "object-cover";
-    } catch { /* SSR */ }
-    switch (settings.aspectRatio) {
-      case "16:9":   return `${base} object-contain`;
-      case "4:3":    return `${base} object-contain`;
-      case "fill":   return `${base} object-cover`;
-      case "stretch":return `${base} object-fill`;
-      default:       return `${base} ${defaultFit}`;
+    switch (scaleMode) {
+      case "fill":    return `${base} object-cover`;
+      case "stretch": return `${base} object-fill`;
+      default:        return `${base} object-contain`;
     }
-  }, [settings.aspectRatio]);
+  }, [scaleMode]);
+
+  // Diagnóstico sanitizado do modo de escala. Nunca loga URL/usuário/senha.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dt = playerDeviceType();
+    const el = videoRef.current;
+    const objectFit = scaleMode === "fill" ? "cover" : scaleMode === "stretch" ? "fill" : "contain";
+    // eslint-disable-next-line no-console
+    console.info("[player-scale]", {
+      deviceType: dt,
+      scaleModeRequested: scaleMode,
+      scaleModeApplied: scaleMode,
+      playerEngine: playerMode,
+      // Nativo: o padrão é decidido no ExoPlayer (patch JEEP_DEVICE_DEFAULT_SCALE)
+      // — ZOOM em phone/tablet, FIT em TV.
+      resizeModeApplied: playerMode === "native" ? (dt === "tv" ? "FIT" : "ZOOM") : null,
+      objectFitApplied: playerMode === "web" ? objectFit : null,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      videoContainerWidth: el?.parentElement?.clientWidth ?? null,
+      videoContainerHeight: el?.parentElement?.clientHeight ?? null,
+    });
+  }, [scaleMode, playerMode]);
 
 
   useEffect(() => {
@@ -1599,6 +1671,8 @@ export function VideoPlayer({
           pipActive={pipActive}
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
+          scaleMode={scaleMode}
+          onCycleScaleMode={cycleScaleMode}
         />
       )}
     </div>
@@ -1619,6 +1693,8 @@ function CustomControls({
   pipActive,
   onTogglePip,
   onInteract,
+  scaleMode,
+  onCycleScaleMode,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   visible: boolean;
@@ -1626,6 +1702,8 @@ function CustomControls({
   pipActive: boolean;
   onTogglePip: () => void;
   onInteract: () => void;
+  scaleMode: ScaleMode;
+  onCycleScaleMode: () => void;
 }) {
   const [paused, setPaused] = useState(true);
   const [current, setCurrent] = useState(0);
@@ -1669,9 +1747,16 @@ function CustomControls({
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 z-20 px-3 py-2 sm:px-4 sm:py-3 bg-gradient-to-t from-black/80 via-black/50 to-transparent transition-opacity duration-200 ${
+      className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/50 to-transparent transition-opacity duration-200 ${
         visible ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
+      style={{
+        // Safe area SOMENTE nos controles — o vídeo vai até a borda física.
+        paddingLeft: "max(0.75rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(0.75rem, env(safe-area-inset-right, 0px))",
+        paddingTop: "0.5rem",
+        paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))",
+      }}
       onClick={(e) => { e.stopPropagation(); onInteract(); }}
       onMouseMove={onInteract}
     >
@@ -1728,6 +1813,16 @@ function CustomControls({
             </span>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={onCycleScaleMode}
+          aria-label={`Modo de escala: ${SCALE_LABELS[scaleMode]}`}
+          title={`Escala: ${SCALE_LABELS[scaleMode]} — toque para alternar`}
+          className="h-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur px-3 text-xs font-semibold text-white"
+        >
+          {SCALE_LABELS[scaleMode]}
+        </button>
 
         {pipSupported && (
           <button
