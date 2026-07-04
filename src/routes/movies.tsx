@@ -230,6 +230,21 @@ function MoviesPage() {
                 <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
               ))}
             </div>
+          ) : filtered.length === 0 && activeIsError ? (
+            <div className="py-16 text-center text-white/70">
+              <Film className="size-10 mx-auto mb-3 opacity-40" />
+              <p className="mb-3">Não foi possível carregar os filmes {perCatEnabled ? "desta categoria" : ""}.</p>
+              {activeError instanceof Error && (
+                <p className="text-xs text-white/40 mb-3">{activeError.message}</p>
+              )}
+              <button
+                type="button"
+                onClick={retryActive}
+                className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
+              >
+                Tentar novamente
+              </button>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-white/60">
               <Film className="size-10 mx-auto mb-3 opacity-40" />
