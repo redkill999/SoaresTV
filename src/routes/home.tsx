@@ -203,15 +203,11 @@ function HomePage() {
   return (
     <div
       className="home-wrapper relative flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-black text-white"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-      }}
+      data-testid="home-fullscreen"
     >
-      {/* Canvas ocupa 100% da viewport. Imagem esticada (object-fill)
-          preenche tudo sem barras pretas; hotspots em % seguem a imagem. */}
+      {/* Background full-bleed: ocupa 100% da tela física (inclusive atrás
+          do notch/câmera). NÃO recebe safe-area padding — o fundo pode
+          cobrir a área do recorte. */}
       <div className="relative home-canvas h-full w-full">
         <img
           src={homeBg.url}
@@ -219,6 +215,7 @@ function HomePage() {
           draggable={false}
           className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
         />
+
 
 
 
