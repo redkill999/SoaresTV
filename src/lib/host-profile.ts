@@ -293,11 +293,69 @@ export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy
 /** Marca o host como incompatível com a variante HLS (.m3u8 404/410):
  *  futuros canais desse provedor pulam direto pro .ts via mpegts.js. */
 export function rememberHlsUnsupported(host: string): void {
+  const override = getWebLiveProviderOverride(host);
+  if (override?.preventHostWideHlsBlacklist) {
+    console.log("[HOST PROFILE] rememberHlsUnsupported ignorado (override)", { host });
+    return;
+  }
   updateHostProfile(host, { disableHlsConversion: true, preferTs: true });
 }
 
 /** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
 export function rememberWebIncompatibleLive(host: string): void {
+  const override = getWebLiveProviderOverride(host);
+  if (override?.preventAutoWebBlacklist) {
+    console.log("[HOST PROFILE] rememberWebIncompatibleLive ignorado (override)", { host });
+    return;
+  }
   updateHostProfile(host, { webIncompatibleLive: true });
 }
+
+// =========================================================================
+// Web-only per-provider overrides — só aplicam a LIVE em navegador desktop.
+// APK/TV/celular continuam usando os presets/perfis normais acima.
+// =========================================================================
+
+export type WebLiveProviderOverride = {
+  strategy: "hls-proxy-first";
+  ignoreWebIncompatibleFlag?: boolean;
+  preventAutoWebBlacklist?: boolean;
+  preventHostWideHlsBlacklist?: boolean;
+};
+
+const WEB_LIVE_PROVIDER_OVERRIDES: Record<string, WebLiveProviderOverride> = {
+  "suportejetflix.site": {
+    strategy: "hls-proxy-first",
+    ignoreWebIncompatibleFlag: true,
+    preventAutoWebBlacklist: true,
+    preventHostWideHlsBlacklist: true,
+  },
+};
+
+export function getWebLiveProviderOverride(
+  host: string | null | undefined,
+): WebLiveProviderOverride | null {
+  if (!host) return null;
+  const h = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+  if (WEB_LIVE_PROVIDER_OVERRIDES[h]) return WEB_LIVE_PROVIDER_OVERRIDES[h];
+  const suffix = Object.keys(WEB_LIVE_PROVIDER_OVERRIDES).find((p) => h.endsWith(`.${p}`));
+  return suffix ? WEB_LIVE_PROVIDER_OVERRIDES[suffix] : null;
+}
+
+// Migração pontual: apaga APENAS `webIncompatibleLive` do perfil persistido
+// dos hosts que ganharam override Web-Live. Não toca outros campos, outros
+// hosts, favoritos, histórico, conta ou cache.
+for (const overrideHost of Object.keys(WEB_LIVE_PROVIDER_OVERRIDES)) {
+  for (const key of Object.keys(memory)) {
+    const bare = key.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+    if (bare !== overrideHost && !bare.endsWith(`.${overrideHost}`)) continue;
+    if (memory[key]?.webIncompatibleLive) {
+      const { webIncompatibleLive: _wi, ...rest } = memory[key];
+      memory[key] = rest;
+      writeStorage(memory);
+      console.log("[HOST PROFILE] migração: webIncompatibleLive removido", { host: key });
+    }
+  }
+}
+
 
