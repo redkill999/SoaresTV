@@ -137,11 +137,21 @@ function LoadingPage() {
       await wait(700);
       if (!mountedRef.current) return;
       setStatus((p) => {
-        // Navega para /home se live+vod+series estiverem OK — o EPG (get_live_streams)
-        // é opcional: em painéis grandes ele pode falhar/timeout, mas o app funciona.
-        // Isso desbloqueia o APK que ficava travado em "Esperando..." no card do Guia.
-        const coreOk = p.live === "ok" && p.vod === "ok" && p.series === "ok";
-        if (coreOk && mountedRef.current) navigate({ to: "/home", replace: true });
+        // Persiste capacidades descobertas para a Home consultar.
+        const toCap = (s: Status): CapabilityStatus =>
+          s === "ok" ? "available" : s === "fail" ? "unavailable" : "unknown";
+        setCapabilities({
+          live: toCap(p.live),
+          movies: toCap(p.vod),
+          series: toCap(p.series),
+          epg: toCap(p.epg),
+          // radio/catchup não são testados aqui — mantêm unknown por ora.
+        });
+        // ANTES: exigia live+vod+series todos OK. AGORA: libera Home com
+        // qualquer conteúdo real disponível (live OU vod OU series). A Home
+        // desabilita cliques nos tiles indisponíveis explicando o motivo.
+        const anyContent = p.live === "ok" || p.vod === "ok" || p.series === "ok";
+        if (anyContent && mountedRef.current) navigate({ to: "/home", replace: true });
         return p;
       });
     })();
