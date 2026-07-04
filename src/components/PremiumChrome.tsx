@@ -84,9 +84,13 @@ export function PremiumChrome({
 
   const runUpdate = () => {
     try {
+      // Limpa caches de catálogo (IndexedDB + memória) e o cache do React Query.
+      // NÃO apaga credenciais, favoritos, histórico ou lista M3U salvas em `store`.
       Object.keys(localStorage)
         .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
         .forEach((k) => localStorage.removeItem(k));
+      clearPersisted(); // IndexedDB qcache
+      queryClient.clear(); // memória do React Query
       toast.success("Conteúdos atualizados");
       setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
     } catch { toast.error("Falha ao atualizar"); }
