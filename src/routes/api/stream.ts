@@ -228,12 +228,21 @@ async function handle(request: Request) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
-      const res = await safeFetch(upstreamUrl, {
-        method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
-        headers: buildHeaders(ua),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      // Propaga aborto do cliente (fechar player, trocar candidato) para o
+      // upstream — evita conexões abandonadas ocupando o slot do painel.
+      const onClientAbort = () => controller.abort();
+      try { request.signal.addEventListener("abort", onClientAbort, { once: true }); } catch { /* noop */ }
+      let res: Response;
+      try {
+        res = await safeFetch(upstreamUrl, {
+          method: isProbe ? "GET" : request.method === "HEAD" ? "HEAD" : "GET",
+          headers: buildHeaders(ua),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+        try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
+      }
       lastStatus = res.status;
       lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
