@@ -288,7 +288,14 @@ function handleKey(e: KeyboardEvent) {
     return;
   }
 
-  if (typing) return;
+  // Em modo TV, Up/Down PRECISAM funcionar mesmo com um <input> focado —
+  // não existe Tab no controle remoto. Sem isto o usuário fica preso no
+  // campo Servidor do login e todos os campos parecem "selecionados juntos".
+  // Fora de tvMode (teclado desktop), typing continua bloqueando 100%.
+  if (typing) {
+    if (!tvMode) return;
+    if (!isUp && !isDown) return; // Left/Right e digitação seguem normais no input
+  }
 
   // No navegador desktop, deixa setas/scroll nativos funcionarem normalmente.
   // A navegação espacial por D-pad fica restrita ao APK/Smart TV.
@@ -469,11 +476,26 @@ export function isSmartTvEnv(): boolean {
 
 /**
  * Detecta especificamente TV/TV Box (diferente de `data-tv-mode`, que também
- * cobre celular). Usa UA de Smart TV OU ausência total de touch.
+ * cobre celular).
+ *
+ * IMPORTANTE — não voltar a usar heurística de "sem touch":
+ * WebViews de Android TV frequentemente reportam `maxTouchPoints > 0` e/ou
+ * `ontouchstart` mesmo sem tela touch, e navegadores desktop reportam
+ * `maxTouchPoints === 0`. O fallback antigo (`noTouch`) causava:
+ *   - TV real caindo no painel de celular (index.tsx → isTv=false)
+ *   - Desktop browser caindo no modo TV (regressão do TV_MODE_SCRIPT)
+ *
+ * Sinais confiáveis (nesta ordem):
+ *   1. `window.__deviceType === "tv"` — flag opcional injetada por um
+ *      plugin nativo (Android UiModeManager.UI_MODE_TYPE_TELEVISION)
+ *      antes da WebView carregar. Se existir, é a verdade.
+ *   2. Regex de UA de Smart TV / TV Box (`isSmartTvEnv()`).
+ * Nada de touch/no-touch.
  */
 export function isTvDevice(): boolean {
   if (typeof navigator === "undefined" || typeof window === "undefined") return false;
-  if (isSmartTvEnv()) return true;
-  const noTouch = (navigator.maxTouchPoints ?? 0) === 0 && !("ontouchstart" in window);
-  return noTouch;
+  const injected = (window as Window & { __deviceType?: string }).__deviceType;
+  if (injected === "tv") return true;
+  if (injected === "phone" || injected === "tablet") return false;
+  return isSmartTvEnv();
 }

@@ -77,6 +77,15 @@ if [ ! -f "$FULL_APK" ]; then
   exit 1
 fi
 
+if [ "$MODE" = "release" ]; then
+  log "4b/5 — Assinando APK release com keystore LOCAL (teste pessoal, NÃO Play Store)"
+  if node scripts/sign-release-apk.mjs; then
+    FULL_APK="android/app/build/outputs/apk/release/app-release-signed.apk"
+  else
+    err "Assinatura automática falhou — APK unsigned continua em $FULL_APK"
+  fi
+fi
+
 log "5/5 — Pronto!"
-printf "\n\033[1;32mAPK gerado:\033[0m %s\n" "$FULL_APK"
+printf "\n\033[1;32mAPK gerado (modo: %s):\033[0m %s\n" "$MODE" "$FULL_APK"
 printf "Tamanho: %s\n\n" "$(du -h "$FULL_APK" | cut -f1)"
