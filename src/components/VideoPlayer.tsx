@@ -1147,7 +1147,7 @@ export function VideoPlayer({
         // curto é assinado no backend — credenciais nunca na query pública.
         let effectiveUrl = url;
         if (url === EXTERNAL_LIVE_RELAY_SENTINEL) {
-          const minted = await mintExternalLiveRelayUrl(hostOf(workingSrc) ?? "", streamIdOf(workingSrc));
+          const minted = await mintExternalLiveRelayUrl(workingSrc);
           if (!minted || cancelled) {
             pushDbg("EXT-RELAY token indisponível/não configurado — avançando candidato");
             if (!cancelled) advanceCandidate("ext-relay-unavailable");
