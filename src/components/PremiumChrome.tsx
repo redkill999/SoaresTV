@@ -35,6 +35,7 @@ export function PremiumChrome({
   hideFooter?: boolean;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
   const [recOn, setRecOn] = useState(false);
   const [alarmMin, setAlarmMin] = useState(0);
