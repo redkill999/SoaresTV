@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // Isolar módulo para exercitar migração e overrides sem estado global compartilhado.
