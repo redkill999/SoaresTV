@@ -393,6 +393,29 @@ if (existsSync(fragmentXmlPath)) {
   }
 }
 
+// Patch build.gradle: AGP/Gradle 9+ removeu suporte a
+// `proguard-android.txt` (traz `-dontoptimize`, incompatível com R8).
+// Trocar por `proguard-android-optimize.txt` — mesma semântica, sem quebra.
+const buildGradlePath = join(
+  root,
+  "node_modules/capacitor-video-player/android/build.gradle",
+);
+if (existsSync(buildGradlePath)) {
+  let g = readFileSync(buildGradlePath, "utf8");
+  const before = g;
+  g = g.replace(
+    /getDefaultProguardFile\(\s*['"]proguard-android\.txt['"]\s*\)/g,
+    "getDefaultProguardFile('proguard-android-optimize.txt')",
+  );
+  if (g !== before) {
+    writeFileSync(buildGradlePath, g);
+    console.log("[patch-video-player] build.gradle: proguard trocado por proguard-android-optimize.txt");
+  } else {
+    console.log("[patch-video-player] build.gradle: já usa proguard-android-optimize.txt ou padrão não bateu");
+  }
+}
+
+
 patchFile(pluginPath, [
   {
     name: "P1) addMethodForNotification playerItemError",
