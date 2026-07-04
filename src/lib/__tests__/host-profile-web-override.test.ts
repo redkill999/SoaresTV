@@ -78,18 +78,17 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     expect(getHostProfile("exemplo-outro.tv").webIncompatibleLive).toBe(true);
   });
 
-  it("rememberHlsUnsupported NÃO torna suportejetflix.site TS-only globalmente", async () => {
+  it("rememberHlsUnsupported NÃO grava/altera perfil para host com override", async () => {
     const { rememberHlsUnsupported, getHostProfile } = await loadModule();
-    // limpa preset built-in que já vem TS-only, para provar o guard
-    localStorage.setItem("iptv.hostProfiles.v1", JSON.stringify({ "suportejetflix.site": {} }));
-    const mod = await loadModule();
-    mod.rememberHlsUnsupported("suportejetflix.site");
-    expect(mod.getHostProfile("suportejetflix.site").disableHlsConversion).toBeFalsy();
-    expect(mod.getHostProfile("suportejetflix.site").preferTs).toBeFalsy();
-    // referência pra evitar unused warning
-    void rememberHlsUnsupported;
-    void getHostProfile;
+    const before = { ...getHostProfile("suportejetflix.site") };
+    rememberHlsUnsupported("suportejetflix.site");
+    const after = getHostProfile("suportejetflix.site");
+    // Guard retorna cedo → sem updatedAt novo e sem mudança de flags.
+    expect(after.updatedAt).toBe(before.updatedAt);
+    expect(after.disableHlsConversion).toBe(before.disableHlsConversion);
+    expect(after.preferTs).toBe(before.preferTs);
   });
+
 
   it("rememberHlsUnsupported continua persistindo para outros hosts", async () => {
     const { rememberHlsUnsupported, getHostProfile } = await loadModule();
