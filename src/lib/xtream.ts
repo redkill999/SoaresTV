@@ -397,9 +397,54 @@ async function loadSavedM3UEntriesForCreds(creds: XtreamCreds): Promise<M3UEntry
   return [];
 }
 
+/** Só cache em memória/IndexedDB — nunca baixa a M3U (que pode levar 25s+). */
+async function loadCachedM3UEntriesForCreds(creds: XtreamCreds): Promise<M3UEntry[]> {
+  if (!isBrowser()) return [];
+  const lists = store.getM3U().filter((list) => sameXtreamAccount(xtreamCredsFromUrl(list.url, list.username, list.password), creds));
+  for (const list of lists) {
+    const cached = m3uCache.get();
+    if (cached?.url === list.url && cached.entries.length) return cached.entries;
+    const hydrated = await m3uCache.loadPersisted(list.url);
+    const persisted = hydrated ? m3uCache.get() : null;
+    if (persisted?.url === list.url && persisted.entries.length) return persisted.entries;
+  }
+  return [];
+}
+
+// Aquecimento da M3U em segundo plano (web): baixa uma vez e guarda no cache
+// para o próximo merge, sem nunca bloquear a exibição dos canais.
+const m3uWarmupLastAttempt = new Map<string, number>();
+let m3uWarmupInFlight = false;
+const M3U_WARMUP_COOLDOWN_MS = 5 * 60_000;
+
+function warmM3UEntriesInBackground(creds: XtreamCreds) {
+  if (!isBrowser() || m3uWarmupInFlight) return;
+  const key = `${creds.server}|${creds.username}`;
+  const last = m3uWarmupLastAttempt.get(key) ?? 0;
+  if (Date.now() - last < M3U_WARMUP_COOLDOWN_MS) return;
+  m3uWarmupLastAttempt.set(key, Date.now());
+  m3uWarmupInFlight = true;
+  void loadSavedM3UEntriesForCreds(creds)
+    .catch(() => undefined)
+    .finally(() => {
+      m3uWarmupInFlight = false;
+    });
+}
+
 export async function preserveOriginalLiveUrls(creds: XtreamCreds, streams: LiveStream[]): Promise<LiveStream[]> {
-  const entries = await loadSavedM3UEntriesForCreds(creds);
-  return entries.length ? mergeLiveStreamsWithM3UUrls(streams, entries) : streams;
+  // APK / Android nativo: comportamento original (pode baixar a M3U de forma
+  // síncrona — fluxo validado, não mexer).
+  if (await canUseNativeHttp()) {
+    const entries = await loadSavedM3UEntriesForCreds(creds);
+    return entries.length ? mergeLiveStreamsWithM3UUrls(streams, entries) : streams;
+  }
+  // Web: nunca bloquear a lista de canais no download da M3U (25s+ de tela
+  // vazia). Usa só o cache; se não houver, mostra os canais já e aquece a
+  // M3U em segundo plano para o próximo carregamento fazer o merge.
+  const cachedEntries = await loadCachedM3UEntriesForCreds(creds);
+  if (cachedEntries.length) return mergeLiveStreamsWithM3UUrls(streams, cachedEntries);
+  warmM3UEntriesInBackground(creds);
+  return streams;
 }
 
 export async function login(c: XtreamCreds) {
