@@ -134,4 +134,27 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     expect(o.ignorePreferTs).toBe(true);
   });
 
+  it("migração v3 limpa flags legadas de suportejetflix.site e grava chave", async () => {
+    localStorage.setItem(
+      "iptv.hostProfiles.v1",
+      JSON.stringify({
+        "suportejetflix.site": {
+          webIncompatibleLive: true, disableProxy: true,
+          disableHlsConversion: true, preferTs: true, bypassProxyForLive: true,
+        },
+        "outro-host.tv": { webIncompatibleLive: true },
+      }),
+    );
+    const { getHostProfile } = await loadModule();
+    expect(localStorage.getItem("iptv.migration.suportejetflixWebLiveV3")).toBe("1");
+    const p = getHostProfile("suportejetflix.site");
+    expect(p.webIncompatibleLive).toBeUndefined();
+    expect(p.disableProxy).toBeUndefined();
+    expect(p.disableHlsConversion).toBeUndefined();
+    expect(p.preferTs).toBeUndefined();
+    expect(p.bypassProxyForLive).toBeUndefined();
+    // Outros hosts intactos.
+    expect(getHostProfile("outro-host.tv").webIncompatibleLive).toBe(true);
+  });
+
 });
