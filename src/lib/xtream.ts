@@ -515,15 +515,10 @@ function warmM3UEntriesInBackground(creds: XtreamCreds) {
 }
 
 export async function preserveOriginalLiveUrls(creds: XtreamCreds, streams: LiveStream[]): Promise<LiveStream[]> {
-  // APK / Android nativo: comportamento original (pode baixar a M3U de forma
-  // síncrona — fluxo validado, não mexer).
-  if (await canUseNativeHttp()) {
-    const entries = await loadSavedM3UEntriesForCreds(creds);
-    return entries.length ? mergeLiveStreamsWithM3UUrls(streams, entries) : streams;
-  }
-  // Web: nunca bloquear a lista de canais no download da M3U (25s+ de tela
-  // vazia). Usa só o cache; se não houver, mostra os canais já e aquece a
-  // M3U em segundo plano para o próximo carregamento fazer o merge.
+  // NUNCA baixar a M3U síncronamente antes de mostrar os canais — a lista
+  // completa pode ter dezenas de MB e trava a WebView do APK. Só usamos M3U
+  // se já estiver em cache; caso contrário, aquecemos em segundo plano e
+  // devolvemos os streams do player_api.php imediatamente.
   const cachedEntries = await loadCachedM3UEntriesForCreds(creds);
   if (cachedEntries.length) return mergeLiveStreamsWithM3UUrls(streams, cachedEntries);
   warmM3UEntriesInBackground(creds);
