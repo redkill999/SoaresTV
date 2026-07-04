@@ -97,12 +97,14 @@ function relayError(
   const h = new Headers(cors);
   h.set("Content-Type", "application/json");
   h.set("Cache-Control", "no-store");
+  h.set("X-Live-Relay-Version", RELAY_VERSION);
   h.set("X-Live-Relay-Error", code);
   return new Response(
     JSON.stringify({ ok: false, errorCode: code, ...(extra ?? {}) }),
     { status, headers: h },
   );
 }
+
 
 function sanitizedLog(event: string, fields: Record<string, unknown>) {
   // eslint-disable-next-line no-console
