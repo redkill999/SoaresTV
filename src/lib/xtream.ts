@@ -520,62 +520,165 @@ export type M3UEntry = {
   url: string;
   logo?: string;
   group?: string;
+  /** tvg-id → chave para casar com XMLTV (EPG). */
+  tvgId?: string;
+  /** tvg-name → nome canônico do canal. */
+  tvgName?: string;
+  /** tvg-chno → número do canal. */
+  tvgChno?: string;
+  /** #EXTVLCOPT:http-user-agent= */
+  userAgent?: string;
+  /** #EXTVLCOPT:http-referrer= */
+  referer?: string;
+  /** catchup / timeshift metadata (Xtream-style). */
+  catchup?: string;
+  catchupSource?: string;
+  catchupDays?: number;
+  /** #KODIPROP:inputstream.adaptive.license_key= etc. */
+  kodiProps?: Record<string, string>;
+  /** #EXTGRP:<group> fallback quando não há group-title. */
+  extGroup?: string;
+};
+
+export type M3UParseResult = {
+  entries: M3UEntry[];
+  /** url-tvg="..." declarado no cabeçalho #EXTM3U (para XMLTV). */
+  epgUrls: string[];
+  truncated: boolean;
 };
 
 // Limite de segurança para evitar OOM em listas absurdamente grandes
 // (~250k canais cobre praticamente qualquer painel real).
 const MAX_M3U_ENTRIES = 250_000;
-const RE_LOGO = /tvg-logo="([^"]+)"/;
-const RE_GROUP = /group-title="([^"]+)"/;
+const RE_ATTR = /([a-zA-Z0-9_-]+)="([^"]*)"/g;
+const RE_URL_TVG = /url-tvg="([^"]+)"/i;
+
+interface CancelSignal { aborted: boolean }
 
 /**
  * Parser incremental: percorre o texto via indexOf("\n") em vez de
  * `text.split(...)`, evitando alocar um array gigante com todas as linhas
  * (em listas de 60-80 MB o split chega a dobrar o uso de memória e
  * derruba o WebView do APK). Cada linha é processada e descartada.
+ *
+ * Suporta: BOM, CRLF, #EXTINF (com atributos tvg-* e catchup-*),
+ * #EXTVLCOPT (user-agent/referer), #KODIPROP, #EXTGRP, url-tvg no header,
+ * URLs relativas (resolvidas via baseUrl) e cancelamento cooperativo.
  */
-export function parseM3U(text: string): M3UEntry[] {
+export function parseM3UDetailed(
+  text: string,
+  opts?: { baseUrl?: string; signal?: CancelSignal },
+): M3UParseResult {
   const out: M3UEntry[] = [];
+  const epgUrls: string[] = [];
   let cur: Partial<M3UEntry> | null = null;
+  let kodi: Record<string, string> | null = null;
   let i = 0;
   const len = text.length;
-  let start = 0;
+  let start = len > 0 && text.charCodeAt(0) === 0xfeff ? 1 : 0;
+  let sawHeader = false;
+  let truncated = false;
+
   while (start <= len) {
+    if (opts?.signal?.aborted) break;
     let end = text.indexOf("\n", start);
     if (end === -1) end = len;
-    // strip \r final e espaços
     let lineEnd = end;
-    while (lineEnd > start && (text.charCodeAt(lineEnd - 1) === 13 /* \r */ || text.charCodeAt(lineEnd - 1) === 32)) lineEnd--;
+    while (lineEnd > start && (text.charCodeAt(lineEnd - 1) === 13 || text.charCodeAt(lineEnd - 1) === 32)) lineEnd--;
     let lineStart = start;
     while (lineStart < lineEnd && text.charCodeAt(lineStart) === 32) lineStart++;
     if (lineEnd > lineStart) {
       const first = text.charCodeAt(lineStart);
       if (first === 35 /* # */) {
-        // só nos importa #EXTINF
-        if (text.startsWith("#EXTINF", lineStart)) {
-          const line = text.slice(lineStart, lineEnd);
+        const line = text.slice(lineStart, lineEnd);
+        if (!sawHeader && line.startsWith("#EXTM3U")) {
+          sawHeader = true;
+          const m = RE_URL_TVG.exec(line);
+          if (m) {
+            for (const u of m[1].split(/[,;\s]+/)) if (u) epgUrls.push(u);
+          }
+        } else if (line.startsWith("#EXTINF")) {
           const comma = line.indexOf(",");
+          const attrs = comma >= 0 ? line.slice(8, comma) : line.slice(8);
           const name = comma >= 0 ? line.slice(comma + 1).trim() : "";
-          const logo = RE_LOGO.exec(line)?.[1];
-          const group = RE_GROUP.exec(line)?.[1];
-          cur = { name, logo, group };
+          const entry: Partial<M3UEntry> = { name };
+          RE_ATTR.lastIndex = 0;
+          let m: RegExpExecArray | null;
+          while ((m = RE_ATTR.exec(attrs))) {
+            const k = m[1].toLowerCase();
+            const v = m[2];
+            if (k === "tvg-logo") entry.logo = v;
+            else if (k === "group-title") entry.group = v;
+            else if (k === "tvg-id") entry.tvgId = v;
+            else if (k === "tvg-name") entry.tvgName = v;
+            else if (k === "tvg-chno") entry.tvgChno = v;
+            else if (k === "catchup") entry.catchup = v;
+            else if (k === "catchup-source") entry.catchupSource = v;
+            else if (k === "catchup-days") {
+              const n = Number(v);
+              if (Number.isFinite(n)) entry.catchupDays = n;
+            }
+          }
+          cur = entry;
+          kodi = null;
+        } else if (line.startsWith("#EXTVLCOPT:") && cur) {
+          const kv = line.slice(11);
+          const eq = kv.indexOf("=");
+          if (eq > 0) {
+            const k = kv.slice(0, eq).toLowerCase().trim();
+            const v = kv.slice(eq + 1).trim();
+            if (k === "http-user-agent") cur.userAgent = v;
+            else if (k === "http-referrer" || k === "http-referer") cur.referer = v;
+          }
+        } else if (line.startsWith("#KODIPROP:") && cur) {
+          const kv = line.slice(10);
+          const eq = kv.indexOf("=");
+          if (eq > 0) {
+            if (!kodi) kodi = {};
+            kodi[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+          }
+        } else if (line.startsWith("#EXTGRP:") && cur) {
+          cur.extGroup = line.slice(8).trim();
         }
       } else if (cur) {
-        const url = text.slice(lineStart, lineEnd);
+        let url = text.slice(lineStart, lineEnd);
+        if (opts?.baseUrl && !/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+          try { url = new URL(url, opts.baseUrl).toString(); } catch { /* mantém */ }
+        }
+        if (kodi) cur.kodiProps = kodi;
         out.push({
           id: `m3u-${i++}`,
           url,
           name: cur.name || "Sem nome",
           logo: cur.logo,
-          group: cur.group,
+          group: cur.group || cur.extGroup,
+          tvgId: cur.tvgId,
+          tvgName: cur.tvgName,
+          tvgChno: cur.tvgChno,
+          userAgent: cur.userAgent,
+          referer: cur.referer,
+          catchup: cur.catchup,
+          catchupSource: cur.catchupSource,
+          catchupDays: cur.catchupDays,
+          kodiProps: cur.kodiProps,
+          extGroup: cur.extGroup,
         });
         cur = null;
-        if (out.length >= MAX_M3U_ENTRIES) break;
+        kodi = null;
+        if (out.length >= MAX_M3U_ENTRIES) { truncated = true; break; }
       }
     }
     start = end + 1;
   }
-  return out;
+  return { entries: out, epgUrls, truncated };
+}
+
+/**
+ * Wrapper retrocompatível: mantém a assinatura antiga usada por todo o app.
+ * Use `parseM3UDetailed` quando precisar de url-tvg, VLC opts, kodi props etc.
+ */
+export function parseM3U(text: string): M3UEntry[] {
+  return parseM3UDetailed(text).entries;
 }
 
 function preferredM3UOutput(hostname: string): "ts" | "m3u8" {
