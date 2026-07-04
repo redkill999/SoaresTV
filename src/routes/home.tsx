@@ -259,7 +259,8 @@ function HomePage() {
               <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
             )}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <Toaster theme="dark" />
