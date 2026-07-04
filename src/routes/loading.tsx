@@ -157,10 +157,12 @@ function LoadingPage() {
     })();
   }, [navigate]);
 
-  const anyFail = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "fail");
   const anyPending = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "pending");
+  const allFailed  = (["live","vod","series"] as TestKey[]).every((k) => status[k] === "fail");
 
-  const finishedWithFailure = !anyPending && anyFail;
+  // Só mostra tela de erro quando NENHUMA capacidade real está disponível.
+  // Antes o app travava aqui se apenas uma delas falhasse (ex.: painel só-Live).
+  const finishedWithFailure = !anyPending && allFailed;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
