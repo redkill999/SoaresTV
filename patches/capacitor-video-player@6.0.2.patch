@@ -1,14 +1,5 @@
 --- a/package.json
 +++ b/package.json
-@@ -14,7 +14,7 @@
-     "ios/Plugin/",
-     "CapacitorVideoPlayer.podspec"
-   ],
--  "author": "Jean Pierre Quéau",
-+  "author": "Jean Pierre Qu\u00e9au",
-   "license": "MIT",
-   "engines": {
-     "node": ">=16.0.0"
 @@ -70,7 +70,7 @@
      "@types/node": "^22.10.2"
    },
@@ -18,10 +9,3 @@
      "hls.js": "^1.4.0"
    },
    "prettier": "@ionic/prettier-config",
-@@ -86,4 +86,4 @@
-       "src": "android"
-     }
-   }
--}
-+}
-\ No newline at end of file
