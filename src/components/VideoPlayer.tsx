@@ -704,10 +704,20 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    // Web-only per-provider override (ex.: suportejetflix.site). Só se aplica
+    // a LIVE em navegador desktop — APK/TV/celular passam batido. Detecção:
+    // não é nativo (Capacitor) E não é phone/tablet/tv injetados pelo shell.
+    const dt = playerDeviceType();
+    const isWebDesktop = !isNativeAppSync() && dt !== "phone" && dt !== "tablet" && dt !== "tv";
+    const webOverride = isLive && isWebDesktop
+      ? getWebLiveProviderOverride(hostOf(workingSrc))
+      : null;
+    const shouldBlockWebLive =
+      !!liveHostProfile.webIncompatibleLive && !webOverride?.ignoreWebIncompatibleFlag;
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && liveHostProfile.webIncompatibleLive) {
+    if (isLive && shouldBlockWebLive) {
       pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
@@ -715,6 +725,7 @@ export function VideoPlayer({
       );
       return;
     }
+
 
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
