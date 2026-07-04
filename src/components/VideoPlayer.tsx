@@ -1049,11 +1049,18 @@ export function VideoPlayer({
       }
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
+      // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
+      const isProxyCandidate = /^\/api\/stream\?/i.test(url);
+      const candidateType = /\.m3u8(\?|&|$)/i.test(decodedUrl)
+        ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
+        : (isProxyCandidate ? "ts-proxy" : "ts-direct");
 
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
+        armFirstFrameWatchdog(candidateType);
         attachHls(url);
         return;
       }
+
       // LIVE MPEG-TS de M3U pode não ter extensão visível (ex.: /user/pass/id)
       // ou estar dentro do /api/stream?u=... sem .ts no path. Nesses casos o
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
