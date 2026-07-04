@@ -59,25 +59,38 @@ function LivePage() {
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `live-cats:${acct}`;
   const listCacheKey = `live-streams:${acct}:all`;
+  const nonEmptyArr = <T,>(v: T[] | undefined | null): v is T[] => Array.isArray(v) && v.length > 0;
   const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
   const listPersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(listCacheKey) : null), [listCacheKey, acct]);
-  const listInitialData = listPersisted?.data?.some((s) => !!s.url) ? listPersisted.data : undefined;
+  // Nunca use um array vazio persistido como initialData válido — força refetch.
+  const listInitialData = nonEmptyArr(listPersisted?.data) && listPersisted!.data.some((s) => !!s.url)
+    ? listPersisted!.data
+    : undefined;
+  const catsInitialData = nonEmptyArr(catsPersisted?.data) ? catsPersisted!.data : undefined;
   const categoriesQ = useQuery({
     queryKey: ["live-cats", acct],
     enabled: !!creds,
     queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_live_categories")),
-    initialData: catsPersisted?.data,
-    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    initialData: catsInitialData,
+    initialDataUpdatedAt: catsInitialData ? catsPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: catsInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
   const streamsQ = useQuery({
     queryKey: ["live-streams", acct, "all"],
     enabled: !!creds,
-    queryFn: withPersist(listCacheKey, () => api<LiveStream[]>(creds!, "get_live_streams")),
+    queryFn: withPersist(
+      listCacheKey,
+      () => api<LiveStream[]>(creds!, "get_live_streams"),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
     initialData: listInitialData,
     initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
     retry: 1,
+    refetchOnMount: listInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
   // Fallback per-category: painéis grandes (60MB+) muitas vezes falham no
   // get_live_streams "all" no APK TV. Ao selecionar uma categoria, buscamos
@@ -88,14 +101,22 @@ function LivePage() {
     () => (perCatEnabled ? loadPersisted<LiveStream[]>(perCatKey) : null),
     [perCatEnabled, perCatKey],
   );
+  const perCatInitial = nonEmptyArr(perCatPersisted?.data) ? perCatPersisted!.data : undefined;
   const perCatQ = useQuery({
     queryKey: ["live-streams", acct, "cat", cat],
     enabled: perCatEnabled,
-    queryFn: withPersist(perCatKey, () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat })),
-    initialData: perCatPersisted?.data,
-    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    queryFn: withPersist(
+      perCatKey,
+      () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat }),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
+    initialData: perCatInitial,
+    initialDataUpdatedAt: perCatInitial ? perCatPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: perCatInitial ? false : "always",
+    refetchOnReconnect: true,
   });
+  const hasPerCategoryData = Array.isArray(perCatQ.data) && perCatQ.data.length > 0;
 
   const favs = useFavorites();
   const history = useHistory();
