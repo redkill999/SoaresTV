@@ -74,6 +74,35 @@ function HomePage() {
   const [alarmMin, setAlarmMin] = useState(0);
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Capacidades descobertas em /loading. Home usa isso pra desabilitar
+  // cliques em tiles cujo servidor não suporta (ex.: painel só-Live não
+  // deve abrir /movies vazio).
+  const [caps, setCaps] = useState<Capabilities>(() => getCapabilities());
+  useEffect(() => {
+    setCaps(getCapabilities());
+    return subscribeCapabilities(() => setCaps(getCapabilities()));
+  }, []);
+
+  /** Mapeia hotspot.key → CapabilityKey. null = tile sempre habilitado. */
+  const capOfHotspot = (key: string): CapabilityKey | null => {
+    if (key === "live") return "live";
+    if (key === "vod") return "movies";
+    if (key === "series") return "series";
+    if (key === "epg") return "epg";
+    if (key === "radio") return "radio";
+    if (key === "catchup") return "catchup";
+    return null; // conta, settings, favoritos, multi, status icons: sempre habilitados
+  };
+  const isHotspotAvailable = useMemo(() => {
+    return (key: string) => {
+      const c = capOfHotspot(key);
+      if (!c) return true;
+      // "unknown" também libera — não vamos bloquear enquanto a descoberta
+      // ainda não rodou. Só bloqueia "unavailable" comprovado.
+      return caps[c] !== "unavailable";
+    };
+  }, [caps]);
+
   useEffect(() => {
     const hasCreds = !!store.getCreds();
     const playlists = store.getM3U();
