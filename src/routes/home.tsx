@@ -225,14 +225,18 @@ function HomePage() {
 
 
 
-        {HOTSPOTS.map((h) => (
+        {HOTSPOTS.map((h) => {
+          const available = isHotspotAvailable(h.key);
+          return (
           <button
             key={h.key}
             type="button"
             onClick={() => onHotspot(h)}
             data-tv-default-focus={h.key === "live" ? "" : undefined}
             aria-label={h.label}
-            className="hotspot group absolute outline-none active:scale-[0.97]"
+            aria-disabled={!available || undefined}
+            data-unavailable={!available || undefined}
+            className="hotspot group absolute outline-none active:scale-[0.97] data-[unavailable]:opacity-60"
             style={{
               left: `${h.l}%`,
               top: `${h.t}%`,
