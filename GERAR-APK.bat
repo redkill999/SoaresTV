@@ -193,10 +193,24 @@ if not exist "%FULL_APK%" (
   goto :fail
 )
 
+REM ---------- 6b. Assinar release com keystore LOCAL (teste pessoal) ----------
+if /I "%MODE%"=="release" (
+  echo.
+  echo  [4b/5] Assinando APK release com keystore local para instalacao pessoal...
+  call node scripts/sign-release-apk.mjs >> "%LOG_FILE%" 2>&1
+  if errorlevel 1 (
+    echo  [aviso] Nao consegui assinar automaticamente. APK unsigned continua em %FULL_APK%.
+  ) else (
+    set "FULL_APK=android\app\build\outputs\apk\release\app-release-signed.apk"
+    echo  [ok] APK release assinado ^(keystore local, NAO usar pra Play Store^).
+  )
+)
+
 echo.
 echo  [5/5] Pronto!
 echo  ============================================================
 echo    APK GERADO COM SUCESSO
+echo    Modo:    %MODE%
 echo    Arquivo: %CD%\%FULL_APK%
 echo  ============================================================
 echo.
