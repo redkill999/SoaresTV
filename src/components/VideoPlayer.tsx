@@ -983,8 +983,11 @@ export function VideoPlayer({
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
           pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
-          if (!cancelled) tryNextVod();
+          if (cancelled) return;
+          if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
+          else tryNextVod();
         });
+
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
         const playPromise = tsPlayer.play();
