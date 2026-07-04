@@ -832,14 +832,32 @@ export function VideoPlayer({
     let overrideCandidateTypes: string[] = [];
     if (webOverride) {
       const isHls = isHlsUrl(workingSrc);
-      const hlsUrl = isHls ? workingSrc : toHlsCandidate(workingSrc, "live");
       const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
-      const entries: Array<[string, string | null]> = [
-        ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
-        ["hls-direct", hlsUrl],
-        ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
-        ["ts-direct", tsUrl],
-      ];
+      const hlsUrl = webOverride.skipSyntheticHls
+        ? (isHls ? workingSrc : null)
+        : (isHls ? workingSrc : toHlsCandidate(workingSrc, "live"));
+      const preventDirect = !!webOverride.preventDirectCandidates;
+      // Estratégia ts-proxy-first para .ts original: fila = [ts-proxy].
+      // Se URL original já for .m3u8 (raro para este provedor), usar HLS proxy.
+      const entries: Array<[string, string | null]> =
+        webOverride.strategy === "ts-proxy-first"
+          ? (isHls
+              ? [
+                  ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
+                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
+                ]
+              : [
+                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
+                ])
+          : [
+              ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+              ["hls-direct", hlsUrl],
+              ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+              ["ts-direct", tsUrl],
+            ];
       const seen = new Set<string>();
       const ordered: string[] = [];
       const types: string[] = [];
@@ -852,8 +870,10 @@ export function VideoPlayer({
       playbackCandidates = ordered;
       overrideCandidateTypes = types;
       pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v1 hostMatched=true environment=web-desktop ` +
-        `strategy=${webOverride.strategy} staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v3 hostMatched=true environment=web-desktop ` +
+        `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
+        `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
+        `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
         `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
       );
     }
