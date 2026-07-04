@@ -9,7 +9,12 @@ import {
   buildLiveDiagnoseBody,
   sanitizeContentType,
   LIVE_DIAGNOSE_MAX_BYTES,
+  classify403Body,
+  pickSafeResponseHeaders,
+  buildUpstreamRequestHeaders,
+  UPSTREAM_ERROR_BODY_MAX_BYTES,
 } from "@/lib/live-stream-helpers";
+
 
 function tsPacket(offset = 0, count = 3): Uint8Array {
   // Constrói um buffer com `offset` bytes de ruído + `count` pacotes MPEG-TS
