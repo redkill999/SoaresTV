@@ -302,114 +302,14 @@ export async function api<T = unknown>(
   return maybePreserveLiveUrls(c, action, r.data as T);
 }
 
-/**
- * Aceita como válido qualquer objeto Xtream com `stream_id` e `name`.
- * NÃO exige `url` — a maioria dos painéis só devolve `stream_id`+metadados,
- * e a URL é montada com `streamUrl.live(creds, stream_id)` na hora de tocar.
- */
-export function isValidLiveStream(stream: unknown): stream is LiveStream {
-  if (!stream || typeof stream !== "object") return false;
-  const item = stream as Partial<LiveStream>;
-  return (
-    item.stream_id !== undefined &&
-    item.stream_id !== null &&
-    Number.isFinite(Number(item.stream_id)) &&
-    typeof item.name === "string" &&
-    item.name.trim().length > 0
-  );
-}
-
-/**
- * Normaliza a resposta de `get_live_streams` para `LiveStream[]`.
- * Aceita array direto, string JSON, ou objeto com `data`/`streams`/`live_streams`/`results`.
- * Rejeita HTML, tela de login, objeto de erro. Não descarta canais sem `stream_icon`/`url`.
- */
-export function normalizeLiveStreamsResponse(input: unknown): LiveStream[] {
-  let value: unknown = input;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed.startsWith("<")) {
-      throw new Error("O servidor não retornou uma lista de canais válida.");
-    }
-    try { value = JSON.parse(trimmed); }
-    catch { throw new Error("O servidor não retornou uma lista de canais válida."); }
-  }
-  if (!Array.isArray(value) && value && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    value = obj.data ?? obj.streams ?? obj.live_streams ?? obj.results;
-  }
-  if (!Array.isArray(value)) {
-    throw new Error("Resposta Xtream de canais em formato inesperado.");
-  }
-  return value
-    .filter((item) => item && typeof item === "object")
-    .map((item) => {
-      const s = item as Record<string, unknown>;
-      return {
-        ...s,
-        stream_id: Number(s.stream_id),
-        category_id: String(s.category_id ?? ""),
-        name: String(s.name ?? "").trim(),
-        stream_icon: String(s.stream_icon ?? ""),
-      } as LiveStream;
-    })
-    .filter(isValidLiveStream);
-}
-
-// FIX CRÍTICO (skeleton infinito em Live no APK):
-// get_live_streams NÃO pode aguardar download/parse da M3U completa.
-// Este merge agora é 100% síncrono e só usa cache em memória (m3uCache.get()).
-// Se não houver cache já hidratado → devolve a resposta Xtream original
-// imediatamente. Baixar M3U ao selecionar categoria travava a WebView.
-//
-// A flag `m3uMergeTriggered` (WeakMap por resposta) fica exposta para
-// diagnóstico. Nunca dispara fetch/loadM3U/IDB — apenas leitura de Map.
-export const __m3uMergeDiagnostics = new WeakMap<object, { triggered: boolean }>();
-
-function getAlreadyLoadedM3UEntriesSync(creds: XtreamCreds): M3UEntry[] {
-  if (!isBrowser()) return [];
+async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
+  if (action !== "get_live_streams" || !Array.isArray(data)) return data;
   try {
-    const cached = m3uCache.get();
-    if (!cached?.entries?.length) return [];
-    // Só usa se a M3U em memória bate com uma das listas salvas dessa conta.
-    const lists = store.getM3U();
-    const match = lists.some(
-      (list) =>
-        list.url === cached.url &&
-        sameXtreamAccount(
-          xtreamCredsFromUrl(list.url, list.username, list.password),
-          creds,
-        ),
-    );
-    return match ? cached.entries : [];
-  } catch {
-    return [];
-  }
-}
-
-function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): T {
-  if (action !== "get_live_streams") return data;
-  if (!Array.isArray(data)) return data;
-  const entries = getAlreadyLoadedM3UEntriesSync(c);
-  if (!entries.length) {
-    // Nenhum merge disparado — 0 I/O, retorno instantâneo.
-    if (typeof data === "object" && data !== null) {
-      __m3uMergeDiagnostics.set(data as unknown as object, { triggered: false });
-    }
-    return data;
-  }
-  try {
-    const normalized = normalizeLiveStreamsResponse(data);
-    const merged = mergeLiveStreamsWithM3UUrls(normalized, entries) as unknown as T;
-    if (typeof merged === "object" && merged !== null) {
-      __m3uMergeDiagnostics.set(merged as unknown as object, { triggered: true });
-    }
-    return merged;
+    return (await preserveOriginalLiveUrls(c, data as LiveStream[])) as T;
   } catch {
     return data;
   }
 }
-
 
 export function extractLiveStreamIdFromUrl(url: string): number | null {
   try {

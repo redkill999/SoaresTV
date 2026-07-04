@@ -25,22 +25,8 @@ REM
 REM  Parametros opcionais (linha de comando):
 REM     GERAR-APK.bat           -> APK debug (padrao, instala em qualquer celular)
 REM     GERAR-APK.bat release   -> APK release nao-assinado
+REM     GERAR-APK.bat studio    -> So abre o projeto no Android Studio
 REM ============================================================
-REM
-REM  IMPORTANTE - server.url no capacitor.config.ts
-REM  --------------------------------------------------
-REM  Este APK aponta para o site publicado no Lovable
-REM  (tv-magica-brasa-soarestv.lovable.app). Alteracoes do
-REM  frontend PRECISAM ser publicadas la antes de testar no
-REM  celular/TV — o build local NAO substitui o site remoto.
-REM
-REM  Como confirmar que o APK esta rodando a versao certa:
-REM    - Configuracoes > Sobre > "Build" mostra o APP_BUILD_ID
-REM    - Deve ser igual ao APP_BUILD_ID em src/lib/app-build.ts
-REM    - Se divergir: publique no Lovable e reabra o APP
-REM ============================================================
-
-
 
 setlocal ENABLEDELAYEDEXPANSION
 cd /d "%~dp0"

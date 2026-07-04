@@ -1,40 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { getDeviceProfile } from "@/lib/device-profile";
-
-/**
- * Retorna tamanhos de chunk apropriados ao dispositivo. Renderizar 240
- * cards de uma vez no APK celular / Android TV causava ANR ("SoaresTV
- * não está respondendo"), então cada perfil tem um teto próprio.
- */
-export function getDeviceChunkSize(): { initial: number; step: number } {
-  if (typeof window === "undefined") return { initial: 60, step: 40 };
-  try {
-    const p = getDeviceProfile();
-    if (p.isTv) return { initial: 36, step: 24 };
-    if (p.isMobile) return { initial: 24, step: 18 };
-    if (p.isTablet) return { initial: 30, step: 20 };
-    return { initial: 80, step: 40 }; // desktop
-  } catch {
-    return { initial: 60, step: 40 };
-  }
-}
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Renderiza listas grandes em chunks: começa com `initial` itens e cresce
  * `step` itens cada vez que o sentinel entra na viewport.
- * Se `initial`/`step` não forem passados, usa perfil do dispositivo.
+ * Evita pintar 5k+ tiles de uma vez (causa principal de lentidão ao abrir
+ * Filmes/Séries em navegador desktop e em Android TV).
  */
-export function useProgressive<T>(items: T[], initial?: number, step?: number) {
-  const chunks = useMemo(() => {
-    const d = getDeviceChunkSize();
-    return { initial: initial ?? d.initial, step: step ?? d.step };
-  }, [initial, step]);
-  const [count, setCount] = useState(chunks.initial);
+export function useProgressive<T>(items: T[], initial = 240, step = 240) {
+  const [count, setCount] = useState(initial);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // Reset quando a lista muda (categoria/busca/sort).
   useEffect(() => {
-    setCount(chunks.initial);
-  }, [items, chunks.initial]);
+    setCount(initial);
+  }, [items, initial]);
 
   useEffect(() => {
     if (count >= items.length) return;
@@ -47,14 +26,14 @@ export function useProgressive<T>(items: T[], initial?: number, step?: number) {
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setCount((c) => Math.min(items.length, c + chunks.step));
+          setCount((c) => Math.min(items.length, c + step));
         }
       },
       { rootMargin: "600px 0px" },
     );
     io.observe(node);
     return () => io.disconnect();
-  }, [count, items.length, chunks.step]);
+  }, [count, items.length, step]);
 
   return {
     visible: count < items.length ? items.slice(0, count) : items,

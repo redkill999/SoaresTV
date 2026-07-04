@@ -51,9 +51,6 @@ export const XciptvTile = memo(function XciptvTile({
             src={image}
             alt={name}
             loading="lazy"
-            decoding="async"
-            // @ts-expect-error fetchpriority é atributo válido; typing do React ainda não cobre
-            fetchpriority="low"
             onError={() => setErrored(true)}
             className="w-full h-full object-contain p-3"
           />
@@ -62,7 +59,6 @@ export const XciptvTile = memo(function XciptvTile({
             src={channelFallback.url}
             alt={name}
             loading="lazy"
-            decoding="async"
             className="w-full h-full object-contain p-3 opacity-90"
           />
         )}

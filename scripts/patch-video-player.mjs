@@ -351,78 +351,6 @@ patchFile(fragmentPath, [
   }`,
     ),
   },
-  {
-    name: "14) campos _userResized + _isTvDevice (escala por dispositivo)",
-    required: true,
-    mustContainAfter: "JEEP_USER_RESIZED",
-    apply: (s) => s.replace(
-      "  private void forceExpandedControlLayout() {",
-      `  // JEEP_USER_RESIZED: flag de escolha manual + detecção de Android TV.
-  // Usados para aplicar a escala padrão por tipo de dispositivo sem
-  // sobrescrever a escolha do usuário no botão resize.
-  private boolean _userResized = false;
-
-  private boolean _isTvDevice() {
-    try {
-      android.content.Context c = getContext();
-      if (c == null) c = getActivity();
-      if (c == null) return false;
-      android.app.UiModeManager um =
-        (android.app.UiModeManager) c.getSystemService(android.content.Context.UI_MODE_SERVICE);
-      if (um != null && um.getCurrentModeType() == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) return true;
-      return c.getPackageManager().hasSystemFeature("android.software.leanback");
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
-  private void forceExpandedControlLayout() {`,
-    ),
-  },
-  {
-    name: "15) resizePressed marca escolha manual (JEEP_USER_RESIZED_FLAG)",
-    required: true,
-    mustContainAfter: "JEEP_USER_RESIZED_FLAG",
-    apply: (s) => s.replace(
-      "  private void resizePressed() {\n    if (resizeStatus == AspectRatioFrameLayout.RESIZE_MODE_FIT) {",
-      `  private void resizePressed() {
-    // JEEP_USER_RESIZED_FLAG: a partir daqui a escolha manual do usuário vence
-    // e o layout automático não força mais o modo padrão do dispositivo.
-    _userResized = true;
-    if (resizeStatus == AspectRatioFrameLayout.RESIZE_MODE_FIT) {`,
-    ),
-  },
-  {
-    name: "16) escala padrão: ZOOM em celular/tablet, FIT em TV",
-    required: true,
-    mustContainAfter: "JEEP_DEVICE_DEFAULT_SCALE",
-    apply: (s) => s.replace(
-      `      hideSystemUi();
-      styledPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
-      resizeStatus = AspectRatioFrameLayout.RESIZE_MODE_FILL;
-      if (resizeBtn != null) resizeBtn.setImageResource(R.drawable.ic_zoom);`,
-      `      hideSystemUi();
-      // JEEP_DEVICE_DEFAULT_SCALE: celular/tablet => RESIZE_MODE_ZOOM (preenche
-      // toda a tela física sem distorcer, com pequeno crop vertical permitido).
-      // Android TV => RESIZE_MODE_FIT. Nunca sobrescreve a escolha manual do
-      // usuário no botão resize (_userResized). Aplicado na abertura (250ms),
-      // no STATE_READY (cada troca de canal) e em onConfigurationChanged.
-      if (!_userResized) {
-        boolean tv = _isTvDevice();
-        int targetMode = tv
-          ? AspectRatioFrameLayout.RESIZE_MODE_FIT
-          : AspectRatioFrameLayout.RESIZE_MODE_ZOOM;
-        styledPlayerView.setResizeMode(targetMode);
-        resizeStatus = targetMode;
-        if (resizeBtn != null) {
-          resizeBtn.setImageResource(tv ? R.drawable.ic_expand : R.drawable.ic_fit);
-        }
-        Log.i(TAG, "JEEP_DEVICE_DEFAULT_SCALE resizeModeApplied=" + (tv ? "FIT" : "ZOOM"));
-      } else if (resizeStatus != null) {
-        styledPlayerView.setResizeMode(resizeStatus);
-      }`,
-    ),
-  },
 ]);
 
 // Patch XML do controle: remove android:fitsSystemWindows="true" do controlador
@@ -465,29 +393,6 @@ if (existsSync(fragmentXmlPath)) {
   }
 }
 
-// Patch build.gradle: AGP/Gradle 9+ removeu suporte a
-// `proguard-android.txt` (traz `-dontoptimize`, incompatível com R8).
-// Trocar por `proguard-android-optimize.txt` — mesma semântica, sem quebra.
-const buildGradlePath = join(
-  root,
-  "node_modules/capacitor-video-player/android/build.gradle",
-);
-if (existsSync(buildGradlePath)) {
-  let g = readFileSync(buildGradlePath, "utf8");
-  const before = g;
-  g = g.replace(
-    /getDefaultProguardFile\(\s*['"]proguard-android\.txt['"]\s*\)/g,
-    "getDefaultProguardFile('proguard-android-optimize.txt')",
-  );
-  if (g !== before) {
-    writeFileSync(buildGradlePath, g);
-    console.log("[patch-video-player] build.gradle: proguard trocado por proguard-android-optimize.txt");
-  } else {
-    console.log("[patch-video-player] build.gradle: já usa proguard-android-optimize.txt ou padrão não bateu");
-  }
-}
-
-
 patchFile(pluginPath, [
   {
     name: "P1) addMethodForNotification playerItemError",
@@ -515,9 +420,6 @@ assertContains(fragmentPath, [
   ["helper controles expandidos", "JEEP_FORCE_EXPANDED_CONTROLS"],
   ["refit no READY", "JEEP_READY_REFIT_CONTROLS"],
   ["landscape mantém FILL", "JEEP_KEEP_LANDSCAPE_FILL"],
-  ["flag resize manual", "JEEP_USER_RESIZED_FLAG"],
-  ["escala padrão por dispositivo (ZOOM/FIT)", "JEEP_DEVICE_DEFAULT_SCALE"],
-  ["detecção Android TV nativa", "_isTvDevice"],
 ]);
 
 assertContains(pluginPath, [

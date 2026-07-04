@@ -3,15 +3,10 @@ import Hls from "hls.js";
 import { Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
-import { getHostProfile, getWebLiveProviderOverride, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
-import { isNativeAppSync } from "@/lib/platform";
+import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative } from "@/lib/native-player";
-import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
+import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
-import { APP_BUILD_ID } from "@/lib/app-build";
-import { EXTERNAL_LIVE_RELAY_SENTINEL, externalLiveRelayBase, mintExternalLiveRelayUrl } from "@/lib/external-live-relay";
-
-
 
 
 
@@ -47,51 +42,6 @@ type MpegTsPlayer = {
   play(): Promise<void> | void;
   on(event: string, listener: (...args: unknown[]) => void): void;
 };
-
-// ===== Escala do vídeo por plataforma (fill/fit/stretch) ====================
-// "fill"    => object-cover (web) / RESIZE_MODE_ZOOM (nativo): preenche a tela
-//              inteira sem distorcer (pequeno crop). PADRÃO em phone/tablet.
-// "fit"     => object-contain / RESIZE_MODE_FIT: sem crop (pode ter faixas).
-//              Padrão em TV e web desktop.
-// "stretch" => object-fill / RESIZE_MODE_FILL: estica (só por escolha manual).
-export type ScaleMode = "fill" | "fit" | "stretch";
-
-const SCALE_LABELS: Record<ScaleMode, string> = {
-  fill: "Preencher",
-  fit: "Ajustar",
-  stretch: "Esticar",
-};
-
-function playerDeviceType(): "phone" | "tablet" | "tv" | "web" {
-  if (typeof window === "undefined") return "web";
-  try {
-    const dt = (window as unknown as { __deviceType?: string }).__deviceType
-      ?? document.documentElement.getAttribute("data-device-type");
-    if (dt === "phone" || dt === "tablet" || dt === "tv") return dt;
-    if (document.documentElement.hasAttribute("data-tv-mode")) return "tv";
-  } catch { /* ignore */ }
-  return "web";
-}
-
-function scaleModeKey(platform: string): string {
-  return `player-scale-mode:${platform}`;
-}
-
-function resolveInitialScaleMode(aspect: AspectRatio): ScaleMode {
-  const platform = playerDeviceType();
-  try {
-    const saved = localStorage.getItem(scaleModeKey(platform));
-    if (saved === "fill" || saved === "fit" || saved === "stretch") return saved;
-  } catch { /* ignore */ }
-  // Preferência legada da tela Settings (quando não é "default").
-  if (aspect === "fill") return "fill";
-  if (aspect === "stretch") return "stretch";
-  if (aspect === "16:9" || aspect === "4:3") return "fit";
-  // Sem preferência salva ou inválida: fill no celular/tablet, fit em TV/web.
-  // Nunca deixar "fit" como fallback silencioso no celular.
-  return platform === "phone" || platform === "tablet" ? "fill" : "fit";
-}
-
 
 async function lockLandscape() {
   try {
@@ -402,131 +352,6 @@ export function VideoPlayer({
     setDebugPanelOpen(true);
     setError(message);
   }, []);
-  // ---- Testes manuais do relay (spec V5 §5/§6) -----------------------------
-  // Botões "Testar upstream" e "Testar bytes do relay": só existem no painel
-  // de diagnóstico para hosts com webOverride (LIVE + Web Desktop). NUNCA
-  // executados automaticamente durante a reprodução normal.
-  const [manualDiag, setManualDiag] = useState<{ diagnoseUrl: string; relayUrl: string } | null>(null);
-  const manualStopRef = useRef<(() => void) | null>(null);
-  const manualTestBusyRef = useRef(false);
-  const stopForManualTest = useCallback(async () => {
-    // Destrói mpegts.js/hls.js, fecha o canal e aguarda 1 s — evita conflito
-    // com limite de conexões simultâneas do provedor.
-    try { manualStopRef.current?.(); } catch { /* noop */ }
-    await new Promise((r) => setTimeout(r, 1000));
-  }, []);
-  const runUpstreamDiagnose = useCallback(async () => {
-    if (!manualDiag || manualTestBusyRef.current) return;
-    manualTestBusyRef.current = true;
-    try {
-      pushDbg("TESTE upstream: player parado; aguardando 1s antes de abrir conexão única");
-      await stopForManualTest();
-      const res = await fetch(manualDiag.diagnoseUrl, { cache: "no-store" });
-      const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      if (!j) { pushDbg(`liveDiagnose http=${res.status} resposta inválida`); return; }
-      pushDbg(
-        `liveDiagnose ok=${j.ok === true} upstreamStatus=${j.upstreamStatus ?? "-"} ` +
-        `upstreamContentType=${j.upstreamContentType ?? "-"} firstByteReceived=${j.firstByteReceived === true} ` +
-        `firstByteMs=${j.firstByteMs ?? "-"} firstChunkBytes=${j.firstChunkBytes ?? 0} ` +
-        `mpegTsSyncFound=${j.mpegTsSyncFound === true} mpegTsSyncOffset=${j.mpegTsSyncOffset ?? -1} ` +
-        `bodyKind=${j.bodyKind ?? "unknown"}${j.errorCode ? ` errorCode=${j.errorCode}` : ""}`,
-      );
-    } catch (e) {
-      pushDbg(`liveDiagnose erro=${e instanceof Error ? e.name : "?"}`);
-    } finally {
-      manualTestBusyRef.current = false;
-    }
-  }, [manualDiag, pushDbg, stopForManualTest]);
-  const runRelayByteTest = useCallback(async () => {
-    if (!manualDiag || manualTestBusyRef.current) return;
-    manualTestBusyRef.current = true;
-    const controller = new AbortController();
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort("relay-test-timeout");
-    }, 8_000);
-    let responseReceived = false;
-    try {
-      pushDbg("TESTE relay: fetch direto de /api/live-stream (sem mpegts.js), aguardando primeiro chunk até 8s");
-      await stopForManualTest();
-      await new Promise((r) => setTimeout(r, 1_000));
-      const res = await fetch(manualDiag.relayUrl, { cache: "no-store", signal: controller.signal });
-      responseReceived = true;
-      const relayErrorCode = res.headers.get("x-live-relay-error");
-      const relayVersion = res.headers.get("x-live-relay-version") ?? "-";
-      const ct = res.headers.get("content-type") ?? "-";
-      const serverFirstChunkRead = res.headers.get("x-live-relay-first-chunk-read") === "true";
-      const serverFirstChunkBytes = Number(res.headers.get("x-live-relay-first-chunk-bytes") ?? 0) || 0;
-      const serverMpegTsSync = res.headers.get("x-live-relay-mpegts-sync") === "true";
-      const serverBodyMode = res.headers.get("x-live-relay-body-mode") ?? "-";
-      pushDbg(
-        `relayTest headers relayVersion=${relayVersion} serverFirstChunkRead=${serverFirstChunkRead} ` +
-        `serverFirstChunkBytes=${serverFirstChunkBytes} serverMpegTsSync=${serverMpegTsSync} serverBodyMode=${serverBodyMode}`,
-      );
-      if (!res.ok) {
-        const errClass = res.headers.get("x-live-upstream-error-class") ?? "-";
-        const respServer = res.headers.get("x-live-response-server") ?? "-";
-        const respCfRay = res.headers.get("x-live-response-cf-ray") ?? "-";
-        const respRetryAfter = res.headers.get("x-live-response-retry-after") ?? "-";
-        pushDbg(
-          `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
-          `relayErrorCode=${relayErrorCode ?? "-"} upstreamErrorClass=${errClass} ` +
-          `responseServer=${respServer} responseCfRay=${respCfRay} responseRetryAfter=${respRetryAfter} ` +
-          `relayFirstByteReceived=false`,
-        );
-        if (res.status === 504 && relayErrorCode === "NO_FIRST_BYTE") {
-          pushDbg("O servidor do canal não enviou dados ao relay dentro do prazo.");
-        } else if (res.status === 403) {
-          const msg: Record<string, string> = {
-            CONNECTION_LIMIT: "Limite de conexões atingido. Feche outros players e tente novamente.",
-            AUTH_REJECTED: "O servidor recusou a autenticação desta conta.",
-            IP_BLOCKED_OR_DATACENTER: "O servidor recusou a conexão da infraestrutura Web publicada. O aplicativo Android pode continuar funcionando normalmente.",
-            RATE_LIMITED: "O servidor limitou temporariamente as tentativas. Aguarde e tente novamente.",
-            WAF_CHALLENGE: "O provedor apresentou desafio de segurança (WAF) para esta conexão.",
-            GEO_BLOCKED: "O provedor bloqueou a região do IP de saída.",
-            ACCESS_DENIED: "O servidor recusou o acesso a este canal.",
-            UNKNOWN_403: "O servidor recusou esta conexão com HTTP 403.",
-          };
-          pushDbg(msg[errClass] ?? "O servidor recusou esta conexão com HTTP 403.");
-        }
-        try { await res.body?.cancel(); } catch { /* noop */ }
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        pushDbg(`relayTest relayHttpStatus=${res.status} relayVersion=${relayVersion} relayFirstByteReceived=false (sem body no navegador)`);
-        return;
-      }
-      const startedAt = performance.now();
-      const first = await reader.read();
-      const relayFirstByteMs = Math.round(performance.now() - startedAt);
-      const relayFirstChunkBytes = first.value?.byteLength ?? 0;
-      const relayFirstByteReceived = !first.done && relayFirstChunkBytes > 0;
-      pushDbg(
-        `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
-        `relayFirstByteReceived=${relayFirstByteReceived} ` +
-        `relayFirstByteMs=${relayFirstByteMs} relayFirstChunkBytes=${relayFirstChunkBytes}`,
-      );
-      if (!relayFirstByteReceived && serverFirstChunkRead && responseReceived) {
-        pushDbg(
-          "O ambiente atual recebeu os cabeçalhos e o backend leu o chunk, mas o corpo progressivo do stream não chegou. " +
-          "No Preview, publique o projeto e repita. Se ocorrer também no publicado, o runtime bloqueia streaming long-lived.",
-        );
-      }
-      try { await reader.cancel("manual-test-complete"); } catch { /* noop */ }
-    } catch (e) {
-      const errName = e instanceof Error ? e.name : "?";
-      const abortReason = timedOut ? "timeout-8s" : (responseReceived ? "relay-cancelled" : "before-response");
-      pushDbg(`relayTest erro=${errName} abortReason=${abortReason} timeoutReached=${timedOut} responseHeadersReceived=${responseReceived}`);
-    } finally {
-      clearTimeout(timer);
-      if (!controller.signal.aborted) controller.abort("manual-test-finished");
-      manualTestBusyRef.current = false;
-    }
-  }, [manualDiag, pushDbg, stopForManualTest]);
-
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
@@ -673,7 +498,7 @@ export function VideoPlayer({
     keepDebugOverlayRef.current = false;
     manualNativeStartRef.current = false;
     setError(null);
-    pushDbg(`ETAPA 1 host=${hostOf(src) ?? "?"} kind=${kind ?? "auto"}`);
+    pushDbg(`ETAPA 1 src=${maskIptvUrl(src)}`);
     pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
     (async () => {
       const native = await isNativeApp();
@@ -748,53 +573,16 @@ export function VideoPlayer({
     };
   }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic]);
 
-  // ===== Modo de escala (Preencher/Ajustar/Esticar) =========================
-  // Padrão por plataforma: phone/tablet => "fill" (object-cover, sem faixas
-  // laterais criadas pelo player); tv/web => "fit" (object-contain).
-  // Preferência persistida por plataforma: player-scale-mode:<plataforma>.
-  const [scaleMode, setScaleMode] = useState<ScaleMode>(() =>
-    resolveInitialScaleMode(store.getAppSettings().aspectRatio),
-  );
-  const cycleScaleMode = useCallback(() => {
-    setScaleMode((prev) => {
-      const next: ScaleMode = prev === "fill" ? "fit" : prev === "fit" ? "stretch" : "fill";
-      try { localStorage.setItem(scaleModeKey(playerDeviceType()), next); } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
-
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
-    switch (scaleMode) {
-      case "fill":    return `${base} object-cover`;
-      case "stretch": return `${base} object-fill`;
-      default:        return `${base} object-contain`;
+    switch (settings.aspectRatio) {
+      case "16:9":   return `${base} object-contain`;
+      case "4:3":    return `${base} object-contain`;
+      case "fill":   return `${base} object-cover`;
+      case "stretch":return `${base} object-fill`;
+      default:       return `${base} object-contain`;
     }
-  }, [scaleMode]);
-
-  // Diagnóstico sanitizado do modo de escala. Nunca loga URL/usuário/senha.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const dt = playerDeviceType();
-    const el = videoRef.current;
-    const objectFit = scaleMode === "fill" ? "cover" : scaleMode === "stretch" ? "fill" : "contain";
-    // eslint-disable-next-line no-console
-    console.info("[player-scale]", {
-      deviceType: dt,
-      scaleModeRequested: scaleMode,
-      scaleModeApplied: scaleMode,
-      playerEngine: playerMode,
-      // Nativo: o padrão é decidido no ExoPlayer (patch JEEP_DEVICE_DEFAULT_SCALE)
-      // — ZOOM em phone/tablet, FIT em TV.
-      resizeModeApplied: playerMode === "native" ? (dt === "tv" ? "FIT" : "ZOOM") : null,
-      objectFitApplied: playerMode === "web" ? objectFit : null,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      videoContainerWidth: el?.parentElement?.clientWidth ?? null,
-      videoContainerHeight: el?.parentElement?.clientHeight ?? null,
-    });
-  }, [scaleMode, playerMode]);
-
+  }, [settings.aspectRatio]);
 
   useEffect(() => {
     // No APK, o ExoPlayer nativo cuida do playback — pulamos MSE.
@@ -833,41 +621,10 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
-    // Web-only per-provider override (ex.: suportejetflix.site). Só se aplica
-    // a LIVE em navegador desktop — APK/TV/celular passam batido. Detecção:
-    // não é nativo (Capacitor) E não é phone/tablet/tv injetados pelo shell.
-    const dt = playerDeviceType();
-    const isWebDesktop = !isNativeAppSync() && dt !== "phone" && dt !== "tablet" && dt !== "tv";
-    const webOverride = isLive && isWebDesktop
-      ? getWebLiveProviderOverride(hostOf(workingSrc))
-      : null;
-    // Sanitização de logs (spec V5 §12): para hosts com override, o painel de
-    // diagnóstico nunca mostra URL (nem mascarada) — apenas host, streamId e
-    // relayPath. Outros provedores mantêm maskIptvUrl (comportamento antigo).
-    const streamIdOf = (u: string): string => {
-      try {
-        const p = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
-        const m = p.match(/(\d+)(?:\.[a-z0-9]+)?$/i);
-        return m?.[1] ?? "-";
-      } catch { return "-"; }
-    };
-    const logUrl = (u: string): string => {
-      if (!webOverride) return maskIptvUrl(u);
-      if (u.startsWith("external-relay:")) return "relay=external";
-      try {
-        const parsed = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://x");
-        if (parsed.pathname === "/api/live-stream" || parsed.pathname === "/api/stream" || parsed.pathname === "/api/live-diagnose") {
-          return `relayPath=${parsed.pathname}`;
-        }
-        return `host=${parsed.host} streamId=${streamIdOf(u)}`;
-      } catch { return "(sanitizado)"; }
-    };
-    const shouldBlockWebLive =
-      !!liveHostProfile.webIncompatibleLive && !webOverride?.ignoreWebIncompatibleFlag;
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && shouldBlockWebLive) {
+    if (isLive && liveHostProfile.webIncompatibleLive) {
       pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
@@ -875,7 +632,6 @@ export function VideoPlayer({
       );
       return;
     }
-
 
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
@@ -886,19 +642,11 @@ export function VideoPlayer({
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
     // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
-    // Web-Live override: para hosts com override, ignorar flags TS-only
-    // (persistidas ou vindas do preset). Sem isso, o preset seguia forçando
-    // MPEG-TS no Web Desktop e a tela ficava preta.
-    const effectiveDisableHlsConversion =
-      webOverride?.ignoreDisableHlsConversion ? false : !!liveHostProfile.disableHlsConversion;
-    // `streamFormat === "ts"` do compat também é ignorado quando o override
-    // pede HLS-first — spec item 3.
     const skipHls =
-      (compat.streamFormat === "ts" && !webOverride) ||
+      compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      (isLive && effectiveDisableHlsConversion && !sourceIsHls) ||
+      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
-
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     // VOD (filmes/séries) deve ser conservador: usa exatamente a URL resolvida
@@ -947,7 +695,7 @@ export function VideoPlayer({
       return [...candidates].sort((a, b) => rank(a) - rank(b));
     };
 
-    let playbackCandidates = isVod
+    const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = mayUseHttpsVariant ? httpsVariant(url) : null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
@@ -973,106 +721,10 @@ export function VideoPlayer({
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
-    // Web-Live override exclusivo (ex.: suportejetflix.site): ignora TODAS as
-    // preferências antigas conflitantes (streamFormat/transport/forceHttps/
-    // disableHlsConversion/preferTs/bypassProxyForLive/disableProxy/
-    // webIncompatibleLive) SOMENTE para LIVE nesse host no Web Desktop, e
-    // monta uma fila fixa: HLS-proxy → HLS-direto → TS-proxy → TS-direto.
-    // APK/TV/celular e VOD/séries seguem intactos (webOverride é null).
-    let overrideCandidateTypes: string[] = [];
-    // Relay dedicado para Live MPEG-TS (spec V4). Usado APENAS para o
-    // candidato ts-proxy do override — HLS e VOD continuam pelo /api/stream.
-    const liveRelayUrl = (rawUrl: string): string => {
-      const uaPart = forcedUA ? `&ua=${encodeURIComponent(forcedUA)}` : "";
-      const path = `/api/live-stream?u=${encodeURIComponent(rawUrl)}${uaPart}`;
-      try {
-        return typeof window !== "undefined"
-          ? new URL(path, window.location.origin).toString()
-          : path;
-      } catch {
-        return path;
-      }
-    };
-    if (webOverride) {
-      const isHls = isHlsUrl(workingSrc);
-      const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
-      const hlsUrl = webOverride.skipSyntheticHls
-        ? (isHls ? workingSrc : null)
-        : (isHls ? workingSrc : toHlsCandidate(workingSrc, "live"));
-      const preventDirect = !!webOverride.preventDirectCandidates;
-      // Relay externo dedicado (spec V5 §10): entra na frente da fila SOMENTE
-      // quando VITE_LIVE_RELAY_BASE_URL está configurada. Inerte por padrão.
-      // APK/TV nunca chegam aqui (webOverride é null fora do Web Desktop).
-      const extEntries: Array<[string, string | null]> = externalLiveRelayBase()
-        ? [["ts-external-relay", EXTERNAL_LIVE_RELAY_SENTINEL]]
-        : [];
-      // Estratégia ts-proxy-first para .ts original: fila = [ts-proxy].
-      // Se URL original já for .m3u8 (raro para este provedor), usar HLS proxy.
-      const entries: Array<[string, string | null]> =
-        webOverride.strategy === "ts-proxy-first"
-          ? (isHls
-              ? [
-                  ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
-                  ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
-                  ...extEntries,
-                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
-                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
-                ]
-              : [
-                  ...extEntries,
-                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
-                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
-                ])
-          : [
-              ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
-              ["hls-direct", hlsUrl],
-              ...extEntries,
-              ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
-              ["ts-direct", tsUrl],
-            ];
-      const seen = new Set<string>();
-      const ordered: string[] = [];
-      const types: string[] = [];
-      for (const [type, url] of entries) {
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        ordered.push(url);
-        types.push(type);
-      }
-      playbackCandidates = ordered;
-      overrideCandidateTypes = types;
-      pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v5 hostMatched=true environment=web-desktop ` +
-        `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
-        `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
-        `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
-        `relaySameOrigin=true relayPath="/api/live-stream" externalRelayConfigured=${!!externalLiveRelayBase()} ` +
-        `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
-      );
-      // Ambiente de execução (spec V5 §1): preview vs site publicado.
-      try {
-        const loc = window.location;
-        const execHost = loc.hostname;
-        const isLovablePreview = /\.lovableproject\.com$/i.test(execHost) || /^id-preview--/i.test(execHost);
-        const isPublishedDeployment = !isLovablePreview && !/^(localhost|127\.0\.0\.1)$/i.test(execHost);
-        pushDbg(
-          `ENV executionOrigin=${loc.origin} executionHostname=${execHost} ` +
-          `isLovablePreview=${isLovablePreview} isPublishedDeployment=${isPublishedDeployment} appBuildId=${APP_BUILD_ID}`,
-        );
-        if (isLovablePreview) {
-          pushDbg(
-            "AVISO: Este teste está sendo executado no ambiente de Visualização. O comportamento de " +
-            "funções e streaming deve ser confirmado também no site publicado.",
-          );
-        }
-      } catch { /* noop */ }
-    }
-
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
-    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? logUrl(hlsCandidate) : "-"}`);
-    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(logUrl).join(" | ")}`);
-
+    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
+    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 
 
     let hls: Hls | null = null;
@@ -1139,30 +791,13 @@ export function VideoPlayer({
       return 0;
     };
 
-    const playMpegTs = async (url: string, candidateType: string = "ts-proxy") => {
+    const playMpegTs = async (url: string) => {
       if (!isLive) return false;
       try {
-        // Relay externo dedicado (spec V5 §10/§11): candidato sentinela só
-        // existe quando VITE_LIVE_RELAY_BASE_URL está configurada. O token
-        // curto é assinado no backend — credenciais nunca na query pública.
-        let effectiveUrl = url;
-        if (url === EXTERNAL_LIVE_RELAY_SENTINEL) {
-          const minted = await mintExternalLiveRelayUrl(workingSrc);
-          if (!minted || cancelled) {
-            pushDbg("EXT-RELAY token indisponível/não configurado — avançando candidato");
-            if (!cancelled) advanceCandidate("ext-relay-unavailable");
-            return true;
-          }
-          effectiveUrl = minted;
-          pushDbg("EXT-RELAY candidato ativo relay=external kind=live");
-        }
-        // Probe pré-reprodução: pulado quando o override pede (evita gastar
-        // uma conexão simultânea e não encurtar o watchdog do primeiro quadro).
-        const skipProbe = !!webOverride?.disablePrePlaybackProbe;
-        const probeUrl = skipProbe ? null : probeUrlForCandidate(effectiveUrl);
+        const probeUrl = probeUrlForCandidate(url);
         if (probeUrl) {
           try {
-            pushDbg(`PROBE url=${logUrl(probeUrl)}`);
+            pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
             const probeRes = await fetch(probeUrl, { cache: "no-store" });
             const probe = (await probeRes.json()) as StreamProbeResult;
             pushDbg(`PROBE status=${probe.status} ok=${probe.ok} ct=${probe.contentType || "-"} host=${probe.finalUrlHost || "-"}${probe.reason ? ` reason=${probe.reason}` : ""}`);
@@ -1177,12 +812,9 @@ export function VideoPlayer({
             const msg = err instanceof Error ? err.message : String(err);
             pushDbg(`PROBE erro=${msg.slice(0, 160)}`);
           }
-        } else if (skipProbe) {
-          pushDbg(`PROBE skipped (override) candidate=${candidateType}`);
         }
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
-        pushDbg(`mpegts loaded candidate=${candidateType}`);
         destroyTsPlayer();
         video.pause();
         video.removeAttribute("src");
@@ -1192,10 +824,10 @@ export function VideoPlayer({
         const absUrl = (() => {
           try {
             return typeof window !== "undefined"
-              ? new URL(effectiveUrl, window.location.origin).toString()
-              : effectiveUrl;
+              ? new URL(url, window.location.origin).toString()
+              : url;
           } catch {
-            return effectiveUrl;
+            return url;
           }
         })();
         tsPlayer = mpegts.createPlayer(
@@ -1206,89 +838,28 @@ export function VideoPlayer({
             // a URL é proxiada e Range é negociado de forma imprevisível.
             enableWorker: false,
             enableStashBuffer: false,
-            lazyLoad: false,
-            autoCleanupSourceBuffer: true,
-            autoCleanupMaxBackwardDuration: 30,
-            autoCleanupMinBackwardDuration: 15,
             liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 10,
+            liveBufferLatencyMaxLatency: 6,
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown, errInfo: unknown) => {
-          // spec V5 §8: quando o relay responde 4xx/5xx o mpegts.js entrega o
-          // status HTTP em errInfo.code — mostramos IMEDIATAMENTE, sem esperar
-          // o watchdog de 20 s.
-          const info = (errInfo || {}) as { code?: number; msg?: string };
-          const httpStatus = typeof info.code === "number" && info.code >= 100 ? info.code : null;
-          pushDbg(
-            `mpegts EVT=ERROR errorType=${String(errType)} errorDetail=${String(errDetail)}` +
-            (httpStatus != null ? ` relayHttpStatus=${httpStatus}` : ""),
-          );
-          if (cancelled) return;
-          if (httpStatus === 504) {
-            lastLiveError = "O servidor do canal não enviou dados ao relay dentro do prazo.";
-            pushDbg("relayErrorCode=NO_FIRST_BYTE relayHttpStatus=504 — upstream não entregou o primeiro byte em 8s");
-          } else if (httpStatus != null && httpStatus >= 400) {
-            lastLiveError = `O relay respondeu HTTP ${httpStatus} para este canal.`;
-            pushDbg(`relayHttpStatus=${httpStatus} relayErrorCode=HTTP_${httpStatus}`);
-          }
-          if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
-          else tryNextVod();
+        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
+          pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
+          if (!cancelled) tryNextVod();
         });
-        // Instrumentação MPEG-TS sanitizada (spec V4 §9). Nunca loga URL/credenciais.
-        try {
-          type MediaInfoLike = {
-            videoCodec?: string; audioCodec?: string;
-            width?: number; height?: number; mimeType?: string;
-          };
-          type StatsLike = {
-            speed?: number; loaderType?: string; currentSegmentIndex?: number;
-            decodedFrames?: number; droppedFrames?: number;
-          };
-          tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
-            const mi = (info || {}) as MediaInfoLike;
-            pushDbg(
-              `mpegts EVT=MEDIA_INFO mediaInfoReceived=true ` +
-              `videoCodec=${mi.videoCodec ?? "-"} audioCodec=${mi.audioCodec ?? "-"} ` +
-              `width=${mi.width ?? 0} height=${mi.height ?? 0} mime=${mi.mimeType ?? "-"}`,
-            );
-          });
-          tsPlayer.on(mpegts.Events.STATISTICS_INFO, (stats: unknown) => {
-            const s = (stats || {}) as StatsLike;
-            if ((s.decodedFrames ?? 0) > 0 || (s.speed ?? 0) > 0) {
-              pushDbg(
-                `mpegts EVT=STATISTICS_INFO speed=${s.speed ?? 0} ` +
-                `decodedFrames=${s.decodedFrames ?? 0} droppedFrames=${s.droppedFrames ?? 0}`,
-              );
-            }
-          });
-          tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
-            pushDbg(`mpegts EVT=LOADING_COMPLETE candidate=${candidateType}`);
-          });
-        } catch { /* eventos podem não estar todos disponíveis */ }
-
-
         tsPlayer.attachMediaElement(video);
-        pushDbg(`mpegts attached candidate=${candidateType}`);
         tsPlayer.load();
-        pushDbg(`mpegts loaded/starting candidate=${candidateType}`);
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
           playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
-        // Watchdog do primeiro quadro só arma AGORA — após attach/load/play.
-        // Antes de load(), qualquer atraso de import do mpegts contava contra
-        // o timeout e disparava fallback indevido.
-        armFirstFrameWatchdog(candidateType);
         return true;
       } catch {
         return false;
       }
     };
-
 
     const playDirect = () => {
       if (hls) {
@@ -1314,69 +885,48 @@ export function VideoPlayer({
       }
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       triedUrls.add(normUrl(url));
-      // Reconhece tanto /api/stream quanto o relay dedicado /api/live-stream
-      // como candidatos "via proxy" — o URL do relay pode estar absoluto
-      // (mesmo origin), então testamos o pathname em vez do prefixo.
-      const isProxied = (() => {
-        // Sentinela do relay externo conta como "via proxy" — nunca deve
-        // disparar aprendizado de bypass nem aviso de mixed-content.
-        if (url.startsWith("external-relay:")) return true;
-        try {
-          const p = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
-          return p === "/api/stream" || p === "/api/live-stream";
-        } catch {
-          return /\/api\/(stream|live-stream)\?/i.test(url);
-        }
-      })();
+      const isProxied = /^\/api\/stream\?/i.test(url);
       // ETAPA 8.6: LIVE caiu no candidato direto (fora do proxy) — útil pra
       // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
-      // Skip para hosts com override (preventHostWideLearning): uma falha
-      // isolada não deve virar decisão global de host.
       if (isLive && !isProxied) {
         pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
+        // Aprendizado: chegamos a um candidato direto LIVE, logo todos os
+        // proxiados anteriores falharam (404/5xx). Memoriza pra próxima sessão
+        // já priorizar direto pra esse host e não desperdiçar tentativas.
         try {
           const h = hostOf(url);
-          if (h && !getHostProfile(h).bypassProxyForLive && !webOverride?.preventHostWideLearning) {
+          if (h && !getHostProfile(h).bypassProxyForLive) {
             updateHostProfile(h, { bypassProxyForLive: true });
             pushDbg(`ETAPA 8.6 host ${h} marcado bypassProxyForLive=true`);
           }
         } catch { /* noop */ }
+        // Mixed content: página https + stream http é silenciosamente bloqueada
+        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
+        // o tryNextVod normalmente.
         try {
           if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
             pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
           }
         } catch { /* noop */ }
       }
-      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${logUrl(url)}`);
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
-      // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
-      const isProxyCandidate = isProxied;
-      const candidateType = url.startsWith("external-relay:")
-        ? "ts-external-relay"
-        : /\.m3u8(\?|&|$)/i.test(decodedUrl)
-          ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
-          : (isProxyCandidate ? "ts-proxy" : "ts-direct");
 
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
-        armFirstFrameWatchdog(candidateType);
         attachHls(url);
         return;
       }
-
       // LIVE MPEG-TS de M3U pode não ter extensão visível (ex.: /user/pass/id)
       // ou estar dentro do /api/stream?u=... sem .ts no path. Nesses casos o
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
       // precisa passar pelo mpegts.js. VOD continua intocado.
       if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
-        // NÃO armar watchdog aqui: playMpegTs arma internamente APÓS
-        // attach/load/play, garantindo os 20s reais para o primeiro quadro.
-        void playMpegTs(url, candidateType).then((handled) => {
+        void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
             video.currentTime = 0;
             video.src = url;
             video.load();
-            armFirstFrameWatchdog(candidateType);
             video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
           }
         });
@@ -1387,87 +937,18 @@ export function VideoPlayer({
       video.src = url;
       video.load();
       armVodWatchdog();
-      armFirstFrameWatchdog(candidateType);
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
-    };
-
-
-    // ---- First-frame watchdog (webOverride only) --------------------------
-    // Impede tela preta indefinida: se em 10s não recebermos o primeiro frame
-    // (HAVE_CURRENT_DATA + videoWidth>0), destrói a engine atual e avança.
-    // Trava `advancingCandidate` garante que erro do mpegts + timeout não
-    // avancem duas vezes. Só ativo quando webOverride está presente para não
-    // regredir o comportamento em outros provedores/plataformas.
-    let firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
-    let advancingCandidate = false;
-    const clearFirstFrameWatchdog = () => {
-      if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
-    };
-    const advanceCandidate = (reason: string) => {
-      if (advancingCandidate || cancelled) return;
-      advancingCandidate = true;
-      clearFirstFrameWatchdog();
-      if (hls) { try { hls.destroy(); } catch { /* noop */ } hls = null; }
-      destroyTsPlayer();
-      vodIdx += 1;
-      pushDbg(`ADV candidate reason=${reason} nextIdx=${vodIdx}`);
-      queueMicrotask(() => {
-        advancingCandidate = false;
-        if (!cancelled) playDirect();
-      });
-    };
-    const armFirstFrameWatchdog = (candidateType: string) => {
-      if (!webOverride) return;
-      clearFirstFrameWatchdog();
-      const timeoutMs = webOverride.firstFrameTimeoutMs ?? 10_000;
-      pushDbg(`watchdog armed candidate=${candidateType} timeoutMs=${timeoutMs}`);
-      // requestVideoFrameCallback: prova canônica de que o decoder entregou
-      // um quadro renderizável. Cancela o watchdog antes do timeout.
-      try {
-        const vAny = video as HTMLVideoElement & {
-          requestVideoFrameCallback?: (cb: (now: number, meta: unknown) => void) => number;
-        };
-        if (typeof vAny.requestVideoFrameCallback === "function") {
-          vAny.requestVideoFrameCallback(() => {
-            if (cancelled) return;
-            pushDbg(
-              `first-frame candidate=${candidateType} via=rVFC ` +
-              `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
-            );
-            clearFirstFrameWatchdog();
-          });
-        }
-      } catch { /* noop */ }
-      firstFrameTimer = setTimeout(() => {
-        firstFrameTimer = null;
-        if (cancelled) return;
-        const hasFrame =
-          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-          video.videoWidth > 0 && video.videoHeight > 0;
-        if (hasFrame) return;
-        pushDbg(
-          `first-frame-timeout candidate=${candidateType} readyState=${video.readyState} ` +
-          `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
-        );
-        advanceCandidate(`first-frame-timeout:${candidateType}`);
-      }, timeoutMs);
     };
 
     const onVideoError = () => {
       const mediaErr = video.error;
-      pushDbg(
-        `<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} ` +
-        `netState=${video.networkState} readyState=${video.readyState} ` +
-        `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
-      );
+      pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
       if (cancelled || hls) return;
-      if (webOverride) { advanceCandidate(`video-error:${mediaErr?.code ?? "?"}`); return; }
       tryNextVod();
     };
-    const onVideoReady = () => { clearWatchdog(); clearFirstFrameWatchdog(); };
+    const onVideoReady = () => clearWatchdog();
     const onPlaying = () => {
       clearWatchdog();
-      clearFirstFrameWatchdog();
       setCanManualPlay(false);
     };
     video.addEventListener("error", onVideoError);
@@ -1475,11 +956,10 @@ export function VideoPlayer({
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
 
-
     const attachHls = (url: string) => {
       currentHlsUrl = url;
       triedUrls.add(normUrl(url));
-      pushDbg(`attachHls url=${logUrl(url)}`);
+      pushDbg(`attachHls url=${maskIptvUrl(url)}`);
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -1688,9 +1168,7 @@ export function VideoPlayer({
                     // Padrão típico de host incompatível com Web: proxy 404/424
                     // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
                     // Marca o host para futuras sessões pularem o loop de tentativas.
-                    // Exceção: hosts com webOverride (ex.: suportejetflix.site) —
-                    // uma falha isolada de canal NÃO condena o provedor inteiro.
-                    if (isLive && triedDirect && !webOverride) {
+                    if (isLive && triedDirect) {
                       const h = hostOf(workingSrc);
                       if (h) {
                         rememberWebIncompatibleLive(h);
@@ -1705,7 +1183,6 @@ export function VideoPlayer({
                     }
                     return;
                   }
-
 
                   triedDirect = true;
                   playDirect();
@@ -1768,29 +1245,6 @@ export function VideoPlayer({
       }
     };
 
-    // ---- Testes manuais do Modo Diagnóstico (spec V5 §5/§6) ----------------
-    // Disponíveis SOMENTE para hosts com webOverride em LIVE Web Desktop.
-    // Nunca executados automaticamente na reprodução normal.
-    if (webOverride) {
-      manualStopRef.current = () => {
-        clearWatchdog();
-        clearFirstFrameWatchdog();
-        if (hls) { try { hls.destroy(); } catch { /* noop */ } hls = null; }
-        destroyTsPlayer();
-        try { video.pause(); video.removeAttribute("src"); video.load(); } catch { /* noop */ }
-      };
-      const diagIsHls = isHlsUrl(workingSrc);
-      const diagTsUrl = diagIsHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
-      const uaPart = forcedUA ? `&ua=${encodeURIComponent(forcedUA)}` : "";
-      setManualDiag({
-        diagnoseUrl: `/api/live-diagnose?u=${encodeURIComponent(diagTsUrl)}${uaPart}`,
-        relayUrl: liveRelayUrl(diagTsUrl),
-      });
-    } else {
-      manualStopRef.current = null;
-      setManualDiag(null);
-    }
-
     void isNativeApp().then((native) => {
       if (cancelled) return;
       nativeDirect = native;
@@ -1815,11 +1269,8 @@ export function VideoPlayer({
 
     return () => {
       cancelled = true;
-      manualStopRef.current = null;
       clearWatchdog();
-      clearFirstFrameWatchdog();
       detachStallListeners?.();
-
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
@@ -2102,24 +1553,6 @@ export function VideoPlayer({
                   Abrir ExoPlayer
                 </button>
               )}
-              {manualDiag && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { void runUpstreamDiagnose(); }}
-                    className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
-                  >
-                    Testar upstream
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { void runRelayByteTest(); }}
-                    className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
-                  >
-                    Testar bytes do relay
-                  </button>
-                </>
-              )}
               <button
                 type="button"
                 onClick={() => {
@@ -2156,8 +1589,6 @@ export function VideoPlayer({
           pipActive={pipActive}
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
-          scaleMode={scaleMode}
-          onCycleScaleMode={cycleScaleMode}
         />
       )}
     </div>
@@ -2178,8 +1609,6 @@ function CustomControls({
   pipActive,
   onTogglePip,
   onInteract,
-  scaleMode,
-  onCycleScaleMode,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   visible: boolean;
@@ -2187,8 +1616,6 @@ function CustomControls({
   pipActive: boolean;
   onTogglePip: () => void;
   onInteract: () => void;
-  scaleMode: ScaleMode;
-  onCycleScaleMode: () => void;
 }) {
   const [paused, setPaused] = useState(true);
   const [current, setCurrent] = useState(0);
@@ -2232,16 +1659,9 @@ function CustomControls({
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/50 to-transparent transition-opacity duration-200 ${
+      className={`absolute inset-x-0 bottom-0 z-20 px-3 py-2 sm:px-4 sm:py-3 bg-gradient-to-t from-black/80 via-black/50 to-transparent transition-opacity duration-200 ${
         visible ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
-      style={{
-        // Safe area SOMENTE nos controles — o vídeo vai até a borda física.
-        paddingLeft: "max(0.75rem, env(safe-area-inset-left, 0px))",
-        paddingRight: "max(0.75rem, env(safe-area-inset-right, 0px))",
-        paddingTop: "0.5rem",
-        paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))",
-      }}
       onClick={(e) => { e.stopPropagation(); onInteract(); }}
       onMouseMove={onInteract}
     >
@@ -2298,16 +1718,6 @@ function CustomControls({
             </span>
           </>
         )}
-
-        <button
-          type="button"
-          onClick={onCycleScaleMode}
-          aria-label={`Modo de escala: ${SCALE_LABELS[scaleMode]}`}
-          title={`Escala: ${SCALE_LABELS[scaleMode]} — toque para alternar`}
-          className="h-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur px-3 text-xs font-semibold text-white"
-        >
-          {SCALE_LABELS[scaleMode]}
-        </button>
 
         {pipSupported && (
           <button

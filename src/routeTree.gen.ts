@@ -21,10 +21,6 @@ import { Route as GuideRouteImport } from './routes/guide'
 import { Route as FavoritesRouteImport } from './routes/favorites'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiStreamRouteImport } from './routes/api/stream'
-import { Route as ApiLiveTokenRouteImport } from './routes/api/live-token'
-import { Route as ApiLiveStreamRouteImport } from './routes/api/live-stream'
-import { Route as ApiLiveRelayTokenRouteImport } from './routes/api/live-relay-token'
-import { Route as ApiLiveDiagnoseRouteImport } from './routes/api/live-diagnose'
 import { Route as PlayerTypeIdRouteImport } from './routes/player.$type.$id'
 
 const SettingsRoute = SettingsRouteImport.update({
@@ -87,26 +83,6 @@ const ApiStreamRoute = ApiStreamRouteImport.update({
   path: '/api/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiLiveTokenRoute = ApiLiveTokenRouteImport.update({
-  id: '/api/live-token',
-  path: '/api/live-token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiLiveStreamRoute = ApiLiveStreamRouteImport.update({
-  id: '/api/live-stream',
-  path: '/api/live-stream',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiLiveRelayTokenRoute = ApiLiveRelayTokenRouteImport.update({
-  id: '/api/live-relay-token',
-  path: '/api/live-relay-token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiLiveDiagnoseRoute = ApiLiveDiagnoseRouteImport.update({
-  id: '/api/live-diagnose',
-  path: '/api/live-diagnose',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PlayerTypeIdRoute = PlayerTypeIdRouteImport.update({
   id: '/player/$type/$id',
   path: '/player/$type/$id',
@@ -125,10 +101,6 @@ export interface FileRoutesByFullPath {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
-  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
-  '/api/live-stream': typeof ApiLiveStreamRoute
-  '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
@@ -144,10 +116,6 @@ export interface FileRoutesByTo {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
-  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
-  '/api/live-stream': typeof ApiLiveStreamRoute
-  '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
@@ -164,10 +132,6 @@ export interface FileRoutesById {
   '/playlist': typeof PlaylistRoute
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
-  '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
-  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
-  '/api/live-stream': typeof ApiLiveStreamRoute
-  '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
   '/player/$type/$id': typeof PlayerTypeIdRoute
 }
@@ -185,10 +149,6 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/live-diagnose'
-    | '/api/live-relay-token'
-    | '/api/live-stream'
-    | '/api/live-token'
     | '/api/stream'
     | '/player/$type/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -204,10 +164,6 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/live-diagnose'
-    | '/api/live-relay-token'
-    | '/api/live-stream'
-    | '/api/live-token'
     | '/api/stream'
     | '/player/$type/$id'
   id:
@@ -223,10 +179,6 @@ export interface FileRouteTypes {
     | '/playlist'
     | '/series'
     | '/settings'
-    | '/api/live-diagnose'
-    | '/api/live-relay-token'
-    | '/api/live-stream'
-    | '/api/live-token'
     | '/api/stream'
     | '/player/$type/$id'
   fileRoutesById: FileRoutesById
@@ -243,10 +195,6 @@ export interface RootRouteChildren {
   PlaylistRoute: typeof PlaylistRoute
   SeriesRoute: typeof SeriesRoute
   SettingsRoute: typeof SettingsRoute
-  ApiLiveDiagnoseRoute: typeof ApiLiveDiagnoseRoute
-  ApiLiveRelayTokenRoute: typeof ApiLiveRelayTokenRoute
-  ApiLiveStreamRoute: typeof ApiLiveStreamRoute
-  ApiLiveTokenRoute: typeof ApiLiveTokenRoute
   ApiStreamRoute: typeof ApiStreamRoute
   PlayerTypeIdRoute: typeof PlayerTypeIdRoute
 }
@@ -337,34 +285,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/live-token': {
-      id: '/api/live-token'
-      path: '/api/live-token'
-      fullPath: '/api/live-token'
-      preLoaderRoute: typeof ApiLiveTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/live-stream': {
-      id: '/api/live-stream'
-      path: '/api/live-stream'
-      fullPath: '/api/live-stream'
-      preLoaderRoute: typeof ApiLiveStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/live-relay-token': {
-      id: '/api/live-relay-token'
-      path: '/api/live-relay-token'
-      fullPath: '/api/live-relay-token'
-      preLoaderRoute: typeof ApiLiveRelayTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/live-diagnose': {
-      id: '/api/live-diagnose'
-      path: '/api/live-diagnose'
-      fullPath: '/api/live-diagnose'
-      preLoaderRoute: typeof ApiLiveDiagnoseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/player/$type/$id': {
       id: '/player/$type/$id'
       path: '/player/$type/$id'
@@ -387,13 +307,19 @@ const rootRouteChildren: RootRouteChildren = {
   PlaylistRoute: PlaylistRoute,
   SeriesRoute: SeriesRoute,
   SettingsRoute: SettingsRoute,
-  ApiLiveDiagnoseRoute: ApiLiveDiagnoseRoute,
-  ApiLiveRelayTokenRoute: ApiLiveRelayTokenRoute,
-  ApiLiveStreamRoute: ApiLiveStreamRoute,
-  ApiLiveTokenRoute: ApiLiveTokenRoute,
   ApiStreamRoute: ApiStreamRoute,
   PlayerTypeIdRoute: PlayerTypeIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

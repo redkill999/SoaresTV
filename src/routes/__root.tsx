@@ -144,14 +144,11 @@ const TV_MODE_SCRIPT = `(function(){
       var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
       // Smart TVs: Tizen (Samsung), WebOS (LG), AndroidTV, GoogleTV, FireTV (AFT*), Hisense/VIDAA, NetCast, Roku, BRAVIA
       var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|androidtv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox|tcl|mibox|mitv|chromecast|aosp on iat|linux; ?android[^)]*; ?(?:tv|atv|mibox|tcl)/.test(ua);
-      // FIX (celular vs TV): a única fonte confiável é window.__deviceType
-      // injetado pelo MainActivity via UiModeManager (UI_MODE_TYPE_TELEVISION).
-      // Sem essa flag, presumimos NÃO-TV a menos que o UA seja Smart TV real.
-      // isNative sozinho não distingue APK celular de APK Android TV, e
-      // tratar "todo APK como TV" causou o layout 1280×720 comprimido em celular.
-      var injectedType = window.__deviceType;
+      // Dentro do APK (Capacitor) sempre tratamos como TV pra replicar o layout do XCIPTV.
       var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-      var isTV = injectedType === "tv" || (injectedType == null && isSmartTV);
+      // TV mode: somente app nativo (APK) ou Smart TV real via UA.
+      // Navegador desktop fica em layout responsivo normal (igual ao do celular).
+      var isTV = isNative || isSmartTV;
       var html = document.documentElement;
       if (isSmartTV) html.setAttribute && document.documentElement.setAttribute('data-smart-tv','');
 
@@ -258,24 +255,6 @@ function RootComponent() {
     }
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
-    // Marca build id no <html> pra confirmar via inspect qual versão está rodando.
-    void import("@/lib/app-build").then(({ APP_BUILD_ID }) => {
-      try {
-        document.documentElement.dataset.appBuild = APP_BUILD_ID;
-        // No APK: compara com /app-version.json do site publicado.
-        if (w.Capacitor?.isNativePlatform?.()) {
-          fetch("/app-version.json", { cache: "no-store" })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((json) => {
-              const remote = json?.buildId;
-              if (remote && remote !== APP_BUILD_ID) {
-                console.warn("[app-build] versão publicada difere", { local: APP_BUILD_ID, remote });
-              }
-            })
-            .catch(() => {});
-        }
-      } catch {}
-    });
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());

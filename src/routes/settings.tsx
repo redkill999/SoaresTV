@@ -24,7 +24,6 @@ import {
 import { SUPPORTED_LANGS, getStoredLang, setLang, type LangCode } from "@/lib/i18n";
 import homeBg from "@/assets/home-bg.png.asset.json";
 import { maskIptvUrl } from "@/lib/iptv-url";
-import { APP_BUILD_ID } from "@/lib/app-build";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
@@ -689,7 +688,6 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         <p className="mb-4 text-sm text-white/60">SoaresTV — IPTV Player</p>
         <div className="space-y-3 text-sm text-white">
           <Row label="Versão" value="1.0.0" />
-          <Row label="Build" value={APP_BUILD_ID} mono />
           <Row label="Plataforma" value={platform || "—"} />
           <Row label="Idioma do sistema" value={lang || "—"} />
           <Row label="User Agent" value={ua || "—"} mono />
