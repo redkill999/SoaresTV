@@ -98,4 +98,34 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     expect(getHostProfile("provedor-qualquer.tv").disableHlsConversion).toBe(true);
     expect(getHostProfile("provedor-qualquer.tv").preferTs).toBe(true);
   });
+
+  it("migração v2 roda uma vez e grava chave suportejetflixWebLiveV2", async () => {
+    localStorage.setItem(
+      "iptv.hostProfiles.v1",
+      JSON.stringify({
+        "suportejetflix.site": {
+          disableHlsConversion: true, preferTs: true,
+          webIncompatibleLive: true, bypassProxyForLive: true, disableProxy: true,
+        },
+      }),
+    );
+    await loadModule();
+    expect(localStorage.getItem("iptv.migration.suportejetflixWebLiveV2")).toBe("1");
+    // Segunda execução não deve reverter estado nem falhar.
+    const mod2 = await loadModule();
+    const p = mod2.getHostProfile("suportejetflix.site");
+    expect(p.disableHlsConversion).toBeUndefined();
+    expect(p.preferTs).toBeUndefined();
+    expect(p.webIncompatibleLive).toBeUndefined();
+    expect(p.bypassProxyForLive).toBeUndefined();
+    expect(p.disableProxy).toBeUndefined();
+  });
+
+  it("override inclui ignoreDisableHlsConversion e ignorePreferTs", async () => {
+    const { getWebLiveProviderOverride } = await loadModule();
+    const o = getWebLiveProviderOverride("suportejetflix.site")!;
+    expect(o.ignoreDisableHlsConversion).toBe(true);
+    expect(o.ignorePreferTs).toBe(true);
+  });
+
 });
