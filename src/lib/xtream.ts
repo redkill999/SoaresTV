@@ -275,21 +275,61 @@ const HEAVY_CATALOG_ACTIONS = new Set<string>([
   "get_series",
 ]);
 
+/**
+ * Normaliza a resposta do Xtream em Array<T>.
+ * Alguns painéis retornam arrays; outros devolvem objeto com chaves numéricas
+ * ou uma propriedade `data`. Em vez de silenciar com [], lança erro descritivo.
+ */
+export function normalizeXtreamList<T>(raw: unknown): T[] {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); }
+    catch { throw new Error("O servidor Xtream retornou JSON inválido."); }
+  }
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && Array.isArray((value as { data?: unknown }).data)) {
+    return (value as { data: T[] }).data;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    const numeric = entries.filter(([k]) => /^\d+$/.test(k));
+    if (numeric.length > 0) return numeric.map(([, v]) => v as T);
+  }
+  throw new Error(
+    `Formato inesperado retornado pelo Xtream: ${value === null ? "null" : typeof value}`,
+  );
+}
+
+export async function apiList<T>(
+  c: XtreamCreds,
+  action: string,
+  params?: Record<string, string | number>,
+): Promise<T[]> {
+  const raw = await api<unknown>(c, action, params);
+  const list = normalizeXtreamList<T>(raw);
+  try {
+    console.info("[Xtream catalog]", {
+      action,
+      categoryId: params?.category_id ?? null,
+      itemCount: list.length,
+      native: await isNativeApp(),
+    });
+  } catch { /* noop */ }
+  return list;
+}
+
 export async function api<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<T> {
   const isHeavy = HEAVY_CATALOG_ACTIONS.has(action ?? "");
-  const nativeTimeoutMs = isHeavy ? 25_000 : 8_000;
-  const nativeTotalMs = isHeavy ? 45_000 : 20_000;
-  const proxyTimeoutMs = isHeavy ? 30_000 : 10_000;
+  const nativeTimeoutMs = isHeavy ? 30_000 : 10_000;
+  const nativeTotalMs = isHeavy ? 60_000 : 25_000;
+  const proxyTimeoutMs = isHeavy ? 45_000 : 15_000;
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
   const isDev = typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
 
-  // Tenta direto pelo Android (CapacitorHttp). Se falhar no APK, NÃO
-  // estouramos a UI — caímos para o proxy do server-fn, que tem rotação
-  // de User-Agent e bypassa Cloudflare/bloqueios de UA do painel.
   try {
     const native = await nativeApiWithFallbackPorts<T>(c, action, params, {
       timeoutMs: nativeTimeoutMs,
@@ -300,38 +340,44 @@ export async function api<T = unknown>(
       if (isDev) {
         const ms = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
         console.debug("[Catalog]", {
-          action,
-          categoryId: params?.category_id,
-          source: "native",
+          action, categoryId: params?.category_id, source: "native",
           itemCount: Array.isArray(out) ? (out as unknown[]).length : undefined,
           elapsedMs: ms,
         });
       }
       return out;
     }
-  } catch {
-    // segue para o fallback do server-fn
+  } catch (err) {
+    try {
+      console.error("[Xtream catalog error]", {
+        action,
+        categoryId: params?.category_id ?? null,
+        source: "native",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } catch { /* noop */ }
+    // continua para proxy
   }
 
-  // Hint: UA que já funcionou para esse host — server-fn tenta esse primeiro.
   const preferredUA = getUAHint(c.server);
   const r = await xtreamApi({
     data: { ...c, action, params, preferredUA, timeoutMs: proxyTimeoutMs },
   });
   if (!r.ok) {
-    const msg =
-      "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
+    const msg = "error" in r && typeof r.error === "string" ? r.error : "Resposta inválida do servidor";
+    try {
+      console.error("[Xtream catalog error]", {
+        action, categoryId: params?.category_id ?? null, source: "server", message: msg,
+      });
+    } catch { /* noop */ }
     throw new Error(msg);
   }
-  // Persistir UA vencedor para acelerar próxima chamada ao mesmo servidor.
   if ("ua" in r && typeof r.ua === "string") setUAHint(c.server, r.ua);
   const out = await maybePreserveLiveUrls(c, action, r.data as T);
   if (isDev) {
     const ms = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
     console.debug("[Catalog]", {
-      action,
-      categoryId: params?.category_id,
-      source: "server",
+      action, categoryId: params?.category_id, source: "server",
       itemCount: Array.isArray(out) ? (out as unknown[]).length : undefined,
       elapsedMs: ms,
     });
@@ -469,15 +515,10 @@ function warmM3UEntriesInBackground(creds: XtreamCreds) {
 }
 
 export async function preserveOriginalLiveUrls(creds: XtreamCreds, streams: LiveStream[]): Promise<LiveStream[]> {
-  // APK / Android nativo: comportamento original (pode baixar a M3U de forma
-  // síncrona — fluxo validado, não mexer).
-  if (await canUseNativeHttp()) {
-    const entries = await loadSavedM3UEntriesForCreds(creds);
-    return entries.length ? mergeLiveStreamsWithM3UUrls(streams, entries) : streams;
-  }
-  // Web: nunca bloquear a lista de canais no download da M3U (25s+ de tela
-  // vazia). Usa só o cache; se não houver, mostra os canais já e aquece a
-  // M3U em segundo plano para o próximo carregamento fazer o merge.
+  // NUNCA baixar a M3U síncronamente antes de mostrar os canais — a lista
+  // completa pode ter dezenas de MB e trava a WebView do APK. Só usamos M3U
+  // se já estiver em cache; caso contrário, aquecemos em segundo plano e
+  // devolvemos os streams do player_api.php imediatamente.
   const cachedEntries = await loadCachedM3UEntriesForCreds(creds);
   if (cachedEntries.length) return mergeLiveStreamsWithM3UUrls(streams, cachedEntries);
   warmM3UEntriesInBackground(creds);

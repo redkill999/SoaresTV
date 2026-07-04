@@ -15,7 +15,7 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
   loading,
   favCount = 0,
   recentCount = 0,
-  totalCount = 0,
+  totalCount,
 }: {
   categories: XciptvCat[];
   value: string;
