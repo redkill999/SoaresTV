@@ -163,11 +163,12 @@ h1, h2, h3, h4, h5, h6, .font-display {
   border-color: #ffcf2e;
 }
 
-/* Focus ring for TV/D-pad navigation */
+/* Focus ring padrão — colado no elemento (sem offset) para casar com o
+   tamanho real do botão/link. Só aplica quando o próprio elemento não
+   define outline (evita conflito com botões que usam ring do tailwind). */
 *:focus-visible {
   outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: var(--radius-md);
+  outline-offset: 0;
 }
 
 /* Smart TV / TV-mode: foco mais grosso e brilhante p/ visibilidade a 3m */
