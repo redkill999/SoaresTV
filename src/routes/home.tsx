@@ -80,7 +80,8 @@ function HomePage() {
   const [caps, setCaps] = useState<Capabilities>(() => getCapabilities());
   useEffect(() => {
     setCaps(getCapabilities());
-    return subscribeCapabilities(() => setCaps(getCapabilities()));
+    const unsub = subscribeCapabilities(() => setCaps(getCapabilities()));
+    return () => { unsub(); };
   }, []);
 
   /** Mapeia hotspot.key → CapabilityKey. null = tile sempre habilitado. */
