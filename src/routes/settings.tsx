@@ -24,6 +24,7 @@ import {
 import { SUPPORTED_LANGS, getStoredLang, setLang, type LangCode } from "@/lib/i18n";
 import homeBg from "@/assets/home-bg.png.asset.json";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { APP_BUILD_ID } from "@/lib/app-build";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
