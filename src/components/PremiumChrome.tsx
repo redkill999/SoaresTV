@@ -11,6 +11,7 @@
  */
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Tv, RefreshCw, Lock, Mail, Video, AlarmClock,
   RotateCcw, LayoutGrid,
@@ -18,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { store } from "@/lib/storage";
+import { clearPersisted } from "@/lib/query-persist";
 
 type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
