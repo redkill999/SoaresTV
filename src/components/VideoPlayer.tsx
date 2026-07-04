@@ -3,7 +3,8 @@ import Hls from "hls.js";
 import { Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
-import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
+import { getHostProfile, getWebLiveProviderOverride, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
+import { isNativeAppSync } from "@/lib/platform";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
@@ -703,10 +704,20 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    // Web-only per-provider override (ex.: suportejetflix.site). Só se aplica
+    // a LIVE em navegador desktop — APK/TV/celular passam batido. Detecção:
+    // não é nativo (Capacitor) E não é phone/tablet/tv injetados pelo shell.
+    const dt = playerDeviceType();
+    const isWebDesktop = !isNativeAppSync() && dt !== "phone" && dt !== "tablet" && dt !== "tv";
+    const webOverride = isLive && isWebDesktop
+      ? getWebLiveProviderOverride(hostOf(workingSrc))
+      : null;
+    const shouldBlockWebLive =
+      !!liveHostProfile.webIncompatibleLive && !webOverride?.ignoreWebIncompatibleFlag;
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && liveHostProfile.webIncompatibleLive) {
+    if (isLive && shouldBlockWebLive) {
       pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
@@ -714,6 +725,7 @@ export function VideoPlayer({
       );
       return;
     }
+
 
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
@@ -777,7 +789,7 @@ export function VideoPlayer({
       return [...candidates].sort((a, b) => rank(a) - rank(b));
     };
 
-    const playbackCandidates = isVod
+    let playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = mayUseHttpsVariant ? httpsVariant(url) : null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
@@ -803,10 +815,46 @@ export function VideoPlayer({
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
+    // Web-Live override exclusivo (ex.: suportejetflix.site): ignora TODAS as
+    // preferências antigas conflitantes (streamFormat/transport/forceHttps/
+    // disableHlsConversion/preferTs/bypassProxyForLive/disableProxy/
+    // webIncompatibleLive) SOMENTE para LIVE nesse host no Web Desktop, e
+    // monta uma fila fixa: HLS-proxy → HLS-direto → TS-proxy → TS-direto.
+    // APK/TV/celular e VOD/séries seguem intactos (webOverride é null).
+    let overrideCandidateTypes: string[] = [];
+    if (webOverride) {
+      const isHls = isHlsUrl(workingSrc);
+      const hlsUrl = isHls ? workingSrc : toHlsCandidate(workingSrc, "live");
+      const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
+      const entries: Array<[string, string | null]> = [
+        ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+        ["hls-direct", hlsUrl],
+        ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+        ["ts-direct", tsUrl],
+      ];
+      const seen = new Set<string>();
+      const ordered: string[] = [];
+      const types: string[] = [];
+      for (const [type, url] of entries) {
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        ordered.push(url);
+        types.push(type);
+      }
+      playbackCandidates = ordered;
+      overrideCandidateTypes = types;
+      pushDbg(
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v1 hostMatched=true environment=web-desktop ` +
+        `strategy=${webOverride.strategy} staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
+      );
+    }
+
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
+
 
 
     let hls: Hls | null = null;
