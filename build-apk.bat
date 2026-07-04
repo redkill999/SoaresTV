@@ -96,9 +96,21 @@ if not exist "%FULL_APK%" (
   goto :fail
 )
 
+if /I "%MODE%"=="release" (
+  echo.
+  echo [4b/5] Assinando APK release com keystore LOCAL (teste pessoal)...
+  call node scripts/sign-release-apk.mjs
+  if errorlevel 1 (
+    echo [aviso] Assinatura automatica falhou - APK unsigned continua em %FULL_APK%.
+  ) else (
+    set "FULL_APK=android\app\build\outputs\apk\release\app-release-signed.apk"
+  )
+)
+
 echo.
 echo ============================================================
 echo  [OK] APK gerado com sucesso!
+echo  Modo:    %MODE%
 echo  Caminho: %CD%\%FULL_APK%
 echo ============================================================
 echo.
