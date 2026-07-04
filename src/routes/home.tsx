@@ -165,6 +165,14 @@ function HomePage() {
   };
 
   const onHotspot = (h: Hotspot) => {
+    // Bloqueia clique em tile cujo servidor comprovadamente NÃO oferece
+    // aquele tipo de conteúdo. Só afeta live/vod/series/epg/radio/catchup —
+    // status icons, conta, favoritos e settings continuam livres.
+    const capKey = capOfHotspot(h.key);
+    if (capKey && caps[capKey] === "unavailable") {
+      toast(capabilityUnavailableReason(capKey));
+      return;
+    }
     if (h.action === "rec")    return toggleRec();
     if (h.action === "update") return runUpdate();
     if (h.action === "conta")  return setOpenConta(true);
