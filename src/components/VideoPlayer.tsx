@@ -789,7 +789,7 @@ export function VideoPlayer({
       return [...candidates].sort((a, b) => rank(a) - rank(b));
     };
 
-    const playbackCandidates = isVod
+    let playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = mayUseHttpsVariant ? httpsVariant(url) : null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
@@ -815,10 +815,46 @@ export function VideoPlayer({
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
+    // Web-Live override exclusivo (ex.: suportejetflix.site): ignora TODAS as
+    // preferências antigas conflitantes (streamFormat/transport/forceHttps/
+    // disableHlsConversion/preferTs/bypassProxyForLive/disableProxy/
+    // webIncompatibleLive) SOMENTE para LIVE nesse host no Web Desktop, e
+    // monta uma fila fixa: HLS-proxy → HLS-direto → TS-proxy → TS-direto.
+    // APK/TV/celular e VOD/séries seguem intactos (webOverride é null).
+    let overrideCandidateTypes: string[] = [];
+    if (webOverride) {
+      const isHls = isHlsUrl(workingSrc);
+      const hlsUrl = isHls ? workingSrc : toHlsCandidate(workingSrc, "live");
+      const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
+      const entries: Array<[string, string | null]> = [
+        ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+        ["hls-direct", hlsUrl],
+        ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+        ["ts-direct", tsUrl],
+      ];
+      const seen = new Set<string>();
+      const ordered: string[] = [];
+      const types: string[] = [];
+      for (const [type, url] of entries) {
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        ordered.push(url);
+        types.push(type);
+      }
+      playbackCandidates = ordered;
+      overrideCandidateTypes = types;
+      pushDbg(
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v1 hostMatched=true environment=web-desktop ` +
+        `strategy=${webOverride.strategy} staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
+      );
+    }
+
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
+
 
 
     let hls: Hls | null = null;
