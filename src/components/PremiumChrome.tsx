@@ -117,7 +117,7 @@ export function PremiumChrome({
   };
   const handleStatus = (k: StatusKey) => {
     if (k === "rec") return toggleRec();
-    if (k === "update") return runUpdate();
+    if (k === "update") { void runUpdate(); return; }
     setOpenStatus(k);
   };
 
