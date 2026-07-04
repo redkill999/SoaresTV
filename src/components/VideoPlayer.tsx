@@ -1157,6 +1157,25 @@ export function VideoPlayer({
     const armFirstFrameWatchdog = (candidateType: string) => {
       if (!webOverride) return;
       clearFirstFrameWatchdog();
+      const timeoutMs = webOverride.firstFrameTimeoutMs ?? 10_000;
+      pushDbg(`watchdog armed candidate=${candidateType} timeoutMs=${timeoutMs}`);
+      // requestVideoFrameCallback: prova canônica de que o decoder entregou
+      // um quadro renderizável. Cancela o watchdog antes do timeout.
+      try {
+        const vAny = video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (cb: (now: number, meta: unknown) => void) => number;
+        };
+        if (typeof vAny.requestVideoFrameCallback === "function") {
+          vAny.requestVideoFrameCallback(() => {
+            if (cancelled) return;
+            pushDbg(
+              `first-frame candidate=${candidateType} via=rVFC ` +
+              `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+            );
+            clearFirstFrameWatchdog();
+          });
+        }
+      } catch { /* noop */ }
       firstFrameTimer = setTimeout(() => {
         firstFrameTimer = null;
         if (cancelled) return;
@@ -1169,7 +1188,7 @@ export function VideoPlayer({
           `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
         );
         advanceCandidate(`first-frame-timeout:${candidateType}`);
-      }, 10_000);
+      }, timeoutMs);
     };
 
     const onVideoError = () => {
