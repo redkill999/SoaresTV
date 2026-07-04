@@ -830,6 +830,19 @@ export function VideoPlayer({
     // monta uma fila fixa: HLS-proxy → HLS-direto → TS-proxy → TS-direto.
     // APK/TV/celular e VOD/séries seguem intactos (webOverride é null).
     let overrideCandidateTypes: string[] = [];
+    // Relay dedicado para Live MPEG-TS (spec V4). Usado APENAS para o
+    // candidato ts-proxy do override — HLS e VOD continuam pelo /api/stream.
+    const liveRelayUrl = (rawUrl: string): string => {
+      const uaPart = forcedUA ? `&ua=${encodeURIComponent(forcedUA)}` : "";
+      const path = `/api/live-stream?u=${encodeURIComponent(rawUrl)}${uaPart}`;
+      try {
+        return typeof window !== "undefined"
+          ? new URL(path, window.location.origin).toString()
+          : path;
+      } catch {
+        return path;
+      }
+    };
     if (webOverride) {
       const isHls = isHlsUrl(workingSrc);
       const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
@@ -845,17 +858,17 @@ export function VideoPlayer({
               ? [
                   ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
                   ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
-                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ]
               : [
-                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ])
           : [
               ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
               ["hls-direct", hlsUrl],
-              ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+              ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
               ["ts-direct", tsUrl],
             ];
       const seen = new Set<string>();
@@ -870,10 +883,11 @@ export function VideoPlayer({
       playbackCandidates = ordered;
       overrideCandidateTypes = types;
       pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v3 hostMatched=true environment=web-desktop ` +
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v4 hostMatched=true environment=web-desktop ` +
         `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
         `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
         `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `relaySameOrigin=true relayPath="/api/live-stream" ` +
         `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
       );
     }
@@ -1012,11 +1026,43 @@ export function VideoPlayer({
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
-          pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
+          pushDbg(`mpegts EVT=ERROR errorType=${String(errType)} errorDetail=${String(errDetail)}`);
           if (cancelled) return;
           if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
           else tryNextVod();
         });
+        // Instrumentação MPEG-TS sanitizada (spec V4 §9). Nunca loga URL/credenciais.
+        try {
+          type MediaInfoLike = {
+            videoCodec?: string; audioCodec?: string;
+            width?: number; height?: number; mimeType?: string;
+          };
+          type StatsLike = {
+            speed?: number; loaderType?: string; currentSegmentIndex?: number;
+            decodedFrames?: number; droppedFrames?: number;
+          };
+          tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
+            const mi = (info || {}) as MediaInfoLike;
+            pushDbg(
+              `mpegts EVT=MEDIA_INFO mediaInfoReceived=true ` +
+              `videoCodec=${mi.videoCodec ?? "-"} audioCodec=${mi.audioCodec ?? "-"} ` +
+              `width=${mi.width ?? 0} height=${mi.height ?? 0} mime=${mi.mimeType ?? "-"}`,
+            );
+          });
+          tsPlayer.on(mpegts.Events.STATISTICS_INFO, (stats: unknown) => {
+            const s = (stats || {}) as StatsLike;
+            if ((s.decodedFrames ?? 0) > 0 || (s.speed ?? 0) > 0) {
+              pushDbg(
+                `mpegts EVT=STATISTICS_INFO speed=${s.speed ?? 0} ` +
+                `decodedFrames=${s.decodedFrames ?? 0} droppedFrames=${s.droppedFrames ?? 0}`,
+              );
+            }
+          });
+          tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+            pushDbg(`mpegts EVT=LOADING_COMPLETE candidate=${candidateType}`);
+          });
+        } catch { /* eventos podem não estar todos disponíveis */ }
+
 
         tsPlayer.attachMediaElement(video);
         pushDbg(`mpegts attached candidate=${candidateType}`);
@@ -1063,24 +1109,30 @@ export function VideoPlayer({
       }
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       triedUrls.add(normUrl(url));
-      const isProxied = /^\/api\/stream\?/i.test(url);
+      // Reconhece tanto /api/stream quanto o relay dedicado /api/live-stream
+      // como candidatos "via proxy" — o URL do relay pode estar absoluto
+      // (mesmo origin), então testamos o pathname em vez do prefixo.
+      const isProxied = (() => {
+        try {
+          const p = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
+          return p === "/api/stream" || p === "/api/live-stream";
+        } catch {
+          return /\/api\/(stream|live-stream)\?/i.test(url);
+        }
+      })();
       // ETAPA 8.6: LIVE caiu no candidato direto (fora do proxy) — útil pra
       // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
+      // Skip para hosts com override (preventHostWideLearning): uma falha
+      // isolada não deve virar decisão global de host.
       if (isLive && !isProxied) {
         pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
-        // Aprendizado: chegamos a um candidato direto LIVE, logo todos os
-        // proxiados anteriores falharam (404/5xx). Memoriza pra próxima sessão
-        // já priorizar direto pra esse host e não desperdiçar tentativas.
         try {
           const h = hostOf(url);
-          if (h && !getHostProfile(h).bypassProxyForLive) {
+          if (h && !getHostProfile(h).bypassProxyForLive && !webOverride?.preventHostWideLearning) {
             updateHostProfile(h, { bypassProxyForLive: true });
             pushDbg(`ETAPA 8.6 host ${h} marcado bypassProxyForLive=true`);
           }
         } catch { /* noop */ }
-        // Mixed content: página https + stream http é silenciosamente bloqueada
-        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
-        // o tryNextVod normalmente.
         try {
           if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
             pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
@@ -1090,7 +1142,7 @@ export function VideoPlayer({
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
       // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
-      const isProxyCandidate = /^\/api\/stream\?/i.test(url);
+      const isProxyCandidate = isProxied;
       const candidateType = /\.m3u8(\?|&|$)/i.test(decodedUrl)
         ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
         : (isProxyCandidate ? "ts-proxy" : "ts-direct");
