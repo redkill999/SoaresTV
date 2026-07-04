@@ -441,16 +441,24 @@ export function VideoPlayer({
     if (!manualDiag || manualTestBusyRef.current) return;
     manualTestBusyRef.current = true;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort("relay-test-timeout");
+    }, 8_000);
+    let responseReceived = false;
     try {
-      pushDbg("TESTE relay: fetch direto de /api/live-stream (sem mpegts.js), lendo só o primeiro chunk");
+      pushDbg("TESTE relay: fetch direto de /api/live-stream (sem mpegts.js), aguardando primeiro chunk até 8s");
       await stopForManualTest();
+      await new Promise((r) => setTimeout(r, 1_000));
       const res = await fetch(manualDiag.relayUrl, { cache: "no-store", signal: controller.signal });
+      responseReceived = true;
       const relayErrorCode = res.headers.get("x-live-relay-error");
+      const relayVersion = res.headers.get("x-live-relay-version") ?? "-";
       const ct = res.headers.get("content-type") ?? "-";
       if (!res.ok) {
         pushDbg(
-          `relayTest relayHttpStatus=${res.status} relayContentType=${ct} ` +
+          `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
           `relayErrorCode=${relayErrorCode ?? "-"} relayFirstByteReceived=false`,
         );
         if (res.status === 504 && relayErrorCode === "NO_FIRST_BYTE") {
@@ -461,27 +469,31 @@ export function VideoPlayer({
       }
       const reader = res.body?.getReader();
       if (!reader) {
-        pushDbg(`relayTest relayHttpStatus=${res.status} relayFirstByteReceived=false (sem body no navegador)`);
+        pushDbg(`relayTest relayHttpStatus=${res.status} relayVersion=${relayVersion} relayFirstByteReceived=false (sem body no navegador)`);
         return;
       }
       const startedAt = performance.now();
       const first = await reader.read();
       const relayFirstByteMs = Math.round(performance.now() - startedAt);
       const relayFirstChunkBytes = first.value?.byteLength ?? 0;
-      try { await reader.cancel(); } catch { /* noop */ }
+      const relayFirstByteReceived = !first.done && relayFirstChunkBytes > 0;
       pushDbg(
-        `relayTest relayHttpStatus=${res.status} relayContentType=${ct} ` +
-        `relayFirstByteReceived=${!first.done && relayFirstChunkBytes > 0} ` +
+        `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
+        `relayFirstByteReceived=${relayFirstByteReceived} ` +
         `relayFirstByteMs=${relayFirstByteMs} relayFirstChunkBytes=${relayFirstChunkBytes}`,
       );
+      try { await reader.cancel("manual-test-complete"); } catch { /* noop */ }
     } catch (e) {
-      pushDbg(`relayTest erro=${e instanceof Error ? e.name : "?"} (conexão abortada ou falha de rede)`);
+      const errName = e instanceof Error ? e.name : "?";
+      const abortReason = timedOut ? "timeout-8s" : (responseReceived ? "relay-cancelled" : "before-response");
+      pushDbg(`relayTest erro=${errName} abortReason=${abortReason} timeoutReached=${timedOut} responseHeadersReceived=${responseReceived}`);
     } finally {
       clearTimeout(timer);
-      controller.abort();
+      if (!controller.signal.aborted) controller.abort("manual-test-finished");
       manualTestBusyRef.current = false;
     }
   }, [manualDiag, pushDbg, stopForManualTest]);
+
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.

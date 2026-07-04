@@ -44,13 +44,17 @@ const UA_LIST = [
 
 // Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
 // do relay" e tratamento imediato de erro no player).
+const RELAY_VERSION = "v6";
 const EXPOSED_HEADERS = [
+  "X-Live-Relay-Version",
   "X-Live-Relay-Error",
   "X-Live-Upstream-Status",
   "X-Live-First-Byte-Ms",
   "X-Live-First-Chunk-Bytes",
   "X-Live-Ts-Sync-Found",
+  "X-Live-Relay-Content-Type",
 ].join(", ");
+
 
 function corsHeaders(request: Request): Record<string, string> {
   const base: Record<string, string> = {
@@ -74,10 +78,13 @@ function relayHeaders(cors: Record<string, string>): Headers {
   h.set("Pragma", "no-cache");
   h.set("Expires", "0");
   h.set("X-Accel-Buffering", "no");
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("X-Live-Relay-Version", RELAY_VERSION);
   // Não encaminhamos: Content-Length, Content-Range, Accept-Ranges,
   // Content-Encoding, Transfer-Encoding, Connection, Keep-Alive.
   return h;
 }
+
 
 /** Resposta de erro do relay: SEMPRE com X-Live-Relay-Error + JSON sanitizado
  *  (apenas códigos e números — nunca URL, credenciais ou corpo do upstream). */
@@ -90,12 +97,14 @@ function relayError(
   const h = new Headers(cors);
   h.set("Content-Type", "application/json");
   h.set("Cache-Control", "no-store");
+  h.set("X-Live-Relay-Version", RELAY_VERSION);
   h.set("X-Live-Relay-Error", code);
   return new Response(
     JSON.stringify({ ok: false, errorCode: code, ...(extra ?? {}) }),
     { status, headers: h },
   );
 }
+
 
 function sanitizedLog(event: string, fields: Record<string, unknown>) {
   // eslint-disable-next-line no-console
@@ -124,11 +133,13 @@ async function handle(request: Request): Promise<Response> {
   const forcedUA = url.searchParams.get("ua");
   const ua = forcedUA || UA_LIST[0];
 
-  // Um único AbortController por request: cancela upstream quando o cliente
-  // desconecta OU quando decidimos abortar por timeout do primeiro byte.
+  // V6: NÃO vinculamos request.signal.abort() diretamente ao upstream.
+  // Em alguns runtimes (Cloudflare Workers via preview do Lovable) esse
+  // sinal dispara logo após o handler retornar, matando a Response antes
+  // do primeiro chunk sair. O cancelamento real vem via ReadableStream.cancel()
+  // quando o navegador realmente desconecta.
   const upstreamController = new AbortController();
-  const onClientAbort = () => upstreamController.abort();
-  try { request.signal.addEventListener("abort", onClientAbort, { once: true }); } catch { /* noop */ }
+  const requestSignalInitiallyAborted = !!request.signal?.aborted;
 
   const started = Date.now();
   const originHeader = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
@@ -148,18 +159,17 @@ async function handle(request: Request): Promise<Response> {
       },
     });
   } catch (e) {
-    try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
     const aborted = (e as { name?: string })?.name === "AbortError";
     sanitizedLog("LIVE_UPSTREAM_FETCH_ERROR", {
       host: upstreamUrl.host,
       aborted,
+      requestSignalInitiallyAborted,
     });
     return relayError(502, "FETCH_ERROR", cors);
   }
 
   if (!upstream.ok) {
     try { await upstream.body?.cancel(); } catch { /* noop */ }
-    try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
     sanitizedLog("LIVE_UPSTREAM_HTTP_ERROR", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
@@ -169,23 +179,20 @@ async function handle(request: Request): Promise<Response> {
 
   const reader = upstream.body?.getReader();
   if (!reader) {
-    try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
     sanitizedLog("LIVE_UPSTREAM_NO_BODY", { host: upstreamUrl.host });
     return relayError(502, "NO_BODY", cors, { upstreamStatus: upstream.status });
   }
 
   const first = await readFirstChunkWithTimeout(reader, LIVE_FIRST_BYTE_TIMEOUT_MS);
   if (first.timedOut || !first.chunk || first.chunk.byteLength === 0) {
-    try { await reader.cancel(); } catch { /* noop */ }
-    upstreamController.abort();
-    try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
+    try { await reader.cancel("no-first-byte"); } catch { /* noop */ }
+    upstreamController.abort("no-first-byte");
     sanitizedLog("LIVE_UPSTREAM_NO_FIRST_BYTE", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
       upstreamContentType: sanitizeContentType(upstream.headers.get("content-type")),
       firstByteMs: Date.now() - started,
     });
-    // Fail-fast (spec V5 §7): 504 + X-Live-Relay-Error: NO_FIRST_BYTE.
     return relayError(504, "NO_FIRST_BYTE", cors, {
       upstreamStatus: upstream.status,
       firstByteMs: Date.now() - started,
@@ -197,9 +204,8 @@ async function handle(request: Request): Promise<Response> {
   const syncOffset = findMpegTsSync(firstChunk);
   const isTextualError = syncOffset < 0 && looksLikeTextualErrorBody(firstChunk);
   if (isTextualError) {
-    try { await reader.cancel(); } catch { /* noop */ }
-    upstreamController.abort();
-    try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
+    try { await reader.cancel("textual-body"); } catch { /* noop */ }
+    upstreamController.abort("textual-body");
     sanitizedLog("LIVE_UPSTREAM_TEXTUAL_BODY", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
@@ -212,53 +218,99 @@ async function handle(request: Request): Promise<Response> {
     });
   }
 
+  const upstreamCT = sanitizeContentType(upstream.headers.get("content-type"));
   sanitizedLog("LIVE_UPSTREAM_FIRST_BYTE", {
     host: upstreamUrl.host,
     upstreamFinalHost: (() => { try { return new URL(upstream.url).host; } catch { return upstreamUrl.host; } })(),
     upstreamStatus: upstream.status,
-    upstreamContentType: sanitizeContentType(upstream.headers.get("content-type")),
+    upstreamContentType: upstreamCT,
     firstByteReceived: true,
     firstByteMs,
     firstChunkBytes: firstChunk.byteLength,
     mpegTsSyncFound: syncOffset >= 0,
     mpegTsSyncOffset: syncOffset,
+    requestSignalInitiallyAborted,
+    relayVersion: RELAY_VERSION,
   });
 
+  // ------------------------------------------------------------------
+  // V6: relay dirigido por pull() (backpressure do navegador).
+  // - O primeiro chunk já lido é entregue no primeiro pull().
+  // - Não iniciamos tarefa em background (void pump()) — alguns runtimes
+  //   serverless encerram-na após o handler retornar.
+  // - cleanup é idempotente e só ocorre em cancel/erro/upstream-complete.
+  // ------------------------------------------------------------------
+  let pendingFirstChunk: Uint8Array | null = firstChunk;
+  let closed = false;
+  let cleanupCompleted = false;
+  let firstPullAt = 0;
+  let totalChunksEnqueued = 1; // firstChunk conta como 1
+  let totalBytesEnqueued = firstChunk.byteLength;
+
+  const cleanupRelay = async (reason: string) => {
+    if (cleanupCompleted) return;
+    cleanupCompleted = true;
+    try { await reader.cancel(reason); } catch { /* noop */ }
+    if (!upstreamController.signal.aborted) {
+      try { upstreamController.abort(reason); } catch { /* noop */ }
+    }
+    sanitizedLog("LIVE_RELAY_CLEANUP", {
+      host: upstreamUrl.host,
+      cleanupReason: reason,
+      totalChunksEnqueued,
+      totalBytesEnqueued,
+    });
+  };
+
   const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      // O primeiro chunk usado na validação NÃO é perdido: é reenfileirado
-      // antes de continuar bombeando os chunks seguintes (spec V5 §7).
-      controller.enqueue(firstChunk);
-      const pump = async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) { controller.close(); break; }
-            if (value && value.byteLength > 0) controller.enqueue(value);
-          }
-        } catch (err) {
-          try { controller.error(err); } catch { /* noop */ }
-        } finally {
-          try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
+    async pull(controller) {
+      if (closed) return;
+      try {
+        if (pendingFirstChunk) {
+          const chunk = pendingFirstChunk;
+          pendingFirstChunk = null;
+          firstPullAt = Date.now();
+          controller.enqueue(chunk);
+          return;
         }
-      };
-      void pump();
+        const result = await reader.read();
+        if (result.done) {
+          closed = true;
+          controller.close();
+          await cleanupRelay("upstream-complete");
+          return;
+        }
+        if (result.value && result.value.byteLength > 0) {
+          totalChunksEnqueued += 1;
+          totalBytesEnqueued += result.value.byteLength;
+          controller.enqueue(result.value);
+        }
+      } catch (err) {
+        closed = true;
+        try { controller.error(err); } catch { /* noop */ }
+        await cleanupRelay("reader-error");
+      }
     },
-    cancel() {
-      try { void reader.cancel(); } catch { /* noop */ }
-      upstreamController.abort();
-      try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
+    async cancel(reason) {
+      if (closed) return;
+      closed = true;
+      const r = typeof reason === "string" ? reason : "client-cancel";
+      await cleanupRelay(r);
     },
   });
 
   const headers = relayHeaders(cors);
-  // Diagnóstico sanitizado no sucesso (apenas números/booleans).
   headers.set("X-Live-Upstream-Status", String(upstream.status));
   headers.set("X-Live-First-Byte-Ms", String(firstByteMs));
   headers.set("X-Live-First-Chunk-Bytes", String(firstChunk.byteLength));
   headers.set("X-Live-Ts-Sync-Found", String(syncOffset >= 0));
+  headers.set("X-Live-Relay-Content-Type", upstreamCT || "unknown");
+  // NÃO chamamos cleanup em finally aqui — a Response continua viva.
+  // firstPullAt fica visível nos logs após o primeiro pull do navegador.
+  void firstPullAt;
   return new Response(body, { status: 200, headers });
 }
+
 
 export const Route = createFileRoute("/api/live-stream")({
   server: {
