@@ -688,6 +688,7 @@ function AppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
         <p className="mb-4 text-sm text-white/60">SoaresTV — IPTV Player</p>
         <div className="space-y-3 text-sm text-white">
           <Row label="Versão" value="1.0.0" />
+          <Row label="Build" value={APP_BUILD_ID} mono />
           <Row label="Plataforma" value={platform || "—"} />
           <Row label="Idioma do sistema" value={lang || "—"} />
           <Row label="User Agent" value={ua || "—"} mono />
