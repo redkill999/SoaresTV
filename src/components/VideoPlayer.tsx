@@ -1026,11 +1026,43 @@ export function VideoPlayer({
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
-          pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
+          pushDbg(`mpegts EVT=ERROR errorType=${String(errType)} errorDetail=${String(errDetail)}`);
           if (cancelled) return;
           if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
           else tryNextVod();
         });
+        // Instrumentação MPEG-TS sanitizada (spec V4 §9). Nunca loga URL/credenciais.
+        try {
+          type MediaInfoLike = {
+            videoCodec?: string; audioCodec?: string;
+            width?: number; height?: number; mimeType?: string;
+          };
+          type StatsLike = {
+            speed?: number; loaderType?: string; currentSegmentIndex?: number;
+            decodedFrames?: number; droppedFrames?: number;
+          };
+          tsPlayer.on(mpegts.Events.MEDIA_INFO, (info: unknown) => {
+            const mi = (info || {}) as MediaInfoLike;
+            pushDbg(
+              `mpegts EVT=MEDIA_INFO mediaInfoReceived=true ` +
+              `videoCodec=${mi.videoCodec ?? "-"} audioCodec=${mi.audioCodec ?? "-"} ` +
+              `width=${mi.width ?? 0} height=${mi.height ?? 0} mime=${mi.mimeType ?? "-"}`,
+            );
+          });
+          tsPlayer.on(mpegts.Events.STATISTICS_INFO, (stats: unknown) => {
+            const s = (stats || {}) as StatsLike;
+            if ((s.decodedFrames ?? 0) > 0 || (s.speed ?? 0) > 0) {
+              pushDbg(
+                `mpegts EVT=STATISTICS_INFO speed=${s.speed ?? 0} ` +
+                `decodedFrames=${s.decodedFrames ?? 0} droppedFrames=${s.droppedFrames ?? 0}`,
+              );
+            }
+          });
+          tsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+            pushDbg(`mpegts EVT=LOADING_COMPLETE candidate=${candidateType}`);
+          });
+        } catch { /* eventos podem não estar todos disponíveis */ }
+
 
         tsPlayer.attachMediaElement(video);
         pushDbg(`mpegts attached candidate=${candidateType}`);
