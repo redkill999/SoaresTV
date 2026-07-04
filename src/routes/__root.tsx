@@ -258,6 +258,24 @@ function RootComponent() {
     }
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
+    // Marca build id no <html> pra confirmar via inspect qual versão está rodando.
+    void import("@/lib/app-build").then(({ APP_BUILD_ID }) => {
+      try {
+        document.documentElement.dataset.appBuild = APP_BUILD_ID;
+        // No APK: compara com /app-version.json do site publicado.
+        if (w.Capacitor?.isNativePlatform?.()) {
+          fetch("/app-version.json", { cache: "no-store" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((json) => {
+              const remote = json?.buildId;
+              if (remote && remote !== APP_BUILD_ID) {
+                console.warn("[app-build] versão publicada difere", { local: APP_BUILD_ID, remote });
+              }
+            })
+            .catch(() => {});
+        }
+      } catch {}
+    });
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
