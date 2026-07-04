@@ -1,0 +1,350 @@
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+
+export const SUPPORTED_LANGS = [
+  { code: "pt", label: "Português", flag: "🇧🇷" },
+  { code: "en", label: "English", flag: "🇺🇸" },
+  { code: "es", label: "Español", flag: "🇪🇸" },
+  { code: "fr", label: "Français", flag: "🇫🇷" },
+] as const;
+export type LangCode = (typeof SUPPORTED_LANGS)[number]["code"];
+
+const LANG_KEY = "soarestv:lang";
+
+const pt = {
+  common: {
+    back: "Voltar",
+    search: "Buscar…",
+    signOut: "Sair",
+    home: "Início",
+    loading: "Carregando…",
+    retry: "Tentar de novo",
+    cancel: "Cancelar",
+    save: "Salvar",
+    delete: "Excluir",
+  },
+  auth: {
+    appName: "SoaresTV",
+    appKicker: "IPTV Player",
+    heroTitle: "Seu IPTV, em qualquer tela.",
+    heroDesc: "Canais ao vivo, filmes, séries, EPG, favoritos e controle parental — tudo num só app.",
+    feat1: "Player HLS otimizado",
+    feat2: "Suporte Xtream Codes e M3U",
+    feat3: "EPG XMLTV + favoritos",
+    signIn: "Entrar",
+    signInSub: "Escolha como deseja acessar seu conteúdo.",
+    tabXtream: "Xtream Codes",
+    tabM3U: "Lista M3U",
+    server: "DNS / SERVIDOR",
+    user: "USUÁRIO",
+    password: "SENHA",
+    signInXtream: "Entrar Xtream",
+    playFirst: "Reproduzir primeiro canal",
+    listName: "NOME DA LISTA",
+    listNamePh: "Minha lista",
+    m3uUrl: "URL .M3U / DNS XTREAM",
+    m3uHint: "Aceita URL Xtream (DNS + usuário/senha abaixo) ou link direto .m3u/.m3u8.",
+    loadM3U: "Carregar Lista M3U",
+    useSample: "Usar lista de teste (IPTV-Org)",
+    credsLocal: "Suas credenciais ficam salvas apenas neste navegador.",
+  },
+  nav: {
+    channels: "Canais",
+    guide: "Guia",
+    movies: "Filmes",
+    series: "Séries",
+    favorites: "Favoritos",
+    history: "Histórico",
+    settings: "Ajustes",
+    library: "Biblioteca",
+    general: "Geral",
+  },
+  pages: {
+    live: { title: "Canais ao Vivo", subtitle: "Transmissão em tempo real" },
+    movies: { title: "Filmes", subtitle: "Catálogo sob demanda" },
+    series: { title: "Séries", subtitle: "Temporadas e episódios" },
+    favorites: { title: "Favoritos" },
+    history: { title: "Histórico" },
+    settings: { title: "Ajustes" },
+    allCategories: "Todas categorias",
+  },
+  tabs: { all: "Todos", favorites: "Favoritos", recent: "Recentes" },
+  sort: { default: "Padrão", az: "A → Z", za: "Z → A" },
+  empty: {
+    noFav: "Nenhum {{item}} favorito",
+    noRecent: "Nenhum {{item}} recente",
+    noResults: "Nada encontrado",
+    searchHint: 'Sem resultados para "{{q}}".',
+    favHint: "Toque no coração nos cards para favoritar.",
+    recentHint: "O que você assistir aparece aqui.",
+    defaultHint: "Tente ajustar a busca ou trocar a categoria.",
+    channel: "canal",
+    movie: "filme",
+    series: "série",
+  },
+  lang: { label: "Idioma" },
+  theme: { label: "Tema" },
+};
+
+const en: typeof pt = {
+  common: {
+    back: "Back",
+    search: "Search…",
+    signOut: "Sign out",
+    home: "Home",
+    loading: "Loading…",
+    retry: "Retry",
+    cancel: "Cancel",
+    save: "Save",
+    delete: "Delete",
+  },
+  auth: {
+    appName: "SoaresTV",
+    appKicker: "IPTV Player",
+    heroTitle: "Your IPTV, on every screen.",
+    heroDesc: "Live channels, movies, series, EPG, favorites and parental controls — all in one app.",
+    feat1: "Optimized HLS player",
+    feat2: "Xtream Codes and M3U support",
+    feat3: "XMLTV EPG + favorites",
+    signIn: "Sign in",
+    signInSub: "Choose how you want to access your content.",
+    tabXtream: "Xtream Codes",
+    tabM3U: "M3U list",
+    server: "DNS / SERVER",
+    user: "USERNAME",
+    password: "PASSWORD",
+    signInXtream: "Sign in with Xtream",
+    playFirst: "Play first channel",
+    listName: "LIST NAME",
+    listNamePh: "My list",
+    m3uUrl: "M3U URL / XTREAM DNS",
+    m3uHint: "Accepts an Xtream URL (DNS + username/password below) or a direct .m3u/.m3u8 link.",
+    loadM3U: "Load M3U list",
+    useSample: "Use sample list (IPTV-Org)",
+    credsLocal: "Your credentials are saved only in this browser.",
+  },
+  nav: {
+    channels: "Channels",
+    guide: "Guide",
+    movies: "Movies",
+    series: "Series",
+    favorites: "Favorites",
+    history: "History",
+    settings: "Settings",
+    library: "Library",
+    general: "General",
+  },
+  pages: {
+    live: { title: "Live Channels", subtitle: "Real-time broadcast" },
+    movies: { title: "Movies", subtitle: "On-demand catalog" },
+    series: { title: "Series", subtitle: "Seasons and episodes" },
+    favorites: { title: "Favorites" },
+    history: { title: "History" },
+    settings: { title: "Settings" },
+    allCategories: "All categories",
+  },
+  tabs: { all: "All", favorites: "Favorites", recent: "Recent" },
+  sort: { default: "Default", az: "A → Z", za: "Z → A" },
+  empty: {
+    noFav: "No favorite {{item}}",
+    noRecent: "No recent {{item}}",
+    noResults: "Nothing found",
+    searchHint: 'No results for "{{q}}".',
+    favHint: "Tap the heart on a card to favorite it.",
+    recentHint: "What you watch shows up here.",
+    defaultHint: "Try adjusting the search or category.",
+    channel: "channel",
+    movie: "movie",
+    series: "series",
+  },
+  lang: { label: "Language" },
+  theme: { label: "Theme" },
+};
+
+const es: typeof pt = {
+  common: {
+    back: "Volver",
+    search: "Buscar…",
+    signOut: "Cerrar sesión",
+    home: "Inicio",
+    loading: "Cargando…",
+    retry: "Reintentar",
+    cancel: "Cancelar",
+    save: "Guardar",
+    delete: "Eliminar",
+  },
+  auth: {
+    appName: "SoaresTV",
+    appKicker: "Reproductor IPTV",
+    heroTitle: "Tu IPTV, en cualquier pantalla.",
+    heroDesc: "Canales en vivo, películas, series, EPG, favoritos y control parental — todo en una sola app.",
+    feat1: "Reproductor HLS optimizado",
+    feat2: "Compatible con Xtream Codes y M3U",
+    feat3: "EPG XMLTV + favoritos",
+    signIn: "Entrar",
+    signInSub: "Elige cómo quieres acceder a tu contenido.",
+    tabXtream: "Xtream Codes",
+    tabM3U: "Lista M3U",
+    server: "DNS / SERVIDOR",
+    user: "USUARIO",
+    password: "CONTRASEÑA",
+    signInXtream: "Entrar con Xtream",
+    playFirst: "Reproducir primer canal",
+    listName: "NOMBRE DE LA LISTA",
+    listNamePh: "Mi lista",
+    m3uUrl: "URL .M3U / DNS XTREAM",
+    m3uHint: "Acepta URL Xtream (DNS + usuario/contraseña) o enlace directo .m3u/.m3u8.",
+    loadM3U: "Cargar lista M3U",
+    useSample: "Usar lista de prueba (IPTV-Org)",
+    credsLocal: "Tus credenciales se guardan solo en este navegador.",
+  },
+  nav: {
+    channels: "Canales",
+    guide: "Guía",
+    movies: "Películas",
+    series: "Series",
+    favorites: "Favoritos",
+    history: "Historial",
+    settings: "Ajustes",
+    library: "Biblioteca",
+    general: "General",
+  },
+  pages: {
+    live: { title: "Canales en vivo", subtitle: "Transmisión en tiempo real" },
+    movies: { title: "Películas", subtitle: "Catálogo bajo demanda" },
+    series: { title: "Series", subtitle: "Temporadas y episodios" },
+    favorites: { title: "Favoritos" },
+    history: { title: "Historial" },
+    settings: { title: "Ajustes" },
+    allCategories: "Todas las categorías",
+  },
+  tabs: { all: "Todos", favorites: "Favoritos", recent: "Recientes" },
+  sort: { default: "Predeterminado", az: "A → Z", za: "Z → A" },
+  empty: {
+    noFav: "Sin {{item}} favorito",
+    noRecent: "Sin {{item}} reciente",
+    noResults: "Nada encontrado",
+    searchHint: 'Sin resultados para "{{q}}".',
+    favHint: "Toca el corazón en una tarjeta para marcarla.",
+    recentHint: "Lo que veas aparecerá aquí.",
+    defaultHint: "Prueba a ajustar la búsqueda o categoría.",
+    channel: "canal",
+    movie: "película",
+    series: "serie",
+  },
+  lang: { label: "Idioma" },
+  theme: { label: "Tema" },
+};
+
+const fr: typeof pt = {
+  common: {
+    back: "Retour",
+    search: "Rechercher…",
+    signOut: "Se déconnecter",
+    home: "Accueil",
+    loading: "Chargement…",
+    retry: "Réessayer",
+    cancel: "Annuler",
+    save: "Enregistrer",
+    delete: "Supprimer",
+  },
+  auth: {
+    appName: "SoaresTV",
+    appKicker: "Lecteur IPTV",
+    heroTitle: "Votre IPTV, sur chaque écran.",
+    heroDesc: "Chaînes en direct, films, séries, EPG, favoris et contrôle parental — le tout dans une seule app.",
+    feat1: "Lecteur HLS optimisé",
+    feat2: "Support Xtream Codes et M3U",
+    feat3: "EPG XMLTV + favoris",
+    signIn: "Connexion",
+    signInSub: "Choisissez comment accéder à votre contenu.",
+    tabXtream: "Xtream Codes",
+    tabM3U: "Liste M3U",
+    server: "DNS / SERVEUR",
+    user: "UTILISATEUR",
+    password: "MOT DE PASSE",
+    signInXtream: "Se connecter avec Xtream",
+    playFirst: "Lire la première chaîne",
+    listName: "NOM DE LA LISTE",
+    listNamePh: "Ma liste",
+    m3uUrl: "URL .M3U / DNS XTREAM",
+    m3uHint: "Accepte une URL Xtream (DNS + identifiants ci-dessous) ou un lien direct .m3u/.m3u8.",
+    loadM3U: "Charger la liste M3U",
+    useSample: "Utiliser la liste d'exemple (IPTV-Org)",
+    credsLocal: "Vos identifiants ne sont enregistrés que dans ce navigateur.",
+  },
+  nav: {
+    channels: "Chaînes",
+    guide: "Guide",
+    movies: "Films",
+    series: "Séries",
+    favorites: "Favoris",
+    history: "Historique",
+    settings: "Réglages",
+    library: "Bibliothèque",
+    general: "Général",
+  },
+  pages: {
+    live: { title: "Chaînes en direct", subtitle: "Diffusion en temps réel" },
+    movies: { title: "Films", subtitle: "Catalogue à la demande" },
+    series: { title: "Séries", subtitle: "Saisons et épisodes" },
+    favorites: { title: "Favoris" },
+    history: { title: "Historique" },
+    settings: { title: "Réglages" },
+    allCategories: "Toutes les catégories",
+  },
+  tabs: { all: "Tous", favorites: "Favoris", recent: "Récents" },
+  sort: { default: "Par défaut", az: "A → Z", za: "Z → A" },
+  empty: {
+    noFav: "Aucun {{item}} favori",
+    noRecent: "Aucun {{item}} récent",
+    noResults: "Rien trouvé",
+    searchHint: 'Aucun résultat pour "{{q}}".',
+    favHint: "Touchez le cœur sur une carte pour l'ajouter aux favoris.",
+    recentHint: "Ce que vous regardez s'affiche ici.",
+    defaultHint: "Essayez d'ajuster la recherche ou la catégorie.",
+    channel: "chaîne",
+    movie: "film",
+    series: "série",
+  },
+  lang: { label: "Langue" },
+  theme: { label: "Thème" },
+};
+
+// Default to "pt" on both server and first client render to avoid hydration
+// mismatch. The actual user choice is applied after mount via syncLangFromStorage.
+if (!i18n.isInitialized) {
+  void i18n.use(initReactI18next).init({
+    resources: {
+      pt: { translation: pt },
+      en: { translation: en },
+      es: { translation: es },
+      fr: { translation: fr },
+    },
+    lng: "pt",
+    fallbackLng: "pt",
+    interpolation: { escapeValue: false },
+    react: { useSuspense: false },
+  });
+}
+
+export function getStoredLang(): LangCode {
+  if (typeof window === "undefined") return "pt";
+  const saved = localStorage.getItem(LANG_KEY) as LangCode | null;
+  if (saved && SUPPORTED_LANGS.some((l) => l.code === saved)) return saved;
+  const nav = (navigator.language || "pt").slice(0, 2).toLowerCase();
+  const match = SUPPORTED_LANGS.find((l) => l.code === nav);
+  return (match?.code ?? "pt") as LangCode;
+}
+
+export function setLang(code: LangCode) {
+  if (typeof window !== "undefined") localStorage.setItem(LANG_KEY, code);
+  void i18n.changeLanguage(code);
+  if (typeof document !== "undefined") document.documentElement.lang = code;
+}
+
+export function syncLangFromStorage() {
+  setLang(getStoredLang());
+}
+
+export default i18n;
