@@ -282,6 +282,10 @@ function deobfuscateCreds(c: XtreamCreds | null): XtreamCreds | null {
 function obfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
   return l.map((p) => ({ ...p, username: obfuscate(p.username), password: obfuscate(p.password) }));
 }
+function deobfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
+  return l.map((p) => ({ ...p, username: deobfuscate(p.username), password: deobfuscate(p.password) }));
+}
+
 
 // ============================================================================
 //  Provider Identity + Migração de favoritos/histórico legados
