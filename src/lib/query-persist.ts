@@ -203,10 +203,16 @@ export function clearPersisted(prefix?: string) {
 }
 
 /** Wraps a queryFn so its result is persisted on success. */
-export function withPersist<T>(key: string, fn: () => Promise<T>): () => Promise<T> {
+export function withPersist<T>(
+  key: string,
+  fn: () => Promise<T>,
+  options?: { shouldPersist?: (data: T) => boolean },
+): () => Promise<T> {
   return async () => {
     const data = await fn();
-    savePersisted(key, data);
+    const canPersist = options?.shouldPersist?.(data) ?? true;
+    if (canPersist) savePersisted(key, data);
     return data;
   };
 }
+
