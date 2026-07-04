@@ -8,6 +8,10 @@ import { isNativeAppSync } from "@/lib/platform";
 import { playNative, stopNative } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { APP_BUILD_ID } from "@/lib/app-build";
+import { EXTERNAL_LIVE_RELAY_SENTINEL, externalLiveRelayBase, mintExternalLiveRelayUrl } from "@/lib/external-live-relay";
+
+
 
 
 
@@ -398,6 +402,86 @@ export function VideoPlayer({
     setDebugPanelOpen(true);
     setError(message);
   }, []);
+  // ---- Testes manuais do relay (spec V5 §5/§6) -----------------------------
+  // Botões "Testar upstream" e "Testar bytes do relay": só existem no painel
+  // de diagnóstico para hosts com webOverride (LIVE + Web Desktop). NUNCA
+  // executados automaticamente durante a reprodução normal.
+  const [manualDiag, setManualDiag] = useState<{ diagnoseUrl: string; relayUrl: string } | null>(null);
+  const manualStopRef = useRef<(() => void) | null>(null);
+  const manualTestBusyRef = useRef(false);
+  const stopForManualTest = useCallback(async () => {
+    // Destrói mpegts.js/hls.js, fecha o canal e aguarda 1 s — evita conflito
+    // com limite de conexões simultâneas do provedor.
+    try { manualStopRef.current?.(); } catch { /* noop */ }
+    await new Promise((r) => setTimeout(r, 1000));
+  }, []);
+  const runUpstreamDiagnose = useCallback(async () => {
+    if (!manualDiag || manualTestBusyRef.current) return;
+    manualTestBusyRef.current = true;
+    try {
+      pushDbg("TESTE upstream: player parado; aguardando 1s antes de abrir conexão única");
+      await stopForManualTest();
+      const res = await fetch(manualDiag.diagnoseUrl, { cache: "no-store" });
+      const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!j) { pushDbg(`liveDiagnose http=${res.status} resposta inválida`); return; }
+      pushDbg(
+        `liveDiagnose ok=${j.ok === true} upstreamStatus=${j.upstreamStatus ?? "-"} ` +
+        `upstreamContentType=${j.upstreamContentType ?? "-"} firstByteReceived=${j.firstByteReceived === true} ` +
+        `firstByteMs=${j.firstByteMs ?? "-"} firstChunkBytes=${j.firstChunkBytes ?? 0} ` +
+        `mpegTsSyncFound=${j.mpegTsSyncFound === true} mpegTsSyncOffset=${j.mpegTsSyncOffset ?? -1} ` +
+        `bodyKind=${j.bodyKind ?? "unknown"}${j.errorCode ? ` errorCode=${j.errorCode}` : ""}`,
+      );
+    } catch (e) {
+      pushDbg(`liveDiagnose erro=${e instanceof Error ? e.name : "?"}`);
+    } finally {
+      manualTestBusyRef.current = false;
+    }
+  }, [manualDiag, pushDbg, stopForManualTest]);
+  const runRelayByteTest = useCallback(async () => {
+    if (!manualDiag || manualTestBusyRef.current) return;
+    manualTestBusyRef.current = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      pushDbg("TESTE relay: fetch direto de /api/live-stream (sem mpegts.js), lendo só o primeiro chunk");
+      await stopForManualTest();
+      const res = await fetch(manualDiag.relayUrl, { cache: "no-store", signal: controller.signal });
+      const relayErrorCode = res.headers.get("x-live-relay-error");
+      const ct = res.headers.get("content-type") ?? "-";
+      if (!res.ok) {
+        pushDbg(
+          `relayTest relayHttpStatus=${res.status} relayContentType=${ct} ` +
+          `relayErrorCode=${relayErrorCode ?? "-"} relayFirstByteReceived=false`,
+        );
+        if (res.status === 504 && relayErrorCode === "NO_FIRST_BYTE") {
+          pushDbg("O servidor do canal não enviou dados ao relay dentro do prazo.");
+        }
+        try { await res.body?.cancel(); } catch { /* noop */ }
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        pushDbg(`relayTest relayHttpStatus=${res.status} relayFirstByteReceived=false (sem body no navegador)`);
+        return;
+      }
+      const startedAt = performance.now();
+      const first = await reader.read();
+      const relayFirstByteMs = Math.round(performance.now() - startedAt);
+      const relayFirstChunkBytes = first.value?.byteLength ?? 0;
+      try { await reader.cancel(); } catch { /* noop */ }
+      pushDbg(
+        `relayTest relayHttpStatus=${res.status} relayContentType=${ct} ` +
+        `relayFirstByteReceived=${!first.done && relayFirstChunkBytes > 0} ` +
+        `relayFirstByteMs=${relayFirstByteMs} relayFirstChunkBytes=${relayFirstChunkBytes}`,
+      );
+    } catch (e) {
+      pushDbg(`relayTest erro=${e instanceof Error ? e.name : "?"} (conexão abortada ou falha de rede)`);
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+      manualTestBusyRef.current = false;
+    }
+  }, [manualDiag, pushDbg, stopForManualTest]);
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
@@ -544,7 +628,7 @@ export function VideoPlayer({
     keepDebugOverlayRef.current = false;
     manualNativeStartRef.current = false;
     setError(null);
-    pushDbg(`ETAPA 1 src=${maskIptvUrl(src)}`);
+    pushDbg(`ETAPA 1 host=${hostOf(src) ?? "?"} kind=${kind ?? "auto"}`);
     pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
     (async () => {
       const native = await isNativeApp();
@@ -712,6 +796,27 @@ export function VideoPlayer({
     const webOverride = isLive && isWebDesktop
       ? getWebLiveProviderOverride(hostOf(workingSrc))
       : null;
+    // Sanitização de logs (spec V5 §12): para hosts com override, o painel de
+    // diagnóstico nunca mostra URL (nem mascarada) — apenas host, streamId e
+    // relayPath. Outros provedores mantêm maskIptvUrl (comportamento antigo).
+    const streamIdOf = (u: string): string => {
+      try {
+        const p = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
+        const m = p.match(/(\d+)(?:\.[a-z0-9]+)?$/i);
+        return m?.[1] ?? "-";
+      } catch { return "-"; }
+    };
+    const logUrl = (u: string): string => {
+      if (!webOverride) return maskIptvUrl(u);
+      if (u.startsWith("external-relay:")) return "relay=external";
+      try {
+        const parsed = new URL(u, typeof window !== "undefined" ? window.location.origin : "http://x");
+        if (parsed.pathname === "/api/live-stream" || parsed.pathname === "/api/stream" || parsed.pathname === "/api/live-diagnose") {
+          return `relayPath=${parsed.pathname}`;
+        }
+        return `host=${parsed.host} streamId=${streamIdOf(u)}`;
+      } catch { return "(sanitizado)"; }
+    };
     const shouldBlockWebLive =
       !!liveHostProfile.webIncompatibleLive && !webOverride?.ignoreWebIncompatibleFlag;
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
@@ -850,6 +955,12 @@ export function VideoPlayer({
         ? (isHls ? workingSrc : null)
         : (isHls ? workingSrc : toHlsCandidate(workingSrc, "live"));
       const preventDirect = !!webOverride.preventDirectCandidates;
+      // Relay externo dedicado (spec V5 §10): entra na frente da fila SOMENTE
+      // quando VITE_LIVE_RELAY_BASE_URL está configurada. Inerte por padrão.
+      // APK/TV nunca chegam aqui (webOverride é null fora do Web Desktop).
+      const extEntries: Array<[string, string | null]> = externalLiveRelayBase()
+        ? [["ts-external-relay", EXTERNAL_LIVE_RELAY_SENTINEL]]
+        : [];
       // Estratégia ts-proxy-first para .ts original: fila = [ts-proxy].
       // Se URL original já for .m3u8 (raro para este provedor), usar HLS proxy.
       const entries: Array<[string, string | null]> =
@@ -858,16 +969,19 @@ export function VideoPlayer({
               ? [
                   ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
                   ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
+                  ...extEntries,
                   ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ]
               : [
+                  ...extEntries,
                   ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ])
           : [
               ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
               ["hls-direct", hlsUrl],
+              ...extEntries,
               ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
               ["ts-direct", tsUrl],
             ];
@@ -883,19 +997,36 @@ export function VideoPlayer({
       playbackCandidates = ordered;
       overrideCandidateTypes = types;
       pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v4 hostMatched=true environment=web-desktop ` +
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v5 hostMatched=true environment=web-desktop ` +
         `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
         `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
         `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
-        `relaySameOrigin=true relayPath="/api/live-stream" ` +
+        `relaySameOrigin=true relayPath="/api/live-stream" externalRelayConfigured=${!!externalLiveRelayBase()} ` +
         `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
       );
+      // Ambiente de execução (spec V5 §1): preview vs site publicado.
+      try {
+        const loc = window.location;
+        const execHost = loc.hostname;
+        const isLovablePreview = /\.lovableproject\.com$/i.test(execHost) || /^id-preview--/i.test(execHost);
+        const isPublishedDeployment = !isLovablePreview && !/^(localhost|127\.0\.0\.1)$/i.test(execHost);
+        pushDbg(
+          `ENV executionOrigin=${loc.origin} executionHostname=${execHost} ` +
+          `isLovablePreview=${isLovablePreview} isPublishedDeployment=${isPublishedDeployment} appBuildId=${APP_BUILD_ID}`,
+        );
+        if (isLovablePreview) {
+          pushDbg(
+            "AVISO: Este teste está sendo executado no ambiente de Visualização. O comportamento de " +
+            "funções e streaming deve ser confirmado também no site publicado.",
+          );
+        }
+      } catch { /* noop */ }
     }
 
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
-    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
-    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
+    pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? logUrl(hlsCandidate) : "-"}`);
+    pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(logUrl).join(" | ")}`);
 
 
 
@@ -966,13 +1097,27 @@ export function VideoPlayer({
     const playMpegTs = async (url: string, candidateType: string = "ts-proxy") => {
       if (!isLive) return false;
       try {
+        // Relay externo dedicado (spec V5 §10/§11): candidato sentinela só
+        // existe quando VITE_LIVE_RELAY_BASE_URL está configurada. O token
+        // curto é assinado no backend — credenciais nunca na query pública.
+        let effectiveUrl = url;
+        if (url === EXTERNAL_LIVE_RELAY_SENTINEL) {
+          const minted = await mintExternalLiveRelayUrl(hostOf(workingSrc) ?? "", streamIdOf(workingSrc));
+          if (!minted || cancelled) {
+            pushDbg("EXT-RELAY token indisponível/não configurado — avançando candidato");
+            if (!cancelled) advanceCandidate("ext-relay-unavailable");
+            return true;
+          }
+          effectiveUrl = minted;
+          pushDbg("EXT-RELAY candidato ativo relay=external kind=live");
+        }
         // Probe pré-reprodução: pulado quando o override pede (evita gastar
         // uma conexão simultânea e não encurtar o watchdog do primeiro quadro).
         const skipProbe = !!webOverride?.disablePrePlaybackProbe;
-        const probeUrl = skipProbe ? null : probeUrlForCandidate(url);
+        const probeUrl = skipProbe ? null : probeUrlForCandidate(effectiveUrl);
         if (probeUrl) {
           try {
-            pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
+            pushDbg(`PROBE url=${logUrl(probeUrl)}`);
             const probeRes = await fetch(probeUrl, { cache: "no-store" });
             const probe = (await probeRes.json()) as StreamProbeResult;
             pushDbg(`PROBE status=${probe.status} ok=${probe.ok} ct=${probe.contentType || "-"} host=${probe.finalUrlHost || "-"}${probe.reason ? ` reason=${probe.reason}` : ""}`);
@@ -1002,10 +1147,10 @@ export function VideoPlayer({
         const absUrl = (() => {
           try {
             return typeof window !== "undefined"
-              ? new URL(url, window.location.origin).toString()
-              : url;
+              ? new URL(effectiveUrl, window.location.origin).toString()
+              : effectiveUrl;
           } catch {
-            return url;
+            return effectiveUrl;
           }
         })();
         tsPlayer = mpegts.createPlayer(
@@ -1025,9 +1170,24 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
-        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
-          pushDbg(`mpegts EVT=ERROR errorType=${String(errType)} errorDetail=${String(errDetail)}`);
+        tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown, errInfo: unknown) => {
+          // spec V5 §8: quando o relay responde 4xx/5xx o mpegts.js entrega o
+          // status HTTP em errInfo.code — mostramos IMEDIATAMENTE, sem esperar
+          // o watchdog de 20 s.
+          const info = (errInfo || {}) as { code?: number; msg?: string };
+          const httpStatus = typeof info.code === "number" && info.code >= 100 ? info.code : null;
+          pushDbg(
+            `mpegts EVT=ERROR errorType=${String(errType)} errorDetail=${String(errDetail)}` +
+            (httpStatus != null ? ` relayHttpStatus=${httpStatus}` : ""),
+          );
           if (cancelled) return;
+          if (httpStatus === 504) {
+            lastLiveError = "O servidor do canal não enviou dados ao relay dentro do prazo.";
+            pushDbg("relayErrorCode=NO_FIRST_BYTE relayHttpStatus=504 — upstream não entregou o primeiro byte em 8s");
+          } else if (httpStatus != null && httpStatus >= 400) {
+            lastLiveError = `O relay respondeu HTTP ${httpStatus} para este canal.`;
+            pushDbg(`relayHttpStatus=${httpStatus} relayErrorCode=HTTP_${httpStatus}`);
+          }
           if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
           else tryNextVod();
         });
@@ -1113,6 +1273,9 @@ export function VideoPlayer({
       // como candidatos "via proxy" — o URL do relay pode estar absoluto
       // (mesmo origin), então testamos o pathname em vez do prefixo.
       const isProxied = (() => {
+        // Sentinela do relay externo conta como "via proxy" — nunca deve
+        // disparar aprendizado de bypass nem aviso de mixed-content.
+        if (url.startsWith("external-relay:")) return true;
         try {
           const p = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
           return p === "/api/stream" || p === "/api/live-stream";
@@ -1139,13 +1302,15 @@ export function VideoPlayer({
           }
         } catch { /* noop */ }
       }
-      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
+      pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${logUrl(url)}`);
       const decodedUrl = normUrl(url);
       // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
       const isProxyCandidate = isProxied;
-      const candidateType = /\.m3u8(\?|&|$)/i.test(decodedUrl)
-        ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
-        : (isProxyCandidate ? "ts-proxy" : "ts-direct");
+      const candidateType = url.startsWith("external-relay:")
+        ? "ts-external-relay"
+        : /\.m3u8(\?|&|$)/i.test(decodedUrl)
+          ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
+          : (isProxyCandidate ? "ts-proxy" : "ts-direct");
 
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         armFirstFrameWatchdog(candidateType);
@@ -1269,7 +1434,7 @@ export function VideoPlayer({
     const attachHls = (url: string) => {
       currentHlsUrl = url;
       triedUrls.add(normUrl(url));
-      pushDbg(`attachHls url=${maskIptvUrl(url)}`);
+      pushDbg(`attachHls url=${logUrl(url)}`);
 
       if (Hls.isSupported()) {
         hls = new Hls({
@@ -1558,6 +1723,29 @@ export function VideoPlayer({
       }
     };
 
+    // ---- Testes manuais do Modo Diagnóstico (spec V5 §5/§6) ----------------
+    // Disponíveis SOMENTE para hosts com webOverride em LIVE Web Desktop.
+    // Nunca executados automaticamente na reprodução normal.
+    if (webOverride) {
+      manualStopRef.current = () => {
+        clearWatchdog();
+        clearFirstFrameWatchdog();
+        if (hls) { try { hls.destroy(); } catch { /* noop */ } hls = null; }
+        destroyTsPlayer();
+        try { video.pause(); video.removeAttribute("src"); video.load(); } catch { /* noop */ }
+      };
+      const diagIsHls = isHlsUrl(workingSrc);
+      const diagTsUrl = diagIsHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
+      const uaPart = forcedUA ? `&ua=${encodeURIComponent(forcedUA)}` : "";
+      setManualDiag({
+        diagnoseUrl: `/api/live-diagnose?u=${encodeURIComponent(diagTsUrl)}${uaPart}`,
+        relayUrl: liveRelayUrl(diagTsUrl),
+      });
+    } else {
+      manualStopRef.current = null;
+      setManualDiag(null);
+    }
+
     void isNativeApp().then((native) => {
       if (cancelled) return;
       nativeDirect = native;
@@ -1582,6 +1770,7 @@ export function VideoPlayer({
 
     return () => {
       cancelled = true;
+      manualStopRef.current = null;
       clearWatchdog();
       clearFirstFrameWatchdog();
       detachStallListeners?.();
@@ -1867,6 +2056,24 @@ export function VideoPlayer({
                 >
                   Abrir ExoPlayer
                 </button>
+              )}
+              {manualDiag && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { void runUpstreamDiagnose(); }}
+                    className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+                  >
+                    Testar upstream
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void runRelayByteTest(); }}
+                    className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide"
+                  >
+                    Testar bytes do relay
+                  </button>
+                </>
               )}
               <button
                 type="button"
