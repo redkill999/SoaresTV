@@ -49,7 +49,22 @@ export type ListCompat = {
 
 export type XtreamCreds = { server: string; username: string; password: string; compat?: ListCompat };
 export type M3UPlaylist = { name: string; url: string; username?: string; password?: string; mode?: "playlist" | "xtream"; compat?: ListCompat };
-export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
+/**
+ * Item de favorito/histórico.
+ * `providerId` e `stableId` são OPCIONAIS por compatibilidade — registros
+ * antigos não têm esses campos. A migração em `migrateLegacyItems()`
+ * carimba os itens antigos com o provedor ATIVO no momento da migração.
+ * A partir de então, novos itens devem sempre trazer `providerId+stableId`
+ * (ver `store.toggleFavRef` / `store.pushHistoryRef`).
+ */
+export type FavItem = {
+  type: "live" | "movie" | "series";
+  id: string;
+  name: string;
+  logo?: string;
+  providerId?: string;
+  stableId?: string;
+};
 export type HistItem = FavItem & { at: number; position?: number; duration?: number };
 
 /** Mapeia o User-Agent escolhido para a string real enviada ao provedor. */
@@ -271,27 +286,162 @@ function deobfuscateList(l: M3UPlaylist[]): M3UPlaylist[] {
   return l.map((p) => ({ ...p, username: deobfuscate(p.username), password: deobfuscate(p.password) }));
 }
 
+
+// ============================================================================
+//  Provider Identity + Migração de favoritos/histórico legados
+// ----------------------------------------------------------------------------
+//  Contexto em src/lib/content-ref.ts. Aqui só implementamos:
+//    - getCurrentProviderId(): resolve o provedor ATIVO agora.
+//    - migrateLegacyItems(): carimba favs/hist antigos com providerId+stableId
+//      UMA vez (flag persistida). Não apaga nada — só enriquece.
+// ============================================================================
+
+import {
+  providerIdFromXtream,
+  providerIdFromM3U,
+  stableIdFromLegacy,
+} from "./content-ref";
+
+const K_MIGRATION = "soarestv:migration:v1-content-ref";
+
+/** Provedor ATIVO agora. null se não há nenhum. */
+function getCurrentProviderIdInternal(): string | null {
+  const creds = deobfuscateCreds(read<XtreamCreds | null>(K.creds, null));
+  if (creds && creds.server && creds.username) {
+    return providerIdFromXtream(creds.server, creds.username);
+  }
+  const lists = deobfuscateList(read<M3UPlaylist[]>(K.m3u, []));
+  const first = lists[0];
+  if (first) return providerIdFromM3U(first.url, first.username);
+  return null;
+}
+
+/**
+ * Migração one-shot: carimba itens antigos com providerId+stableId derivados
+ * do provedor ATIVO. Se não houver provedor ativo, adia a migração.
+ * Rodada automaticamente pela store na primeira chamada relevante.
+ */
+function migrateLegacyItems(): void {
+  if (!isBrowser()) return;
+  try {
+    if (localStorage.getItem(K_MIGRATION) === "done") return;
+  } catch { return; }
+
+  const providerId = getCurrentProviderIdInternal();
+  if (!providerId) return; // adia — sem provedor não dá pra carimbar corretamente
+
+  let changed = 0;
+
+  // Favoritos
+  const favs = read<FavItem[]>(K.favs, []);
+  const migratedFavs = favs.map((f) => {
+    if (f.providerId && f.stableId) return f;
+    changed++;
+    const sid = stableIdFromLegacy(providerId, f.type, f.id);
+    return { ...f, providerId: f.providerId ?? providerId, stableId: f.stableId ?? sid };
+  });
+  if (changed > 0) write(K.favs, migratedFavs);
+
+  // Histórico
+  changed = 0;
+  const hist = read<HistItem[]>(K.hist, []);
+  const migratedHist = hist.map((h) => {
+    if (h.providerId && h.stableId) return h;
+    changed++;
+    const sid = stableIdFromLegacy(providerId, h.type, h.id);
+    return { ...h, providerId: h.providerId ?? providerId, stableId: h.stableId ?? sid };
+  });
+  if (changed > 0) write(K.hist, migratedHist);
+
+  try { localStorage.setItem(K_MIGRATION, "done"); } catch { /* noop */ }
+}
+
+/** Reseta a flag de migração — útil quando o usuário troca de conta e
+ *  queremos re-carimbar itens que foram salvos SEM providerId após a última
+ *  migração (defensivo). Não apaga favoritos, só a flag. */
+export function resetContentRefMigration(): void {
+  if (!isBrowser()) return;
+  try { localStorage.removeItem(K_MIGRATION); } catch { /* noop */ }
+}
+
+/** Retorna o providerId ATIVO. Roda migração pendente antes. */
+export function getCurrentProviderId(): string | null {
+  migrateLegacyItems();
+  return getCurrentProviderIdInternal();
+}
+
+
 export const store = {
   getCreds: () => deobfuscateCreds(read<XtreamCreds | null>(K.creds, null)),
-  setCreds: (c: XtreamCreds | null) => write(K.creds, obfuscateCreds(c)),
+  setCreds: (c: XtreamCreds | null) => {
+    write(K.creds, obfuscateCreds(c));
+    // Provedor mudou → agenda re-migração para os PRÓXIMOS itens carimbarem
+    // com o novo providerId. Itens já carimbados não são tocados.
+    if (c) resetContentRefMigration();
+  },
 
   getM3U: () => deobfuscateList(read<M3UPlaylist[]>(K.m3u, [])),
-  setM3U: (l: M3UPlaylist[]) => write(K.m3u, obfuscateList(l)),
+  setM3U: (l: M3UPlaylist[]) => {
+    write(K.m3u, obfuscateList(l));
+    if (l.length > 0) resetContentRefMigration();
+  },
 
 
-  getFavs: () => read<FavItem[]>(K.favs, []),
+  getFavs: () => { migrateLegacyItems(); return read<FavItem[]>(K.favs, []); },
   toggleFav: (item: FavItem) => {
+    // Legacy API: continua funcionando. Enriquece com providerId+stableId
+    // do provedor ATIVO se possível — evita gerar novos itens "órfãos".
+    migrateLegacyItems();
     const cur = read<FavItem[]>(K.favs, []);
     const exists = cur.some((x) => sameItem(x, item));
-    const next = exists
-      ? cur.filter((x) => !sameItem(x, item))
-      : [{ ...item, id: String(item.id) }, ...cur];
+    if (exists) {
+      write(K.favs, cur.filter((x) => !sameItem(x, item)));
+      return cur;
+    }
+    const pid = getCurrentProviderIdInternal();
+    const enriched: FavItem = {
+      ...item,
+      id: String(item.id),
+      providerId: item.providerId ?? pid ?? undefined,
+      stableId:
+        item.stableId ??
+        (pid ? stableIdFromLegacy(pid, item.type, String(item.id)) : undefined),
+    };
+    const next = [enriched, ...cur];
+    write(K.favs, next);
+    return next;
+  },
+  /** Toggle usando ContentReference (novo caminho, colision-free entre provedores). */
+  toggleFavRef: (ref: import("./content-ref").ContentReference) => {
+    const cur = read<FavItem[]>(K.favs, []);
+    const idx = cur.findIndex((x) => x.stableId === ref.stableId);
+    if (idx >= 0) {
+      const next = cur.slice(); next.splice(idx, 1); write(K.favs, next);
+      return next;
+    }
+    // Mapeia contentType → legacy type para retrocompat com telas antigas.
+    const legacyType: FavItem["type"] =
+      ref.contentType === "movie" ? "movie" :
+      ref.contentType === "series" || ref.contentType === "episode" ? "series" :
+      "live";
+    const item: FavItem = {
+      type: legacyType,
+      id: String(ref.contentId),
+      name: ref.name,
+      logo: ref.logo,
+      providerId: ref.providerId,
+      stableId: ref.stableId,
+    };
+    const next = [item, ...cur];
     write(K.favs, next);
     return next;
   },
   isFav: (type: FavItem["type"], id: string | number) =>
     read<FavItem[]>(K.favs, []).some((x) => x.type === type && x.id === String(id)),
+  isFavRef: (ref: Pick<import("./content-ref").ContentReference, "stableId">) =>
+    read<FavItem[]>(K.favs, []).some((x) => x.stableId === ref.stableId),
   subscribeFavs: (fn: Listener) => subscribe(K.favs, fn),
+
 
   getHistory: () => read<HistItem[]>(K.hist, []),
   pushHistory: (item: HistItem) => {
