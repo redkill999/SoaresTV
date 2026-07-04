@@ -12,7 +12,7 @@ class MemoryStorage {
   get length() { return this.map.size; }
 }
 if (typeof (globalThis as { localStorage?: unknown }).localStorage === "undefined") {
-  (globalThis as { localStorage: MemoryStorage }).localStorage = new MemoryStorage();
+  (globalThis as unknown as { localStorage: Storage }).localStorage = new MemoryStorage() as unknown as Storage;
 }
 
 async function loadModule() {
