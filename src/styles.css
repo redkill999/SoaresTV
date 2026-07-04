@@ -449,22 +449,21 @@ div[style*="Edit with Lovable"],
 }
 
 
-/* Menu lateral / nav: destaque azul (mantém comportamento já validado para hover desktop) */
+/* Menu lateral / nav: destaque azul colado no botão (mesmo tamanho do item) */
 [data-nav-item]:focus,
 [data-nav-item]:focus-visible,
 [data-nav-item]:hover {
-  outline: 3px solid #3b82f6 !important;
-  outline-offset: 2px !important;
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 0 !important;
   background-color: rgba(59, 130, 246, 0.18) !important;
   color: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.35), 0 0 24px rgba(59, 130, 246, 0.45) !important;
-  border-radius: 10px;
-  transition: background-color 120ms ease, box-shadow 120ms ease, outline-offset 120ms ease;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.6) !important;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 [data-nav-item][data-active="true"] {
   background-color: rgba(59, 130, 246, 0.22) !important;
   color: #ffffff !important;
-  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7), 0 0 18px rgba(59, 130, 246, 0.35) !important;
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.7) !important;
 }
 
 /* Em TV mode o nav-item focado também fica sem moldura amarela */
@@ -472,10 +471,11 @@ div[style*="Edit with Lovable"],
 [data-tv-mode] [data-nav-item]:focus-visible,
 [data-smart-tv] [data-nav-item]:focus,
 [data-smart-tv] [data-nav-item]:focus-visible {
-  outline: none !important;
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 0 !important;
   background-color: rgba(59, 130, 246, 0.18) !important;
   color: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.35) !important;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.6) !important;
 }
 
 
