@@ -363,41 +363,24 @@ div[style*="Edit with Lovable"],
   --tv-arm-soft: rgba(255, 90, 31, 0.45);
 }
 
-/* Foco padrão em qualquer focusable — anel amarelo alto-contraste que
-   sobrevive a overflow:hidden graças ao inset. */
+/* Foco padrão em qualquer focusable — anel amarelo alto-contraste,
+   colado no elemento (sem outline-offset e sem scale) para casar
+   exatamente com o tamanho do botão. O inset garante que o anel
+   apareça mesmo dentro de containers com overflow:hidden. */
 [data-tv-mode] :focus,
 [data-tv-mode] :focus-visible,
 [data-smart-tv] :focus,
 [data-smart-tv] :focus-visible,
 .tv-focus :focus,
 .tv-focus :focus-visible {
-  outline: 3px solid var(--tv-focus, #FFD60A) !important;
-  outline-offset: 2px !important;
+  outline: 2px solid var(--tv-focus, #FFD60A) !important;
+  outline-offset: 0 !important;
   box-shadow:
-    inset 0 0 0 3px var(--tv-focus, #FFD60A),
-    0 0 20px var(--tv-focus-soft, rgba(255, 214, 10, 0.5)) !important;
-  border-radius: 10px;
+    inset 0 0 0 2px var(--tv-focus, #FFD60A),
+    0 0 12px var(--tv-focus-soft, rgba(255, 214, 10, 0.5)) !important;
   z-index: 2;
   position: relative;
-  transition: transform 120ms ease, box-shadow 120ms ease;
-}
-
-/* Tiles/cards focados também crescem levemente. */
-[data-tv-mode] button:focus,
-[data-tv-mode] button:focus-visible,
-[data-tv-mode] a:focus,
-[data-tv-mode] a:focus-visible,
-[data-tv-mode] [role="button"]:focus,
-[data-tv-mode] [role="button"]:focus-visible,
-[data-tv-mode] [tabindex]:focus,
-[data-tv-mode] [tabindex]:focus-visible,
-[data-smart-tv] button:focus,
-[data-smart-tv] button:focus-visible,
-[data-smart-tv] a:focus,
-[data-smart-tv] a:focus-visible,
-[data-smart-tv] [role="button"]:focus,
-[data-smart-tv] [role="button"]:focus-visible {
-  transform: scale(1.04);
+  transition: box-shadow 120ms ease;
 }
 
 /* Imagens dentro de tiles focados ficam mais vivas. */
