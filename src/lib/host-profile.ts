@@ -294,7 +294,7 @@ export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy
  *  futuros canais desse provedor pulam direto pro .ts via mpegts.js. */
 export function rememberHlsUnsupported(host: string): void {
   const override = getWebLiveProviderOverride(host);
-  if (override?.preventHostWideHlsBlacklist) {
+  if (override?.preventHostWideHlsBlacklist || override?.preventHostWideLearning) {
     console.log("[HOST PROFILE] rememberHlsUnsupported ignorado (override)", { host });
     return;
   }
@@ -304,7 +304,7 @@ export function rememberHlsUnsupported(host: string): void {
 /** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
 export function rememberWebIncompatibleLive(host: string): void {
   const override = getWebLiveProviderOverride(host);
-  if (override?.preventAutoWebBlacklist) {
+  if (override?.preventAutoWebBlacklist || override?.preventHostWideLearning) {
     console.log("[HOST PROFILE] rememberWebIncompatibleLive ignorado (override)", { host });
     return;
   }
@@ -317,7 +317,7 @@ export function rememberWebIncompatibleLive(host: string): void {
 // =========================================================================
 
 export type WebLiveProviderOverride = {
-  strategy: "hls-proxy-first";
+  strategy: "hls-proxy-first" | "ts-proxy-first";
   ignoreWebIncompatibleFlag?: boolean;
   preventAutoWebBlacklist?: boolean;
   preventHostWideHlsBlacklist?: boolean;
@@ -325,16 +325,34 @@ export type WebLiveProviderOverride = {
   ignoreDisableHlsConversion?: boolean;
   /** Ignora `preferTs` (preset ou persistido) para este host no Web Desktop. */
   ignorePreferTs?: boolean;
+  /** Não inventar `.m3u8` a partir de `.ts`; não gerar candidatos HLS artificiais. */
+  skipSyntheticHls?: boolean;
+  /** Ignorar `bypassProxyForLive` — força reprodução via /api/stream. */
+  ignoreBypassProxyForLive?: boolean;
+  /** Não incluir candidatos diretos (ts-direct/hls-direct) na fila. */
+  preventDirectCandidates?: boolean;
+  /** Não executar probe (`?probe=1`) antes de iniciar o mpegts.js. */
+  disablePrePlaybackProbe?: boolean;
+  /** Timeout (ms) do watchdog de primeiro quadro para este override. */
+  firstFrameTimeoutMs?: number;
+  /** Falha isolada não pode aprender/persistir flags globais para o host. */
+  preventHostWideLearning?: boolean;
 };
 
 const WEB_LIVE_PROVIDER_OVERRIDES: Record<string, WebLiveProviderOverride> = {
   "suportejetflix.site": {
-    strategy: "hls-proxy-first",
+    strategy: "ts-proxy-first",
     ignoreWebIncompatibleFlag: true,
     preventAutoWebBlacklist: true,
     preventHostWideHlsBlacklist: true,
     ignoreDisableHlsConversion: true,
     ignorePreferTs: true,
+    skipSyntheticHls: true,
+    ignoreBypassProxyForLive: true,
+    preventDirectCandidates: true,
+    disablePrePlaybackProbe: true,
+    firstFrameTimeoutMs: 20_000,
+    preventHostWideLearning: true,
   },
 };
 
