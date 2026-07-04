@@ -283,7 +283,7 @@ function LivePage() {
             loading={!creds || (categoriesQ.isLoading && !categoriesQ.data)}
             favCount={favIds.size}
             recentCount={recentIds.length}
-            totalCount={streamsQ.data?.length ?? 0}
+            totalCount={streamsQ.data?.length ?? (native && !allOptIn ? undefined : 0)}
           />
           <div data-tv-scope className="flex-1 basis-0 min-w-0 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 [-webkit-overflow-scrolling:touch]">
             {showAllOptIn ? (
