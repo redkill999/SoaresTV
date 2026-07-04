@@ -423,5 +423,44 @@ try {
   }
 } catch { /* noop */ }
 
+// Migração pontual v3 (suportejetflixWebLiveV3): remove novamente do perfil
+// persistido de suportejetflix.site as flags que impedem o override
+// ts-proxy-first (webIncompatibleLive, disableProxy aprendido, e o restante
+// das flags HLS-only da tentativa anterior). Não toca em outros hosts, conta,
+// credenciais, favoritos, histórico ou cache. Executa uma vez por dispositivo.
+const MIGRATION_KEY_V3 = "iptv.migration.suportejetflixWebLiveV3";
+try {
+  if (typeof localStorage !== "undefined" && !localStorage.getItem(MIGRATION_KEY_V3)) {
+    const TARGETS = new Set(["suportejetflix.site"]);
+    const STRIP: (keyof HostProfile)[] = [
+      "webIncompatibleLive",
+      "disableProxy",
+      "disableHlsConversion",
+      "preferTs",
+      "bypassProxyForLive",
+    ];
+    let mutated = false;
+    for (const key of Object.keys(memory)) {
+      const bare = key.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+      const matches = TARGETS.has(bare) || [...TARGETS].some((t) => bare.endsWith(`.${t}`));
+      if (!matches) continue;
+      const cur = memory[key];
+      const next: HostProfile = { ...cur };
+      let touched = false;
+      for (const flag of STRIP) {
+        if (next[flag] !== undefined) { delete next[flag]; touched = true; }
+      }
+      if (touched) {
+        memory[key] = next;
+        mutated = true;
+        console.log("[HOST PROFILE] migração v3 aplicada", { host: key });
+      }
+    }
+    if (mutated) writeStorage(memory);
+    localStorage.setItem(MIGRATION_KEY_V3, "1");
+  }
+} catch { /* noop */ }
+
+
 
 
