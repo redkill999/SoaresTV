@@ -79,9 +79,9 @@ function LoadingPage() {
         { k: "live",   action: "get_live_categories",   timeout: 15000 },
         { k: "vod",    action: "get_vod_categories",    timeout: 15000 },
         { k: "series", action: "get_series_categories", timeout: 15000 },
-        // get_live_streams pode ser muito pesado em painéis grandes (60MB+)
-        // e travar o APK indefinidamente. Timeout curto + não bloqueia navegação.
-        { k: "epg",    action: "get_live_streams",      timeout: 20000 },
+        // EPG só é validado quando o usuário abrir o Guia. Testar get_live_streams
+        // aqui baixa a lista completa e trava o APK.
+        { k: "epg",    action: "get_series_categories", timeout: 15000 },
       ];
       const result: Record<TestKey, Status> = {
         live: "pending", vod: "pending", series: "pending", epg: "pending",
