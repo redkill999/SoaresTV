@@ -28,9 +28,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 import {
   LIVE_FIRST_BYTE_TIMEOUT_MS,
+  buildUpstreamRequestHeaders,
+  classify403Body,
   findMpegTsSync,
   looksLikeTextualErrorBody,
+  pickSafeResponseHeaders,
   readFirstChunkWithTimeout,
+  readUpstreamErrorSample,
   sanitizeContentType,
 } from "@/lib/live-stream-helpers";
 
@@ -44,7 +48,7 @@ const UA_LIST = [
 
 // Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
 // do relay" e tratamento imediato de erro no player).
-const RELAY_VERSION = "v7";
+const RELAY_VERSION = "v8";
 const EXPOSED_HEADERS = [
   "X-Live-Relay-Version",
   "X-Live-Relay-Error",
@@ -57,7 +61,13 @@ const EXPOSED_HEADERS = [
   "X-Live-Relay-First-Chunk-Bytes",
   "X-Live-Relay-Mpegts-Sync",
   "X-Live-Relay-Body-Mode",
+  "X-Live-Upstream-Error-Class",
+  "X-Live-Upstream-Body-Length",
+  "X-Live-Response-Server",
+  "X-Live-Response-Cf-Ray",
+  "X-Live-Response-Retry-After",
 ].join(", ");
+
 
 
 
