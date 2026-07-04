@@ -1,9 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { api, xtreamCredsFromUrl } from "@/lib/xtream";
 import { clearPersisted } from "@/lib/query-persist";
+import {
+  getCapabilities,
+  subscribeCapabilities,
+  capabilityUnavailableReason,
+  type Capabilities,
+  type CapabilityKey,
+} from "@/lib/capabilities";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -67,6 +74,36 @@ function HomePage() {
   const [alarmMin, setAlarmMin] = useState(0);
   const alarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Capacidades descobertas em /loading. Home usa isso pra desabilitar
+  // cliques em tiles cujo servidor não suporta (ex.: painel só-Live não
+  // deve abrir /movies vazio).
+  const [caps, setCaps] = useState<Capabilities>(() => getCapabilities());
+  useEffect(() => {
+    setCaps(getCapabilities());
+    const unsub = subscribeCapabilities(() => setCaps(getCapabilities()));
+    return () => { unsub(); };
+  }, []);
+
+  /** Mapeia hotspot.key → CapabilityKey. null = tile sempre habilitado. */
+  const capOfHotspot = (key: string): CapabilityKey | null => {
+    if (key === "live") return "live";
+    if (key === "vod") return "movies";
+    if (key === "series") return "series";
+    if (key === "epg") return "epg";
+    if (key === "radio") return "radio";
+    if (key === "catchup") return "catchup";
+    return null; // conta, settings, favoritos, multi, status icons: sempre habilitados
+  };
+  const isHotspotAvailable = useMemo(() => {
+    return (key: string) => {
+      const c = capOfHotspot(key);
+      if (!c) return true;
+      // "unknown" também libera — não vamos bloquear enquanto a descoberta
+      // ainda não rodou. Só bloqueia "unavailable" comprovado.
+      return caps[c] !== "unavailable";
+    };
+  }, [caps]);
+
   useEffect(() => {
     const hasCreds = !!store.getCreds();
     const playlists = store.getM3U();
@@ -128,6 +165,14 @@ function HomePage() {
   };
 
   const onHotspot = (h: Hotspot) => {
+    // Bloqueia clique em tile cujo servidor comprovadamente NÃO oferece
+    // aquele tipo de conteúdo. Só afeta live/vod/series/epg/radio/catchup —
+    // status icons, conta, favoritos e settings continuam livres.
+    const capKey = capOfHotspot(h.key);
+    if (capKey && caps[capKey] === "unavailable") {
+      toast(capabilityUnavailableReason(capKey));
+      return;
+    }
     if (h.action === "rec")    return toggleRec();
     if (h.action === "update") return runUpdate();
     if (h.action === "conta")  return setOpenConta(true);
@@ -180,14 +225,18 @@ function HomePage() {
 
 
 
-        {HOTSPOTS.map((h) => (
+        {HOTSPOTS.map((h) => {
+          const available = isHotspotAvailable(h.key);
+          return (
           <button
             key={h.key}
             type="button"
             onClick={() => onHotspot(h)}
             data-tv-default-focus={h.key === "live" ? "" : undefined}
             aria-label={h.label}
-            className="hotspot group absolute outline-none active:scale-[0.97]"
+            aria-disabled={!available || undefined}
+            data-unavailable={!available || undefined}
+            className="hotspot group absolute outline-none active:scale-[0.97] data-[unavailable]:opacity-60"
             style={{
               left: `${h.l}%`,
               top: `${h.t}%`,
@@ -210,7 +259,8 @@ function HomePage() {
               <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
             )}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <Toaster theme="dark" />

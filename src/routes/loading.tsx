@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import React, { useEffect, useRef, useState } from "react";
 import { store } from "@/lib/storage";
 import { api, loadM3U } from "@/lib/xtream";
+import { setCapabilities, type CapabilityStatus } from "@/lib/capabilities";
 import bgAsset from "@/assets/loading-bg.png.asset.json";
 
 export const Route = createFileRoute("/loading")({
@@ -136,20 +137,32 @@ function LoadingPage() {
       await wait(700);
       if (!mountedRef.current) return;
       setStatus((p) => {
-        // Navega para /home se live+vod+series estiverem OK — o EPG (get_live_streams)
-        // é opcional: em painéis grandes ele pode falhar/timeout, mas o app funciona.
-        // Isso desbloqueia o APK que ficava travado em "Esperando..." no card do Guia.
-        const coreOk = p.live === "ok" && p.vod === "ok" && p.series === "ok";
-        if (coreOk && mountedRef.current) navigate({ to: "/home", replace: true });
+        // Persiste capacidades descobertas para a Home consultar.
+        const toCap = (s: Status): CapabilityStatus =>
+          s === "ok" ? "available" : s === "fail" ? "unavailable" : "unknown";
+        setCapabilities({
+          live: toCap(p.live),
+          movies: toCap(p.vod),
+          series: toCap(p.series),
+          epg: toCap(p.epg),
+          // radio/catchup não são testados aqui — mantêm unknown por ora.
+        });
+        // ANTES: exigia live+vod+series todos OK. AGORA: libera Home com
+        // qualquer conteúdo real disponível (live OU vod OU series). A Home
+        // desabilita cliques nos tiles indisponíveis explicando o motivo.
+        const anyContent = p.live === "ok" || p.vod === "ok" || p.series === "ok";
+        if (anyContent && mountedRef.current) navigate({ to: "/home", replace: true });
         return p;
       });
     })();
   }, [navigate]);
 
-  const anyFail = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "fail");
   const anyPending = (["live","vod","series"] as TestKey[]).some((k) => status[k] === "pending");
+  const allFailed  = (["live","vod","series"] as TestKey[]).every((k) => status[k] === "fail");
 
-  const finishedWithFailure = !anyPending && anyFail;
+  // Só mostra tela de erro quando NENHUMA capacidade real está disponível.
+  // Antes o app travava aqui se apenas uma delas falhasse (ex.: painel só-Live).
+  const finishedWithFailure = !anyPending && allFailed;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black overflow-hidden">
