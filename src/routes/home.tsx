@@ -38,21 +38,21 @@ const HOTSPOTS: Hotspot[] = [
   { key: "msg",    label: "MENSAGENS",  action: "msg",    l: 87.5, t: 4,  w: 7, h: 16 },
   { key: "update", label: "ATUALIZAR",  action: "update", l: 94.0, t: 4,  w: 6, h: 16 },
 
-  // Tiles principais
-  { key: "live",   label: "TV AO VIVO", to: "/live",     l: 6.5,  t: 30, w: 19, h: 44 },
-  { key: "epg",    label: "GUIA",       to: "/guide",    l: 28.5, t: 30, w: 19, h: 44 },
-  { key: "vod",    label: "FILMES",     to: "/movies",   l: 50.5, t: 30, w: 19, h: 44 },
-  { key: "series", label: "SÉRIES",     to: "/series",   l: 72.5, t: 30, w: 19, h: 44 },
+  // Tiles principais — medidos pixel a pixel na arte (1376x768)
+  { key: "live",   label: "TV AO VIVO", to: "/live",     l: 5.74,  t: 33.33, w: 20.71, h: 35.81 },
+  { key: "epg",    label: "GUIA",       to: "/guide",    l: 28.27, t: 33.33, w: 20.71, h: 35.81 },
+  { key: "vod",    label: "FILMES",     to: "/movies",   l: 50.80, t: 33.33, w: 20.42, h: 35.81 },
+  { key: "series", label: "SÉRIES",     to: "/series",   l: 73.04, t: 33.33, w: 20.64, h: 35.81 },
 
-  // Rodapé esquerdo
-  { key: "account",  label: "CONTA",       action: "conta", l: 3.5,  t: 76, w: 10, h: 20 },
-  { key: "multi",    label: "MULTITELA",   to: "/live",     l: 14.5, t: 76, w: 10, h: 20 },
-  { key: "catchup",  label: "REPRISE",     to: "/live",     l: 25.5, t: 76, w: 10, h: 20 },
+  // Rodapé esquerdo — medidos na arte
+  { key: "account",  label: "CONTA",       action: "conta", l: 3.85,  t: 78.52, w: 8.36, h: 15.36 },
+  { key: "multi",    label: "MULTITELA",   to: "/live",     l: 14.10, t: 78.52, w: 8.36, h: 15.36 },
+  { key: "catchup",  label: "REPRISE",     to: "/live",     l: 24.35, t: 78.52, w: 8.72, h: 15.36 },
 
-  // Rodapé direito
-  { key: "favorite", label: "FAVORITOS",   to: "/favorites", l: 67.5, t: 76, w: 10, h: 20 },
-  { key: "radio",    label: "RÁDIO",       to: "/live",      l: 78.5, t: 76, w: 10, h: 20 },
-  { key: "settings", label: "CONFIGURAÇÕES", to: "/settings", l: 89.5, t: 76, w: 10, h: 20 },
+  // Rodapé direito — medidos na arte
+  { key: "favorite", label: "FAVORITOS",   to: "/favorites", l: 66.72, t: 78.52, w: 8.36, h: 15.36 },
+  { key: "radio",    label: "RÁDIO",       to: "/live",      l: 77.03, t: 78.52, w: 8.50, h: 15.36 },
+  { key: "settings", label: "CONFIGURAÇÕES", to: "/settings", l: 87.50, t: 78.52, w: 8.50, h: 15.36 },
 ];
 
 function HomePage() {

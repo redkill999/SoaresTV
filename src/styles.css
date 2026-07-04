@@ -503,7 +503,7 @@ iframe[src*="gpteng.co"] {
    arte. Escondido por padrão; aparece só ao focar. */
 .hotspot { border-radius: 1rem; }
 .hotspot .hotspot-ring {
-  inset: 0.5% -3%;
+  inset: 0;
   box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
   transition: box-shadow 140ms ease, background-color 140ms ease;
   background-color: transparent;
