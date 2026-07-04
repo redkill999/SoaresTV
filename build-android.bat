@@ -12,15 +12,19 @@ cd /d "%~dp0"
 title SoaresTV - Build Android
 color 0A
 
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=debug"
+
 set "LOG_FILE=%CD%\build-android.log"
 echo ============================================================ > "%LOG_FILE%"
 echo SoaresTV - Build Android - %DATE% %TIME% >> "%LOG_FILE%"
+echo Modo: %MODE% >> "%LOG_FILE%"
 echo Pasta: %CD% >> "%LOG_FILE%"
 echo ============================================================ >> "%LOG_FILE%"
 
 echo.
 echo ============================================================
-echo   SOARESTV - GERADOR DE APK ANDROID
+echo   SOARESTV - GERADOR DE APK ANDROID  (modo: %MODE%)
 echo ============================================================
 echo.
 echo Log desta execucao: %LOG_FILE%
