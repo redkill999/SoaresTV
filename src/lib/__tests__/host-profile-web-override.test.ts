@@ -25,9 +25,16 @@ beforeEach(() => {
 });
 
 describe("getWebLiveProviderOverride — suportejetflix.site", () => {
-  it("host exato encontra override", async () => {
+  it("host exato encontra override ts-proxy-first", async () => {
     const { getWebLiveProviderOverride } = await loadModule();
-    expect(getWebLiveProviderOverride("suportejetflix.site")?.strategy).toBe("hls-proxy-first");
+    const o = getWebLiveProviderOverride("suportejetflix.site")!;
+    expect(o.strategy).toBe("ts-proxy-first");
+    expect(o.skipSyntheticHls).toBe(true);
+    expect(o.preventDirectCandidates).toBe(true);
+    expect(o.disablePrePlaybackProbe).toBe(true);
+    expect(o.ignoreBypassProxyForLive).toBe(true);
+    expect(o.preventHostWideLearning).toBe(true);
+    expect(o.firstFrameTimeoutMs).toBe(20_000);
   });
   it("www.suportejetflix.site encontra override", async () => {
     const { getWebLiveProviderOverride } = await loadModule();
