@@ -1109,24 +1109,30 @@ export function VideoPlayer({
       }
       const url = playbackCandidates[vodIdx] ?? (nativeDirect ? workingSrc : proxiedX(workingSrc, kind));
       triedUrls.add(normUrl(url));
-      const isProxied = /^\/api\/stream\?/i.test(url);
+      // Reconhece tanto /api/stream quanto o relay dedicado /api/live-stream
+      // como candidatos "via proxy" — o URL do relay pode estar absoluto
+      // (mesmo origin), então testamos o pathname em vez do prefixo.
+      const isProxied = (() => {
+        try {
+          const p = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://x").pathname;
+          return p === "/api/stream" || p === "/api/live-stream";
+        } catch {
+          return /\/api\/(stream|live-stream)\?/i.test(url);
+        }
+      })();
       // ETAPA 8.6: LIVE caiu no candidato direto (fora do proxy) — útil pra
       // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
+      // Skip para hosts com override (preventHostWideLearning): uma falha
+      // isolada não deve virar decisão global de host.
       if (isLive && !isProxied) {
         pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
-        // Aprendizado: chegamos a um candidato direto LIVE, logo todos os
-        // proxiados anteriores falharam (404/5xx). Memoriza pra próxima sessão
-        // já priorizar direto pra esse host e não desperdiçar tentativas.
         try {
           const h = hostOf(url);
-          if (h && !getHostProfile(h).bypassProxyForLive) {
+          if (h && !getHostProfile(h).bypassProxyForLive && !webOverride?.preventHostWideLearning) {
             updateHostProfile(h, { bypassProxyForLive: true });
             pushDbg(`ETAPA 8.6 host ${h} marcado bypassProxyForLive=true`);
           }
         } catch { /* noop */ }
-        // Mixed content: página https + stream http é silenciosamente bloqueada
-        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
-        // o tryNextVod normalmente.
         try {
           if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
             pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
@@ -1136,7 +1142,7 @@ export function VideoPlayer({
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
       // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
-      const isProxyCandidate = /^\/api\/stream\?/i.test(url);
+      const isProxyCandidate = isProxied;
       const candidateType = /\.m3u8(\?|&|$)/i.test(decodedUrl)
         ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
         : (isProxyCandidate ? "ts-proxy" : "ts-direct");
