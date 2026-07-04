@@ -145,34 +145,34 @@ function LivePage() {
   const parentalActive = !!parental.pin && lockedCats.size > 0;
 
   const filtered = useMemo(() => {
-    // Se uma categoria específica está selecionada e temos dados do
-    // per-cat query, usamos ele. Senão, cai no streamsQ "all".
+    // Se uma categoria específica está selecionada e o per-cat trouxe itens,
+    // usamos ele como fonte principal. Array vazio NÃO conta como "tem dados".
     const source: LiveStream[] =
-      perCatEnabled && perCatQ.data ? perCatQ.data : (streamsQ.data ?? []);
+      perCatEnabled && hasPerCategoryData ? (perCatQ.data as LiveStream[]) : (streamsQ.data ?? []);
     let list: LiveStream[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((x) => favIds.has(String(x.stream_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((x) => order.has(String(x.stream_id))).sort((a, b) => order.get(String(a.stream_id))! - order.get(String(b.stream_id))!);
-    } else if (cat !== "all" && !perCatQ.data) {
+    } else if (cat !== "all" && !hasPerCategoryData) {
       // Só filtra pelo streamsQ se não veio do per-cat (que já vem filtrado).
       list = list.filter((x) => String(x.category_id) === cat);
     }
-    // Parental: em qualquer view não-específica (all/favorites/recent),
-    // esconde canais cuja category_id esteja bloqueada. A view específica
-    // (cat === category bloqueada) continua sendo protegida pelo ParentalGate.
     if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
       list = list.filter((x) => !lockedCats.has(String(x.category_id)));
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [streamsQ.data, perCatQ.data, perCatEnabled, deferredSearch, cat, favIds, recentIds, sort, parentalActive, lockedCats]);
+  }, [streamsQ.data, perCatQ.data, perCatEnabled, hasPerCategoryData, deferredSearch, cat, favIds, recentIds, sort, parentalActive, lockedCats]);
 
   const needGate = cat !== "all" && cat !== "favorites" && cat !== "recent" && !!parental.pin && parental.lockedCategories.includes(cat);
-  // FIX (audit perf): handler estável evita re-render do XciptvCategoryList memoizado.
   const handleCatChange = useCallback((v: string) => { setCat(v); setUnlocked(false); }, []);
 
+  // Erro real (timeout / rede) na fonte ativa — mostra retry.
+  const activeError = perCatEnabled ? perCatQ.error : streamsQ.error;
+  const activeIsError = perCatEnabled ? perCatQ.isError : streamsQ.isError;
+  const retryActive = () => { if (perCatEnabled) void perCatQ.refetch(); else void streamsQ.refetch(); };
 
   return (
     <PremiumChrome>
@@ -197,6 +197,21 @@ function LivePage() {
                 {Array.from({ length: 18 }).map((_, i) => (
                   <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
                 ))}
+              </div>
+            ) : filtered.length === 0 && activeIsError ? (
+              <div className="py-16 text-center text-white/70">
+                <Tv className="size-10 mx-auto mb-3 opacity-40" />
+                <p className="mb-3">Não foi possível carregar os canais {perCatEnabled ? "desta categoria" : ""}.</p>
+                {activeError instanceof Error && (
+                  <p className="text-xs text-white/40 mb-3">{activeError.message}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={retryActive}
+                  className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
+                >
+                  Tentar novamente
+                </button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="py-16 text-center text-white/60">
