@@ -1,20 +1,27 @@
 // -----------------------------------------------------------------------------
-// Token verification (HMAC-SHA256, base64url).
-// Format emitted by /api/live-token in the Lovable app:
-//   `${b64url(JSON.stringify(payload))}.${b64url(signature)}`
-// Payload (produced by the app, verified here):
-//   { providerId: string, streamId: string, kind: "live", exp: number, nonce: string }
-// The relay NEVER accepts a URL/user/pass in the token — only identifiers.
+// AES-256-GCM opaque token verification (Node side).
+// Format: b64url( VERSION(1=0x02) || IV(12) || CIPHERTEXT || TAG(16) )
+// Key: SHA-256(LIVE_RELAY_ENCRYPTION_KEY) — matches the Lovable backend impl.
 // -----------------------------------------------------------------------------
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createDecipheriv, createHash } from "node:crypto";
 
 export interface RelayTokenPayload {
-  providerId: string;
+  version: 1;
+  host: string;
+  port: number | null;
+  protocol: "http" | "https";
+  username: string;
+  password: string;
   streamId: string;
-  kind: "live";
-  exp: number;
+  extension: "ts";
+  issuedAt: number;
+  expiresAt: number;
   nonce: string;
 }
+
+const VERSION_AES_GCM_V1 = 0x02;
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
 
 function b64urlDecode(s: string): Buffer {
   const pad = 4 - (s.length % 4 || 4);
@@ -24,36 +31,50 @@ function b64urlDecode(s: string): Buffer {
 
 export function verifyRelayToken(
   token: string,
-  secret: string,
+  encryptionKey: string,
 ): { ok: true; payload: RelayTokenPayload } | { ok: false; reason: string } {
-  if (typeof token !== "string" || token.length === 0 || token.length > 2048) {
+  if (typeof token !== "string" || token.length === 0 || token.length > 4096) {
     return { ok: false, reason: "token-shape" };
   }
-  const dot = token.indexOf(".");
-  if (dot <= 0 || dot === token.length - 1) return { ok: false, reason: "token-shape" };
-  const payloadB64 = token.slice(0, dot);
-  const sigB64 = token.slice(dot + 1);
-  if (!/^[A-Za-z0-9_-]+$/.test(payloadB64) || !/^[A-Za-z0-9_-]+$/.test(sigB64)) {
-    return { ok: false, reason: "token-chars" };
-  }
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) return { ok: false, reason: "token-chars" };
 
-  const expected = createHmac("sha256", secret).update(payloadB64).digest();
-  let received: Buffer;
-  try { received = b64urlDecode(sigB64); } catch { return { ok: false, reason: "sig-decode" }; }
-  if (expected.length !== received.length) return { ok: false, reason: "sig-length" };
-  if (!timingSafeEqual(expected, received)) return { ok: false, reason: "sig-mismatch" };
+  let bytes: Buffer;
+  try { bytes = b64urlDecode(token); } catch { return { ok: false, reason: "b64" }; }
+  if (bytes.length < 1 + IV_BYTES + TAG_BYTES + 1) return { ok: false, reason: "length" };
+  if (bytes[0] !== VERSION_AES_GCM_V1) return { ok: false, reason: "version" };
+
+  const iv = bytes.subarray(1, 1 + IV_BYTES);
+  const rest = bytes.subarray(1 + IV_BYTES);
+  const tag = rest.subarray(rest.length - TAG_BYTES);
+  const ciphertext = rest.subarray(0, rest.length - TAG_BYTES);
+
+  const key = createHash("sha256").update(encryptionKey, "utf8").digest();
+
+  let plaintext: Buffer;
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch { return { ok: false, reason: "decrypt" }; }
 
   let payload: RelayTokenPayload;
-  try {
-    payload = JSON.parse(b64urlDecode(payloadB64).toString("utf8")) as RelayTokenPayload;
-  } catch { return { ok: false, reason: "payload-json" }; }
+  try { payload = JSON.parse(plaintext.toString("utf8")) as RelayTokenPayload; }
+  catch { return { ok: false, reason: "json" }; }
 
-  if (typeof payload !== "object" || payload === null) return { ok: false, reason: "payload-shape" };
-  if (typeof payload.providerId !== "string" || !payload.providerId) return { ok: false, reason: "payload-host" };
-  if (typeof payload.streamId !== "string" || !/^\d{1,12}$/.test(payload.streamId)) return { ok: false, reason: "payload-stream" };
-  if (payload.kind !== "live") return { ok: false, reason: "payload-kind" };
-  if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp)) return { ok: false, reason: "payload-exp" };
-  if (Math.floor(Date.now() / 1000) > payload.exp) return { ok: false, reason: "expired" };
-
+  if (!payload || typeof payload !== "object") return { ok: false, reason: "shape" };
+  if (payload.version !== 1) return { ok: false, reason: "payload-version" };
+  if (typeof payload.host !== "string" || !payload.host) return { ok: false, reason: "host" };
+  if (payload.protocol !== "http" && payload.protocol !== "https") return { ok: false, reason: "protocol" };
+  if (typeof payload.username !== "string" || !payload.username) return { ok: false, reason: "username" };
+  if (typeof payload.password !== "string" || !payload.password) return { ok: false, reason: "password" };
+  if (typeof payload.streamId !== "string" || !/^\d{1,12}$/.test(payload.streamId)) {
+    return { ok: false, reason: "streamId" };
+  }
+  if (typeof payload.expiresAt !== "number" || Math.floor(Date.now() / 1000) > payload.expiresAt) {
+    return { ok: false, reason: "expired" };
+  }
+  if (typeof payload.nonce !== "string" || payload.nonce.length < 8) {
+    return { ok: false, reason: "nonce" };
+  }
   return { ok: true, payload };
 }
