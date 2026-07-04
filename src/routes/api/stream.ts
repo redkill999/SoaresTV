@@ -399,6 +399,9 @@ async function handle(request: Request) {
     respHeaders.delete("content-length");
     respHeaders.delete("content-range");
     respHeaders.delete("accept-ranges");
+    respHeaders.delete("content-encoding");
+    respHeaders.set("Cache-Control", "no-store, no-cache, no-transform");
+    respHeaders.set("X-Accel-Buffering", "no");
   }
 
   if (isPlaylist && upstream.ok) {
