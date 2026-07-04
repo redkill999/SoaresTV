@@ -288,7 +288,14 @@ function handleKey(e: KeyboardEvent) {
     return;
   }
 
-  if (typing) return;
+  // Em modo TV, Up/Down PRECISAM funcionar mesmo com um <input> focado —
+  // não existe Tab no controle remoto. Sem isto o usuário fica preso no
+  // campo Servidor do login e todos os campos parecem "selecionados juntos".
+  // Fora de tvMode (teclado desktop), typing continua bloqueando 100%.
+  if (typing) {
+    if (!tvMode) return;
+    if (!isUp && !isDown) return; // Left/Right e digitação seguem normais no input
+  }
 
   // No navegador desktop, deixa setas/scroll nativos funcionarem normalmente.
   // A navegação espacial por D-pad fica restrita ao APK/Smart TV.
