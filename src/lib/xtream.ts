@@ -302,14 +302,69 @@ export async function api<T = unknown>(
   return maybePreserveLiveUrls(c, action, r.data as T);
 }
 
-async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
-  if (action !== "get_live_streams" || !Array.isArray(data)) return data;
-  try {
-    return (await preserveOriginalLiveUrls(c, data as LiveStream[])) as T;
-  } catch {
-    return data;
-  }
+/**
+ * Aceita como válido qualquer objeto Xtream com `stream_id` e `name`.
+ * NÃO exige `url` — a maioria dos painéis só devolve `stream_id`+metadados,
+ * e a URL é montada com `streamUrl.live(creds, stream_id)` na hora de tocar.
+ */
+export function isValidLiveStream(stream: unknown): stream is LiveStream {
+  if (!stream || typeof stream !== "object") return false;
+  const item = stream as Partial<LiveStream>;
+  return (
+    item.stream_id !== undefined &&
+    item.stream_id !== null &&
+    Number.isFinite(Number(item.stream_id)) &&
+    typeof item.name === "string" &&
+    item.name.trim().length > 0
+  );
 }
+
+/**
+ * Normaliza a resposta de `get_live_streams` para `LiveStream[]`.
+ * Aceita array direto, string JSON, ou objeto com `data`/`streams`/`live_streams`/`results`.
+ * Rejeita HTML, tela de login, objeto de erro. Não descarta canais sem `stream_icon`/`url`.
+ */
+export function normalizeLiveStreamsResponse(input: unknown): LiveStream[] {
+  let value: unknown = input;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.startsWith("<")) {
+      throw new Error("O servidor não retornou uma lista de canais válida.");
+    }
+    try { value = JSON.parse(trimmed); }
+    catch { throw new Error("O servidor não retornou uma lista de canais válida."); }
+  }
+  if (!Array.isArray(value) && value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    value = obj.data ?? obj.streams ?? obj.live_streams ?? obj.results;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("Resposta Xtream de canais em formato inesperado.");
+  }
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const s = item as Record<string, unknown>;
+      return {
+        ...s,
+        stream_id: Number(s.stream_id),
+        category_id: String(s.category_id ?? ""),
+        name: String(s.name ?? "").trim(),
+        stream_icon: String(s.stream_icon ?? ""),
+      } as LiveStream;
+    })
+    .filter(isValidLiveStream);
+}
+
+async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
+  if (action !== "get_live_streams") return data;
+  let normalized: LiveStream[];
+  try { normalized = normalizeLiveStreamsResponse(data); }
+  catch { return data; }
+  try { return (await preserveOriginalLiveUrls(c, normalized)) as T; }
+  catch { return normalized as unknown as T; }
+}
+
 
 export function extractLiveStreamIdFromUrl(url: string): number | null {
   try {
