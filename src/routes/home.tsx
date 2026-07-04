@@ -187,8 +187,7 @@ function HomePage() {
             onClick={() => onHotspot(h)}
             data-tv-default-focus={h.key === "live" ? "" : undefined}
             aria-label={h.label}
-
-            className="group absolute rounded-2xl transition-colors duration-150 hover:bg-white/[0.07] focus:bg-white/[0.14] focus-visible:bg-white/[0.14] focus:outline focus:outline-2 focus:outline-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 focus:z-10 active:scale-[0.97] [outline-offset:0px]"
+            className="hotspot group absolute outline-none active:scale-[0.97]"
             style={{
               left: `${h.l}%`,
               top: `${h.t}%`,
@@ -196,7 +195,10 @@ function HomePage() {
               height: `${h.h}%`,
             }}
           >
-            {/* indicador visual ao focar (TV / teclado) */}
+            {/* Overlay do foco — encaixado por dentro do hotbox pra casar
+                com a arte de cada tile do background (que tem margem
+                interna em relação à área clicável). */}
+            <span aria-hidden className="hotspot-ring pointer-events-none absolute inset-0 rounded-2xl" />
             <span className="sr-only">{h.label}</span>
             {h.key === "rec" && recOn && (
               <span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
