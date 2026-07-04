@@ -188,7 +188,7 @@ function HomePage() {
             data-tv-default-focus={h.key === "live" ? "" : undefined}
             aria-label={h.label}
 
-            className="group absolute rounded-2xl outline-none transition-all duration-150 hover:bg-white/[0.07] focus:bg-white/[0.14] focus:ring-4 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-black focus:scale-[1.04] focus:shadow-[0_0_28px_rgba(251,191,36,0.85)] focus:z-10 focus-visible:bg-white/[0.14] focus-visible:ring-4 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black focus-visible:scale-[1.04] focus-visible:shadow-[0_0_28px_rgba(251,191,36,0.85)] active:scale-[0.97]"
+            className="group absolute rounded-2xl outline-none transition-colors duration-150 hover:bg-white/[0.07] focus:bg-white/[0.14] focus:ring-2 focus:ring-inset focus:ring-amber-400 focus:z-10 focus-visible:bg-white/[0.14] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 active:scale-[0.97]"
             style={{
               left: `${h.l}%`,
               top: `${h.t}%`,
