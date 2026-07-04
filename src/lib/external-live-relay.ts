@@ -37,7 +37,7 @@ export async function mintExternalLiveRelayUrl(
     if (!res.ok) return null;
     const j = (await res.json().catch(() => null)) as { ok?: boolean; token?: string } | null;
     if (!j?.ok || !j.token) return null;
-    return `${base}/live?token=${encodeURIComponent(j.token)}`;
+    return `${base}/live/${encodeURIComponent(j.token)}`;
   } catch {
     return null;
   }
