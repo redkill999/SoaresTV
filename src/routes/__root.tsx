@@ -146,13 +146,12 @@ const TV_MODE_SCRIPT = `(function(){
       var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|androidtv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox|tcl|mibox|mitv|chromecast|aosp on iat|linux; ?android[^)]*; ?(?:tv|atv|mibox|tcl)/.test(ua);
       // Flag opcional injetada por plugin nativo (UiModeManager em Android):
       // "tv" | "phone" | "tablet". Se presente, tem prioridade sobre heurísticas.
-      var injectedType = window.__deviceType;
+      var injectedType = window.__deviceType || '';
       var isExplicitTV = injectedType === 'tv';
-      var isExplicitPhone = injectedType === 'phone';
-      var isExplicitTablet = injectedType === 'tablet';
+      var isExplicitPhone = injectedType === 'phone' || injectedType === 'tablet';
       // TV mode: só APK/Smart TV **de verdade**. APK de celular/tablet NÃO recebe data-tv-mode.
-      // isNative NÃO implica TV mais — só entra no waterfall se UA indicar Smart TV / TV Box.
-      var isTV = isExplicitTV || (!isExplicitPhone && !isExplicitTablet && isSmartTV);
+      // Se plugin nativo injetou window.__deviceType, ele tem prioridade absoluta.
+      var isTV = isExplicitTV || (!isExplicitPhone && isSmartTV);
       var html = document.documentElement;
       if (isSmartTV) html.setAttribute && document.documentElement.setAttribute('data-smart-tv','');
 
