@@ -19,16 +19,27 @@ import { useProgressive } from "@/hooks/use-progressive";
 import { filterBySearch, getSorted } from "@/lib/search-index";
 import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { isNative } from "@/lib/device-profile";
+import { timed } from "@/lib/iptv-log";
 import { Tv, RefreshCw } from "lucide-react";
 
-// Cache v2: chaves separadas, aceita cache sem `url`.
-// Não apagamos o cache v1 aqui — apenas ignoramos (evita perder favoritos/histórico).
+// Cache v2: chaves separadas por provider + conta, aceita cache sem `url`.
+// providerId fixo "xtream" para permitir futura coexistência com outros providers
+// sem colisão de chaves. Não apagamos v1 aqui — apenas ignoramos.
+const PROVIDER = "xtream";
 const K = {
-  cats: (acct: string) => `live-cats:v2:${acct}`,
-  all: (acct: string) => `live-streams:v2:${acct}:all`,
-  cat: (acct: string, cat: string) => `live-streams:v2:${acct}:cat:${cat}`,
-  counts: (acct: string) => `live-counts:v1:${acct}`,
-  lastCat: (acct: string) => `live-lastcat:v1:${acct}`,
+  cats: (acct: string) => `live-cats:v2:${PROVIDER}:${acct}`,
+  all: (acct: string) => `live-streams:v2:${PROVIDER}:${acct}:all`,
+  cat: (acct: string, cat: string) =>
+    `live-streams:v2:${PROVIDER}:${acct}:category:${cat}`,
+  counts: (acct: string) => `live-counts:v1:${PROVIDER}:${acct}`,
+  lastCat: (acct: string) => `live-lastcat:v1:${PROVIDER}:${acct}`,
+};
+// Query keys também namespaced: [live-*, provider, acct, ...]
+const QK = {
+  cats: (acct: string) => ["live-cats", PROVIDER, acct] as const,
+  all: (acct: string) => ["live-streams", PROVIDER, acct, "all"] as const,
+  cat: (acct: string, cat: string) =>
+    ["live-streams", PROVIDER, acct, "category", cat] as const,
 };
 
 function readCounts(acct: string): Record<string, number> {
