@@ -1106,13 +1106,15 @@ export function VideoPlayer({
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
       // precisa passar pelo mpegts.js. VOD continua intocado.
       if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
-        armFirstFrameWatchdog(candidateType);
-        void playMpegTs(url).then((handled) => {
+        // NÃO armar watchdog aqui: playMpegTs arma internamente APÓS
+        // attach/load/play, garantindo os 20s reais para o primeiro quadro.
+        void playMpegTs(url, candidateType).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
             video.currentTime = 0;
             video.src = url;
             video.load();
+            armFirstFrameWatchdog(candidateType);
             video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
           }
         });
