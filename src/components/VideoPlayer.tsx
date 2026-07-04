@@ -736,11 +736,19 @@ export function VideoPlayer({
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
     // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
+    // Web-Live override: para hosts com override, ignorar flags TS-only
+    // (persistidas ou vindas do preset). Sem isso, o preset seguia forçando
+    // MPEG-TS no Web Desktop e a tela ficava preta.
+    const effectiveDisableHlsConversion =
+      webOverride?.ignoreDisableHlsConversion ? false : !!liveHostProfile.disableHlsConversion;
+    // `streamFormat === "ts"` do compat também é ignorado quando o override
+    // pede HLS-first — spec item 3.
     const skipHls =
-      compat.streamFormat === "ts" ||
+      (compat.streamFormat === "ts" && !webOverride) ||
       compat.streamFormat === "mp4" ||
-      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
+      (isLive && effectiveDisableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
+
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     // VOD (filmes/séries) deve ser conservador: usa exatamente a URL resolvida
