@@ -82,18 +82,25 @@ export function PremiumChrome({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [openStatus]);
 
-  const runUpdate = () => {
+  const runUpdate = async () => {
     try {
-      // Limpa caches de catálogo (IndexedDB + memória) e o cache do React Query.
-      // NÃO apaga credenciais, favoritos, histórico ou lista M3U salvas em `store`.
+      // Limpa caches de catálogo (IndexedDB + memória). NÃO apaga credenciais,
+      // favoritos, histórico, controle parental ou lista M3U salvas em `store`.
       Object.keys(localStorage)
         .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
         .forEach((k) => localStorage.removeItem(k));
-      clearPersisted(); // IndexedDB qcache
-      queryClient.clear(); // memória do React Query
-      toast.success("Conteúdos atualizados");
-      setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
-    } catch { toast.error("Falha ao atualizar"); }
+      // Limpa entradas persistidas por prefixo (v3 + versões antigas).
+      ["live-streams:", "vod-list:", "series-list:", "live-cats:", "vod-cats:", "series-cats:"]
+        .forEach((p) => clearPersisted(p));
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      toast.success("Catálogos limpos. Atualizando...");
+      navigate({ to: "/loading", replace: true });
+      setTimeout(() => { try { window.location.reload(); } catch { /* noop */ } }, 300);
+    } catch (error) {
+      console.error("[UPDATE]", error);
+      toast.error("Falha ao limpar os catálogos.");
+    }
   };
   const toggleRec = () => { const n = !recOn; setRecOn(n); toast.success(n ? "Gravação iniciada" : "Gravação parada"); };
   const setSleepTimer = (mins: number) => {
