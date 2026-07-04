@@ -1078,21 +1078,70 @@ export function VideoPlayer({
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
 
+    // ---- First-frame watchdog (webOverride only) --------------------------
+    // Impede tela preta indefinida: se em 10s não recebermos o primeiro frame
+    // (HAVE_CURRENT_DATA + videoWidth>0), destrói a engine atual e avança.
+    // Trava `advancingCandidate` garante que erro do mpegts + timeout não
+    // avancem duas vezes. Só ativo quando webOverride está presente para não
+    // regredir o comportamento em outros provedores/plataformas.
+    let firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
+    let advancingCandidate = false;
+    const clearFirstFrameWatchdog = () => {
+      if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+    };
+    const advanceCandidate = (reason: string) => {
+      if (advancingCandidate || cancelled) return;
+      advancingCandidate = true;
+      clearFirstFrameWatchdog();
+      if (hls) { try { hls.destroy(); } catch { /* noop */ } hls = null; }
+      destroyTsPlayer();
+      vodIdx += 1;
+      pushDbg(`ADV candidate reason=${reason} nextIdx=${vodIdx}`);
+      queueMicrotask(() => {
+        advancingCandidate = false;
+        if (!cancelled) playDirect();
+      });
+    };
+    const armFirstFrameWatchdog = (candidateType: string) => {
+      if (!webOverride) return;
+      clearFirstFrameWatchdog();
+      firstFrameTimer = setTimeout(() => {
+        firstFrameTimer = null;
+        if (cancelled) return;
+        const hasFrame =
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          video.videoWidth > 0 && video.videoHeight > 0;
+        if (hasFrame) return;
+        pushDbg(
+          `first-frame-timeout candidate=${candidateType} readyState=${video.readyState} ` +
+          `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+        );
+        advanceCandidate(`first-frame-timeout:${candidateType}`);
+      }, 10_000);
+    };
+
     const onVideoError = () => {
       const mediaErr = video.error;
-      pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
+      pushDbg(
+        `<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} ` +
+        `netState=${video.networkState} readyState=${video.readyState} ` +
+        `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+      );
       if (cancelled || hls) return;
+      if (webOverride) { advanceCandidate(`video-error:${mediaErr?.code ?? "?"}`); return; }
       tryNextVod();
     };
-    const onVideoReady = () => clearWatchdog();
+    const onVideoReady = () => { clearWatchdog(); clearFirstFrameWatchdog(); };
     const onPlaying = () => {
       clearWatchdog();
+      clearFirstFrameWatchdog();
       setCanManualPlay(false);
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
+
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
