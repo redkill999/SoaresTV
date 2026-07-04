@@ -736,11 +736,19 @@ export function VideoPlayer({
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
     // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
+    // Web-Live override: para hosts com override, ignorar flags TS-only
+    // (persistidas ou vindas do preset). Sem isso, o preset seguia forçando
+    // MPEG-TS no Web Desktop e a tela ficava preta.
+    const effectiveDisableHlsConversion =
+      webOverride?.ignoreDisableHlsConversion ? false : !!liveHostProfile.disableHlsConversion;
+    // `streamFormat === "ts"` do compat também é ignorado quando o override
+    // pede HLS-first — spec item 3.
     const skipHls =
-      compat.streamFormat === "ts" ||
+      (compat.streamFormat === "ts" && !webOverride) ||
       compat.streamFormat === "mp4" ||
-      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
+      (isLive && effectiveDisableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
+
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     // VOD (filmes/séries) deve ser conservador: usa exatamente a URL resolvida
@@ -975,8 +983,11 @@ export function VideoPlayer({
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
           pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
-          if (!cancelled) tryNextVod();
+          if (cancelled) return;
+          if (webOverride) advanceCandidate(`mpegts-error:${String(errType)}`);
+          else tryNextVod();
         });
+
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
         const playPromise = tsPlayer.play();
@@ -1041,16 +1052,24 @@ export function VideoPlayer({
       }
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
+      // Marca o tipo do candidato para diagnóstico do watchdog (webOverride).
+      const isProxyCandidate = /^\/api\/stream\?/i.test(url);
+      const candidateType = /\.m3u8(\?|&|$)/i.test(decodedUrl)
+        ? (isProxyCandidate ? "hls-proxy" : "hls-direct")
+        : (isProxyCandidate ? "ts-proxy" : "ts-direct");
 
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
+        armFirstFrameWatchdog(candidateType);
         attachHls(url);
         return;
       }
+
       // LIVE MPEG-TS de M3U pode não ter extensão visível (ex.: /user/pass/id)
       // ou estar dentro do /api/stream?u=... sem .ts no path. Nesses casos o
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
       // precisa passar pelo mpegts.js. VOD continua intocado.
       if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
+        armFirstFrameWatchdog(candidateType);
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
@@ -1067,24 +1086,75 @@ export function VideoPlayer({
       video.src = url;
       video.load();
       armVodWatchdog();
+      armFirstFrameWatchdog(candidateType);
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+    };
+
+
+    // ---- First-frame watchdog (webOverride only) --------------------------
+    // Impede tela preta indefinida: se em 10s não recebermos o primeiro frame
+    // (HAVE_CURRENT_DATA + videoWidth>0), destrói a engine atual e avança.
+    // Trava `advancingCandidate` garante que erro do mpegts + timeout não
+    // avancem duas vezes. Só ativo quando webOverride está presente para não
+    // regredir o comportamento em outros provedores/plataformas.
+    let firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
+    let advancingCandidate = false;
+    const clearFirstFrameWatchdog = () => {
+      if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+    };
+    const advanceCandidate = (reason: string) => {
+      if (advancingCandidate || cancelled) return;
+      advancingCandidate = true;
+      clearFirstFrameWatchdog();
+      if (hls) { try { hls.destroy(); } catch { /* noop */ } hls = null; }
+      destroyTsPlayer();
+      vodIdx += 1;
+      pushDbg(`ADV candidate reason=${reason} nextIdx=${vodIdx}`);
+      queueMicrotask(() => {
+        advancingCandidate = false;
+        if (!cancelled) playDirect();
+      });
+    };
+    const armFirstFrameWatchdog = (candidateType: string) => {
+      if (!webOverride) return;
+      clearFirstFrameWatchdog();
+      firstFrameTimer = setTimeout(() => {
+        firstFrameTimer = null;
+        if (cancelled) return;
+        const hasFrame =
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          video.videoWidth > 0 && video.videoHeight > 0;
+        if (hasFrame) return;
+        pushDbg(
+          `first-frame-timeout candidate=${candidateType} readyState=${video.readyState} ` +
+          `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+        );
+        advanceCandidate(`first-frame-timeout:${candidateType}`);
+      }, 10_000);
     };
 
     const onVideoError = () => {
       const mediaErr = video.error;
-      pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
+      pushDbg(
+        `<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} ` +
+        `netState=${video.networkState} readyState=${video.readyState} ` +
+        `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+      );
       if (cancelled || hls) return;
+      if (webOverride) { advanceCandidate(`video-error:${mediaErr?.code ?? "?"}`); return; }
       tryNextVod();
     };
-    const onVideoReady = () => clearWatchdog();
+    const onVideoReady = () => { clearWatchdog(); clearFirstFrameWatchdog(); };
     const onPlaying = () => {
       clearWatchdog();
+      clearFirstFrameWatchdog();
       setCanManualPlay(false);
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
+
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
@@ -1298,7 +1368,9 @@ export function VideoPlayer({
                     // Padrão típico de host incompatível com Web: proxy 404/424
                     // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
                     // Marca o host para futuras sessões pularem o loop de tentativas.
-                    if (isLive && triedDirect) {
+                    // Exceção: hosts com webOverride (ex.: suportejetflix.site) —
+                    // uma falha isolada de canal NÃO condena o provedor inteiro.
+                    if (isLive && triedDirect && !webOverride) {
                       const h = hostOf(workingSrc);
                       if (h) {
                         rememberWebIncompatibleLive(h);
@@ -1313,6 +1385,7 @@ export function VideoPlayer({
                     }
                     return;
                   }
+
 
                   triedDirect = true;
                   playDirect();
@@ -1400,7 +1473,9 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
       clearWatchdog();
+      clearFirstFrameWatchdog();
       detachStallListeners?.();
+
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);

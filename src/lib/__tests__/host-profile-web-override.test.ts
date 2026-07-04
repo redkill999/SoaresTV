@@ -60,10 +60,12 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     );
     const { getHostProfile } = await loadModule();
     expect(getHostProfile("suportejetflix.site").webIncompatibleLive).toBeUndefined();
-    // outros campos preservados
-    expect(getHostProfile("suportejetflix.site").disableHlsConversion).toBe(true);
+    // v2 também remove disableHlsConversion/preferTs deste host — spec item 8.
+    expect(getHostProfile("suportejetflix.site").disableHlsConversion).toBeUndefined();
+    expect(getHostProfile("suportejetflix.site").preferTs).toBeUndefined();
     // outros hosts intactos
     expect(getHostProfile("flipex.pro").webIncompatibleLive).toBe(true);
+
   });
 
   it("rememberWebIncompatibleLive NÃO persiste para host com override", async () => {
@@ -96,4 +98,33 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     expect(getHostProfile("provedor-qualquer.tv").disableHlsConversion).toBe(true);
     expect(getHostProfile("provedor-qualquer.tv").preferTs).toBe(true);
   });
+
+  it("migração v2 roda uma vez e grava chave suportejetflixWebLiveV2", async () => {
+    localStorage.setItem(
+      "iptv.hostProfiles.v1",
+      JSON.stringify({
+        "suportejetflix.site": {
+          disableHlsConversion: true, preferTs: true,
+          webIncompatibleLive: true, bypassProxyForLive: true, disableProxy: true,
+        },
+      }),
+    );
+    await loadModule();
+    expect(localStorage.getItem("iptv.migration.suportejetflixWebLiveV2")).toBe("1");
+    // Segunda execução não deve reverter estado nem falhar.
+    await loadModule();
+    expect(localStorage.getItem("iptv.migration.suportejetflixWebLiveV2")).toBe("1");
+    // Nota: preset built-in de suportejetflix.site ainda traz
+    // disableHlsConversion/preferTs para APK/TV — o Web Desktop passa por
+    // cima via ignoreDisableHlsConversion / ignorePreferTs no VideoPlayer.
+  });
+
+
+  it("override inclui ignoreDisableHlsConversion e ignorePreferTs", async () => {
+    const { getWebLiveProviderOverride } = await loadModule();
+    const o = getWebLiveProviderOverride("suportejetflix.site")!;
+    expect(o.ignoreDisableHlsConversion).toBe(true);
+    expect(o.ignorePreferTs).toBe(true);
+  });
+
 });
