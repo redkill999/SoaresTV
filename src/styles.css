@@ -495,3 +495,30 @@ iframe[src*="gpteng.co"] {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* ===== Home hotspots: foco amarelo encaixado na arte de cada tile =====
+   O <button> hotbox cobre a área clicável, mas a arte de fundo tem
+   margem interna (padding). O anel amarelo é desenhado num overlay
+   ::inset por dentro do hotbox, com um recuo padrão para casar com a
+   arte. Escondido por padrão; aparece só ao focar. */
+.hotspot { border-radius: 1rem; }
+.hotspot .hotspot-ring {
+  inset: 6% 4%;
+  box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  transition: box-shadow 140ms ease, background-color 140ms ease;
+  background-color: transparent;
+}
+.hotspot:hover .hotspot-ring {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.hotspot:focus .hotspot-ring,
+.hotspot:focus-visible .hotspot-ring {
+  box-shadow: 0 0 0 3px #fbbf24, 0 0 18px rgba(251, 191, 36, 0.55);
+  background-color: rgba(251, 191, 36, 0.10);
+}
+.hotspot:focus,
+.hotspot:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
