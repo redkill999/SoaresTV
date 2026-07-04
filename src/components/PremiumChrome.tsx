@@ -130,8 +130,22 @@ export function PremiumChrome({
 
       {/* Header */}
       <header className="relative z-10 grid grid-cols-[auto_1fr_auto] items-center gap-2 px-3 pt-2 sm:px-5 sm:pt-3">
-        {/* Botão HOME removido a pedido — o "Voltar" do XciptvHeader já cobre a navegação para /home */}
-        <span />
+        {showBack ? (
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/home" })}
+            aria-label="Voltar"
+            title="Voltar"
+            data-tv-focusable
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-white/85 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1FB6FF]"
+          >
+            <ArrowLeft className="size-4" strokeWidth={2} />
+            <span className="text-[10px] font-semibold tracking-[0.2em] hidden sm:inline">VOLTAR</span>
+          </button>
+        ) : (
+          <span />
+        )}
+
 
 
         <div className="flex items-center justify-center gap-2 min-w-0">
