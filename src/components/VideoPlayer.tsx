@@ -1066,6 +1066,7 @@ export function VideoPlayer({
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
       // precisa passar pelo mpegts.js. VOD continua intocado.
       if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
+        armFirstFrameWatchdog(candidateType);
         void playMpegTs(url).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
@@ -1082,8 +1083,10 @@ export function VideoPlayer({
       video.src = url;
       video.load();
       armVodWatchdog();
+      armFirstFrameWatchdog(candidateType);
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
+
 
     // ---- First-frame watchdog (webOverride only) --------------------------
     // Impede tela preta indefinida: se em 10s não recebermos o primeiro frame
