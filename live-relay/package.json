@@ -1,0 +1,23 @@
+{
+  "name": "suportejetflix-live-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Node.js MPEG-TS relay for suportejetflix.site Live on Web Desktop. Runs OUTSIDE the Lovable app; only Live URLs are proxied through it.",
+  "type": "module",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.1",
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
