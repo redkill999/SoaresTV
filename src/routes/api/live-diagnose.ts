@@ -27,14 +27,19 @@ import {
   LIVE_DIAGNOSE_MIN_SAMPLE_BYTES,
   LIVE_FIRST_BYTE_TIMEOUT_MS,
   buildLiveDiagnoseBody,
+  buildUpstreamRequestHeaders,
+  classify403Body,
   classifyBodyKind,
   collectUpToLimit,
   findMpegTsSync,
+  pickSafeResponseHeaders,
   readFirstChunkWithTimeout,
+  readUpstreamErrorSample,
   sanitizeContentType,
 } from "@/lib/live-stream-helpers";
 
 const UA_DEFAULT = "XCIPTV/7.0 (Linux; Android 13)";
+
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
