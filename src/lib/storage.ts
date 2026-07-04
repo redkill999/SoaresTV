@@ -49,7 +49,22 @@ export type ListCompat = {
 
 export type XtreamCreds = { server: string; username: string; password: string; compat?: ListCompat };
 export type M3UPlaylist = { name: string; url: string; username?: string; password?: string; mode?: "playlist" | "xtream"; compat?: ListCompat };
-export type FavItem = { type: "live" | "movie" | "series"; id: string; name: string; logo?: string };
+/**
+ * Item de favorito/histórico.
+ * `providerId` e `stableId` são OPCIONAIS por compatibilidade — registros
+ * antigos não têm esses campos. A migração em `migrateLegacyItems()`
+ * carimba os itens antigos com o provedor ATIVO no momento da migração.
+ * A partir de então, novos itens devem sempre trazer `providerId+stableId`
+ * (ver `store.toggleFavRef` / `store.pushHistoryRef`).
+ */
+export type FavItem = {
+  type: "live" | "movie" | "series";
+  id: string;
+  name: string;
+  logo?: string;
+  providerId?: string;
+  stableId?: string;
+};
 export type HistItem = FavItem & { at: number; position?: number; duration?: number };
 
 /** Mapeia o User-Agent escolhido para a string real enviada ao provedor. */
