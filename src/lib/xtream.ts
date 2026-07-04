@@ -269,20 +269,46 @@ async function nativeApiWithFallbackPorts<T = unknown>(
 }
 
 
+const HEAVY_CATALOG_ACTIONS = new Set<string>([
+  "get_live_streams",
+  "get_vod_streams",
+  "get_series",
+]);
+
 export async function api<T = unknown>(
   c: XtreamCreds,
   action?: string,
   params?: Record<string, string | number>,
 ): Promise<T> {
+  const isHeavy = HEAVY_CATALOG_ACTIONS.has(action ?? "");
+  const nativeTimeoutMs = isHeavy ? 25_000 : 8_000;
+  const nativeTotalMs = isHeavy ? 45_000 : 20_000;
+  const proxyTimeoutMs = isHeavy ? 30_000 : 10_000;
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const isDev = typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+
   // Tenta direto pelo Android (CapacitorHttp). Se falhar no APK, NÃO
   // estouramos a UI — caímos para o proxy do server-fn, que tem rotação
   // de User-Agent e bypassa Cloudflare/bloqueios de UA do painel.
   try {
     const native = await nativeApiWithFallbackPorts<T>(c, action, params, {
-      timeoutMs: 5_000,
-      totalTimeoutMs: 20_000,
+      timeoutMs: nativeTimeoutMs,
+      totalTimeoutMs: nativeTotalMs,
     });
-    if (native) return maybePreserveLiveUrls(c, action, native.data as T);
+    if (native) {
+      const out = await maybePreserveLiveUrls(c, action, native.data as T);
+      if (isDev) {
+        const ms = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
+        console.debug("[Catalog]", {
+          action,
+          categoryId: params?.category_id,
+          source: "native",
+          itemCount: Array.isArray(out) ? (out as unknown[]).length : undefined,
+          elapsedMs: ms,
+        });
+      }
+      return out;
+    }
   } catch {
     // segue para o fallback do server-fn
   }
@@ -290,7 +316,7 @@ export async function api<T = unknown>(
   // Hint: UA que já funcionou para esse host — server-fn tenta esse primeiro.
   const preferredUA = getUAHint(c.server);
   const r = await xtreamApi({
-    data: { ...c, action, params, preferredUA, timeoutMs: 10_000 },
+    data: { ...c, action, params, preferredUA, timeoutMs: proxyTimeoutMs },
   });
   if (!r.ok) {
     const msg =
@@ -299,7 +325,18 @@ export async function api<T = unknown>(
   }
   // Persistir UA vencedor para acelerar próxima chamada ao mesmo servidor.
   if ("ua" in r && typeof r.ua === "string") setUAHint(c.server, r.ua);
-  return maybePreserveLiveUrls(c, action, r.data as T);
+  const out = await maybePreserveLiveUrls(c, action, r.data as T);
+  if (isDev) {
+    const ms = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
+    console.debug("[Catalog]", {
+      action,
+      categoryId: params?.category_id,
+      source: "server",
+      itemCount: Array.isArray(out) ? (out as unknown[]).length : undefined,
+      elapsedMs: ms,
+    });
+  }
+  return out;
 }
 
 async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
