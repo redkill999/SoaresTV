@@ -73,14 +73,22 @@ export const Route = createFileRoute("/live")({
     const acct = `${creds.server}|${creds.username}`;
     // Sempre prefetch categorias (leve).
     void context.queryClient.prefetchQuery({
-      queryKey: ["live-cats", acct],
-      queryFn: withPersist(K.cats(acct), () => api<LiveCategory[]>(creds!, "get_live_categories")),
+      queryKey: QK.cats(acct),
+      queryFn: withPersist(K.cats(acct), () =>
+        timed("get_live_categories", () => api<LiveCategory[]>(creds!, "get_live_categories"), {
+          countOf: (v) => (Array.isArray(v) ? v.length : 0),
+        }),
+      ),
     });
     // Prefetch pesado só em web desktop. No APK Android nunca puxa `all` no loader.
     if (!isNative()) {
       void context.queryClient.prefetchQuery({
-        queryKey: ["live-streams", acct, "all"],
-        queryFn: withPersist(K.all(acct), () => api<LiveStream[]>(creds!, "get_live_streams")),
+        queryKey: QK.all(acct),
+        queryFn: withPersist(K.all(acct), () =>
+          timed("get_live_streams", () => api<LiveStream[]>(creds!, "get_live_streams"), {
+            countOf: (v) => (Array.isArray(v) ? v.length : 0),
+          }),
+        ),
       });
     }
   },
