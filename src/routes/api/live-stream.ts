@@ -28,9 +28,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
 import {
   LIVE_FIRST_BYTE_TIMEOUT_MS,
+  buildUpstreamRequestHeaders,
+  classify403Body,
   findMpegTsSync,
   looksLikeTextualErrorBody,
+  pickSafeResponseHeaders,
   readFirstChunkWithTimeout,
+  readUpstreamErrorSample,
   sanitizeContentType,
 } from "@/lib/live-stream-helpers";
 
@@ -44,7 +48,7 @@ const UA_LIST = [
 
 // Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
 // do relay" e tratamento imediato de erro no player).
-const RELAY_VERSION = "v7";
+const RELAY_VERSION = "v8";
 const EXPOSED_HEADERS = [
   "X-Live-Relay-Version",
   "X-Live-Relay-Error",
@@ -57,7 +61,13 @@ const EXPOSED_HEADERS = [
   "X-Live-Relay-First-Chunk-Bytes",
   "X-Live-Relay-Mpegts-Sync",
   "X-Live-Relay-Body-Mode",
+  "X-Live-Upstream-Error-Class",
+  "X-Live-Upstream-Body-Length",
+  "X-Live-Response-Server",
+  "X-Live-Response-Cf-Ray",
+  "X-Live-Response-Retry-After",
 ].join(", ");
+
 
 
 
@@ -98,17 +108,24 @@ function relayError(
   code: string,
   cors: Record<string, string>,
   extra?: Record<string, number | boolean>,
+  extraHeaders?: Record<string, string>,
 ): Response {
   const h = new Headers(cors);
   h.set("Content-Type", "application/json");
   h.set("Cache-Control", "no-store");
   h.set("X-Live-Relay-Version", RELAY_VERSION);
   h.set("X-Live-Relay-Error", code);
-  return new Response(
-    JSON.stringify({ ok: false, errorCode: code, ...(extra ?? {}) }),
-    { status, headers: h },
-  );
+  if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) h.set(k, v);
+  const body: Record<string, unknown> = { ok: false, errorCode: code, ...(extra ?? {}) };
+  if (extraHeaders?.["X-Live-Upstream-Error-Class"]) {
+    body.upstreamErrorClass = extraHeaders["X-Live-Upstream-Error-Class"];
+  }
+  if (extraHeaders?.["X-Live-Upstream-Body-Length"]) {
+    body.upstreamBodyLength = Number(extraHeaders["X-Live-Upstream-Body-Length"]) || 0;
+  }
+  return new Response(JSON.stringify(body), { status, headers: h });
 }
+
 
 
 function sanitizedLog(event: string, fields: Record<string, unknown>) {
@@ -147,21 +164,14 @@ async function handle(request: Request): Promise<Response> {
   const requestSignalInitiallyAborted = !!request.signal?.aborted;
 
   const started = Date.now();
-  const originHeader = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
   let upstream: Response;
   try {
     upstream = await safeFetch(upstreamUrl, {
       method: "GET",
       cache: "no-store",
       signal: upstreamController.signal,
-      headers: {
-        "User-Agent": ua,
-        Accept: "*/*",
-        "Cache-Control": "no-cache",
-        "Accept-Encoding": "identity",
-        Referer: `${originHeader}/`,
-        Origin: originHeader,
-      },
+      // V8 §4 — Preview e publicado usam EXATAMENTE o mesmo construtor.
+      headers: buildUpstreamRequestHeaders(ua),
     });
   } catch (e) {
     const aborted = (e as { name?: string })?.name === "AbortError";
@@ -174,12 +184,41 @@ async function handle(request: Request): Promise<Response> {
   }
 
   if (!upstream.ok) {
-    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    // V8 §1/§2 — se for 403 (ou similar) com corpo textual, ler no máximo
+    // 512 bytes só para CLASSIFICAR. Nunca logar/retornar o texto.
+    let upstreamErrorClass: string | undefined;
+    let upstreamBodyLength = 0;
+    const upstreamCT = sanitizeContentType(upstream.headers.get("content-type"));
+    const isTextual = /^(text|application\/(json|xml|xhtml))/.test(upstreamCT);
+    if (upstream.status === 403 && isTextual && upstream.body) {
+      try {
+        const sample = await readUpstreamErrorSample(upstream.body.getReader());
+        upstreamBodyLength = sample.byteLength;
+        upstreamErrorClass = classify403Body(sample.text);
+      } catch { /* noop */ }
+    } else {
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+    }
+    const safeHeaders = pickSafeResponseHeaders(upstream.headers);
     sanitizedLog("LIVE_UPSTREAM_HTTP_ERROR", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
+      upstreamContentType: upstreamCT,
+      upstreamErrorClass: upstreamErrorClass ?? "NONE",
+      upstreamBodyLength,
+      responseServer: safeHeaders.server,
+      responseCfRay: safeHeaders.cfRay,
+      responseVia: safeHeaders.via,
+      responseRetryAfter: safeHeaders.retryAfter,
+      responseLocationHost: safeHeaders.locationHost,
     });
-    return relayError(upstream.status, "HTTP_ERROR", cors, { upstreamStatus: upstream.status });
+    const extraHeaders: Record<string, string> = {};
+    if (upstreamErrorClass) extraHeaders["X-Live-Upstream-Error-Class"] = upstreamErrorClass;
+    if (upstreamBodyLength) extraHeaders["X-Live-Upstream-Body-Length"] = String(upstreamBodyLength);
+    if (safeHeaders.server) extraHeaders["X-Live-Response-Server"] = safeHeaders.server;
+    if (safeHeaders.cfRay) extraHeaders["X-Live-Response-Cf-Ray"] = safeHeaders.cfRay;
+    if (safeHeaders.retryAfter) extraHeaders["X-Live-Response-Retry-After"] = safeHeaders.retryAfter;
+    return relayError(upstream.status, "HTTP_ERROR", cors, { upstreamStatus: upstream.status }, extraHeaders);
   }
 
   const reader = upstream.body?.getReader();
@@ -187,6 +226,7 @@ async function handle(request: Request): Promise<Response> {
     sanitizedLog("LIVE_UPSTREAM_NO_BODY", { host: upstreamUrl.host });
     return relayError(502, "NO_BODY", cors, { upstreamStatus: upstream.status });
   }
+
 
   const first = await readFirstChunkWithTimeout(reader, LIVE_FIRST_BYTE_TIMEOUT_MS);
   if (first.timedOut || !first.chunk || first.chunk.byteLength === 0) {
