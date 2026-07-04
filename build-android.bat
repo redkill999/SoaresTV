@@ -154,11 +154,18 @@ echo       OK
 echo.
 
 
-echo [8/8] Compilando APK debug com Gradle (assembleDebug)...
+echo [8/8] Compilando APK %MODE% com Gradle...
 pushd android >nul
 if exist "gradlew.bat" (
-  call gradlew.bat assembleDebug >> "%LOG_FILE%" 2>&1
-  set "GRADLE_RC=!errorlevel!"
+  if /I "%MODE%"=="release" (
+    call gradlew.bat assembleRelease >> "%LOG_FILE%" 2>&1
+    set "GRADLE_RC=!errorlevel!"
+    set "APK_REL=app\build\outputs\apk\release\app-release-unsigned.apk"
+  ) else (
+    call gradlew.bat assembleDebug >> "%LOG_FILE%" 2>&1
+    set "GRADLE_RC=!errorlevel!"
+    set "APK_REL=app\build\outputs\apk\debug\app-debug.apk"
+  )
 ) else (
   echo [ERRO] gradlew.bat nao encontrado em android\
   set "GRADLE_RC=1"
@@ -171,12 +178,26 @@ if not "!GRADLE_RC!"=="0" (
   goto :fail
 )
 
-set "APK_DIR=%CD%\android\app\build\outputs\apk\debug"
-set "APK_FILE=%APK_DIR%\app-debug.apk"
+set "APK_FILE=%CD%\android\!APK_REL!"
+set "APK_DIR=%CD%\android\app\build\outputs\apk\%MODE%"
+
+REM Assinatura automatica para modo release (keystore LOCAL, teste pessoal)
+if /I "%MODE%"=="release" (
+  echo.
+  echo [pos-build] Assinando APK release com keystore local ^(NAO usar pra Play Store^)...
+  call node scripts/sign-release-apk.mjs >> "%LOG_FILE%" 2>&1
+  if errorlevel 1 (
+    echo [aviso] Assinatura automatica falhou - APK unsigned continua em %APK_FILE%.
+  ) else (
+    set "APK_FILE=%CD%\android\app\build\outputs\apk\release\app-release-signed.apk"
+  )
+)
 
 echo.
 echo ============================================================
 echo   PRONTO! APK gerado com sucesso.
+echo   Modo:    %MODE%
+echo   Arquivo: %APK_FILE%
 echo ============================================================
 echo.
 if exist "%APK_FILE%" (
