@@ -60,10 +60,12 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     );
     const { getHostProfile } = await loadModule();
     expect(getHostProfile("suportejetflix.site").webIncompatibleLive).toBeUndefined();
-    // outros campos preservados
-    expect(getHostProfile("suportejetflix.site").disableHlsConversion).toBe(true);
+    // v2 também remove disableHlsConversion/preferTs deste host — spec item 8.
+    expect(getHostProfile("suportejetflix.site").disableHlsConversion).toBeUndefined();
+    expect(getHostProfile("suportejetflix.site").preferTs).toBeUndefined();
     // outros hosts intactos
     expect(getHostProfile("flipex.pro").webIncompatibleLive).toBe(true);
+
   });
 
   it("rememberWebIncompatibleLive NÃO persiste para host com override", async () => {
