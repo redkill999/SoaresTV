@@ -949,10 +949,13 @@ export function VideoPlayer({
       return 0;
     };
 
-    const playMpegTs = async (url: string) => {
+    const playMpegTs = async (url: string, candidateType: string = "ts-proxy") => {
       if (!isLive) return false;
       try {
-        const probeUrl = probeUrlForCandidate(url);
+        // Probe pré-reprodução: pulado quando o override pede (evita gastar
+        // uma conexão simultânea e não encurtar o watchdog do primeiro quadro).
+        const skipProbe = !!webOverride?.disablePrePlaybackProbe;
+        const probeUrl = skipProbe ? null : probeUrlForCandidate(url);
         if (probeUrl) {
           try {
             pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
@@ -970,9 +973,12 @@ export function VideoPlayer({
             const msg = err instanceof Error ? err.message : String(err);
             pushDbg(`PROBE erro=${msg.slice(0, 160)}`);
           }
+        } else if (skipProbe) {
+          pushDbg(`PROBE skipped (override) candidate=${candidateType}`);
         }
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
+        pushDbg(`mpegts loaded candidate=${candidateType}`);
         destroyTsPlayer();
         video.pause();
         video.removeAttribute("src");
@@ -996,8 +1002,12 @@ export function VideoPlayer({
             // a URL é proxiada e Range é negociado de forma imprevisível.
             enableWorker: false,
             enableStashBuffer: false,
+            lazyLoad: false,
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 30,
+            autoCleanupMinBackwardDuration: 15,
             liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMaxLatency: 10,
             liveBufferLatencyMinRemain: 1,
           },
         );
@@ -1009,18 +1019,25 @@ export function VideoPlayer({
         });
 
         tsPlayer.attachMediaElement(video);
+        pushDbg(`mpegts attached candidate=${candidateType}`);
         tsPlayer.load();
+        pushDbg(`mpegts loaded/starting candidate=${candidateType}`);
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
           playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
+        // Watchdog do primeiro quadro só arma AGORA — após attach/load/play.
+        // Antes de load(), qualquer atraso de import do mpegts contava contra
+        // o timeout e disparava fallback indevido.
+        armFirstFrameWatchdog(candidateType);
         return true;
       } catch {
         return false;
       }
     };
+
 
     const playDirect = () => {
       if (hls) {
