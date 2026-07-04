@@ -13,15 +13,26 @@
 //   - responde com headers do relay Live (video/mp2t, no-store, no-buffering)
 //     e SEM Content-Length/Content-Encoding/etc.
 //
+// V5 (fail-fast, spec §7/§8): a rota NUNCA fica silenciosa — se o upstream
+// não entrega o primeiro chunk em 8 s, responde HTTP 504 com header
+// `X-Live-Relay-Error: NO_FIRST_BYTE` e corpo JSON sanitizado. Todos os erros
+// carregam `X-Live-Relay-Error` para o cliente exibir imediatamente, sem
+// esperar o watchdog de 20 s. Em sucesso, expõe headers de diagnóstico
+// sanitizados (status/tempo/bytes/sync) — nunca URL ou credenciais.
+//
 // SEGURANÇA: valida a URL via `assertSafeUpstreamUrl` (mesma proteção
 // anti-SSRF do /api/stream). Não expõe URL/credenciais nos logs.
 // =============================================================================
 
 import { createFileRoute } from "@tanstack/react-router";
 import { assertSafeUpstreamUrl, safeFetch } from "@/lib/server-guard";
-import { findMpegTsSync, looksLikeTextualErrorBody } from "@/lib/live-stream-helpers";
-
-const FIRST_BYTE_TIMEOUT_MS = 8_000;
+import {
+  LIVE_FIRST_BYTE_TIMEOUT_MS,
+  findMpegTsSync,
+  looksLikeTextualErrorBody,
+  readFirstChunkWithTimeout,
+  sanitizeContentType,
+} from "@/lib/live-stream-helpers";
 
 const UA_LIST = [
   "XCIPTV/7.0 (Linux; Android 13)",
@@ -31,10 +42,21 @@ const UA_LIST = [
   "okhttp/4.12.0",
 ];
 
+// Headers de diagnóstico legíveis pelo cliente (fetch manual "Testar bytes
+// do relay" e tratamento imediato de erro no player).
+const EXPOSED_HEADERS = [
+  "X-Live-Relay-Error",
+  "X-Live-Upstream-Status",
+  "X-Live-First-Byte-Ms",
+  "X-Live-First-Chunk-Bytes",
+  "X-Live-Ts-Sync-Found",
+].join(", ");
+
 function corsHeaders(request: Request): Record<string, string> {
   const base: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
+    "Access-Control-Expose-Headers": EXPOSED_HEADERS,
     Vary: "Origin",
   };
   const reqOrigin = request.headers.get("origin");
@@ -57,29 +79,27 @@ function relayHeaders(cors: Record<string, string>): Headers {
   return h;
 }
 
+/** Resposta de erro do relay: SEMPRE com X-Live-Relay-Error + JSON sanitizado
+ *  (apenas códigos e números — nunca URL, credenciais ou corpo do upstream). */
+function relayError(
+  status: number,
+  code: string,
+  cors: Record<string, string>,
+  extra?: Record<string, number | boolean>,
+): Response {
+  const h = new Headers(cors);
+  h.set("Content-Type", "application/json");
+  h.set("Cache-Control", "no-store");
+  h.set("X-Live-Relay-Error", code);
+  return new Response(
+    JSON.stringify({ ok: false, errorCode: code, ...(extra ?? {}) }),
+    { status, headers: h },
+  );
+}
+
 function sanitizedLog(event: string, fields: Record<string, unknown>) {
   // eslint-disable-next-line no-console
   console.log(`[LIVE-RELAY] ${event}`, fields);
-}
-
-async function readFirstChunkWithTimeout(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  timeoutMs: number,
-): Promise<{ chunk: Uint8Array | null; timedOut: boolean }> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeoutPromise = new Promise<{ chunk: null; timedOut: true }>((resolve) => {
-    timer = setTimeout(() => resolve({ chunk: null, timedOut: true }), timeoutMs);
-  });
-  try {
-    const readPromise = reader.read().then((r) => ({
-      chunk: (r.done ? null : (r.value ?? null)) as Uint8Array | null,
-      timedOut: false as const,
-    }));
-    const winner = await Promise.race([readPromise, timeoutPromise]);
-    return winner;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 async function handle(request: Request): Promise<Response> {
@@ -91,15 +111,14 @@ async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
   if (!target) {
-    return new Response("missing ?u", { status: 400, headers: cors });
+    return relayError(400, "MISSING_TARGET", cors);
   }
 
   let upstreamUrl: URL;
   try {
     upstreamUrl = assertSafeUpstreamUrl(target);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "invalid url";
-    return new Response(msg, { status: 400, headers: cors });
+  } catch {
+    return relayError(400, "INVALID_TARGET", cors);
   }
 
   const forcedUA = url.searchParams.get("ua");
@@ -135,7 +154,7 @@ async function handle(request: Request): Promise<Response> {
       host: upstreamUrl.host,
       aborted,
     });
-    return new Response("LIVE_UPSTREAM_FETCH_ERROR", { status: 502, headers: cors });
+    return relayError(502, "FETCH_ERROR", cors);
   }
 
   if (!upstream.ok) {
@@ -145,17 +164,17 @@ async function handle(request: Request): Promise<Response> {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
     });
-    return new Response("LIVE_UPSTREAM_HTTP_ERROR", { status: upstream.status, headers: cors });
+    return relayError(upstream.status, "HTTP_ERROR", cors, { upstreamStatus: upstream.status });
   }
 
   const reader = upstream.body?.getReader();
   if (!reader) {
     try { request.signal.removeEventListener("abort", onClientAbort); } catch { /* noop */ }
     sanitizedLog("LIVE_UPSTREAM_NO_BODY", { host: upstreamUrl.host });
-    return new Response("LIVE_UPSTREAM_NO_BODY", { status: 502, headers: cors });
+    return relayError(502, "NO_BODY", cors, { upstreamStatus: upstream.status });
   }
 
-  const first = await readFirstChunkWithTimeout(reader, FIRST_BYTE_TIMEOUT_MS);
+  const first = await readFirstChunkWithTimeout(reader, LIVE_FIRST_BYTE_TIMEOUT_MS);
   if (first.timedOut || !first.chunk || first.chunk.byteLength === 0) {
     try { await reader.cancel(); } catch { /* noop */ }
     upstreamController.abort();
@@ -163,13 +182,18 @@ async function handle(request: Request): Promise<Response> {
     sanitizedLog("LIVE_UPSTREAM_NO_FIRST_BYTE", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
-      upstreamContentType: upstream.headers.get("content-type") || "",
+      upstreamContentType: sanitizeContentType(upstream.headers.get("content-type")),
       firstByteMs: Date.now() - started,
     });
-    return new Response("LIVE_UPSTREAM_NO_FIRST_BYTE", { status: 504, headers: cors });
+    // Fail-fast (spec V5 §7): 504 + X-Live-Relay-Error: NO_FIRST_BYTE.
+    return relayError(504, "NO_FIRST_BYTE", cors, {
+      upstreamStatus: upstream.status,
+      firstByteMs: Date.now() - started,
+    });
   }
 
   const firstChunk = first.chunk;
+  const firstByteMs = Date.now() - started;
   const syncOffset = findMpegTsSync(firstChunk);
   const isTextualError = syncOffset < 0 && looksLikeTextualErrorBody(firstChunk);
   if (isTextualError) {
@@ -179,19 +203,22 @@ async function handle(request: Request): Promise<Response> {
     sanitizedLog("LIVE_UPSTREAM_TEXTUAL_BODY", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
-      upstreamContentType: upstream.headers.get("content-type") || "",
+      upstreamContentType: sanitizeContentType(upstream.headers.get("content-type")),
       firstChunkBytes: firstChunk.byteLength,
     });
-    return new Response("LIVE_UPSTREAM_TEXTUAL_BODY", { status: 502, headers: cors });
+    return relayError(502, "TEXTUAL_BODY", cors, {
+      upstreamStatus: upstream.status,
+      firstChunkBytes: firstChunk.byteLength,
+    });
   }
 
   sanitizedLog("LIVE_UPSTREAM_FIRST_BYTE", {
     host: upstreamUrl.host,
     upstreamFinalHost: (() => { try { return new URL(upstream.url).host; } catch { return upstreamUrl.host; } })(),
     upstreamStatus: upstream.status,
-    upstreamContentType: upstream.headers.get("content-type") || "",
+    upstreamContentType: sanitizeContentType(upstream.headers.get("content-type")),
     firstByteReceived: true,
-    firstByteMs: Date.now() - started,
+    firstByteMs,
     firstChunkBytes: firstChunk.byteLength,
     mpegTsSyncFound: syncOffset >= 0,
     mpegTsSyncOffset: syncOffset,
@@ -199,6 +226,8 @@ async function handle(request: Request): Promise<Response> {
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      // O primeiro chunk usado na validação NÃO é perdido: é reenfileirado
+      // antes de continuar bombeando os chunks seguintes (spec V5 §7).
       controller.enqueue(firstChunk);
       const pump = async () => {
         try {
@@ -222,7 +251,13 @@ async function handle(request: Request): Promise<Response> {
     },
   });
 
-  return new Response(body, { status: 200, headers: relayHeaders(cors) });
+  const headers = relayHeaders(cors);
+  // Diagnóstico sanitizado no sucesso (apenas números/booleans).
+  headers.set("X-Live-Upstream-Status", String(upstream.status));
+  headers.set("X-Live-First-Byte-Ms", String(firstByteMs));
+  headers.set("X-Live-First-Chunk-Bytes", String(firstChunk.byteLength));
+  headers.set("X-Live-Ts-Sync-Found", String(syncOffset >= 0));
+  return new Response(body, { status: 200, headers });
 }
 
 export const Route = createFileRoute("/api/live-stream")({
