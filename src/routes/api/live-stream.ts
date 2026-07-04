@@ -157,21 +157,14 @@ async function handle(request: Request): Promise<Response> {
   const requestSignalInitiallyAborted = !!request.signal?.aborted;
 
   const started = Date.now();
-  const originHeader = `${upstreamUrl.protocol}//${upstreamUrl.host}`;
   let upstream: Response;
   try {
     upstream = await safeFetch(upstreamUrl, {
       method: "GET",
       cache: "no-store",
       signal: upstreamController.signal,
-      headers: {
-        "User-Agent": ua,
-        Accept: "*/*",
-        "Cache-Control": "no-cache",
-        "Accept-Encoding": "identity",
-        Referer: `${originHeader}/`,
-        Origin: originHeader,
-      },
+      // V8 §4 — Preview e publicado usam EXATAMENTE o mesmo construtor.
+      headers: buildUpstreamRequestHeaders(ua),
     });
   } catch (e) {
     const aborted = (e as { name?: string })?.name === "AbortError";
@@ -184,12 +177,41 @@ async function handle(request: Request): Promise<Response> {
   }
 
   if (!upstream.ok) {
-    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    // V8 §1/§2 — se for 403 (ou similar) com corpo textual, ler no máximo
+    // 512 bytes só para CLASSIFICAR. Nunca logar/retornar o texto.
+    let upstreamErrorClass: string | undefined;
+    let upstreamBodyLength = 0;
+    const upstreamCT = sanitizeContentType(upstream.headers.get("content-type"));
+    const isTextual = /^(text|application\/(json|xml|xhtml))/.test(upstreamCT);
+    if (upstream.status === 403 && isTextual && upstream.body) {
+      try {
+        const sample = await readUpstreamErrorSample(upstream.body.getReader());
+        upstreamBodyLength = sample.byteLength;
+        upstreamErrorClass = classify403Body(sample.text);
+      } catch { /* noop */ }
+    } else {
+      try { await upstream.body?.cancel(); } catch { /* noop */ }
+    }
+    const safeHeaders = pickSafeResponseHeaders(upstream.headers);
     sanitizedLog("LIVE_UPSTREAM_HTTP_ERROR", {
       host: upstreamUrl.host,
       upstreamStatus: upstream.status,
+      upstreamContentType: upstreamCT,
+      upstreamErrorClass: upstreamErrorClass ?? "NONE",
+      upstreamBodyLength,
+      responseServer: safeHeaders.server,
+      responseCfRay: safeHeaders.cfRay,
+      responseVia: safeHeaders.via,
+      responseRetryAfter: safeHeaders.retryAfter,
+      responseLocationHost: safeHeaders.locationHost,
     });
-    return relayError(upstream.status, "HTTP_ERROR", cors, { upstreamStatus: upstream.status });
+    const extraHeaders: Record<string, string> = {};
+    if (upstreamErrorClass) extraHeaders["X-Live-Upstream-Error-Class"] = upstreamErrorClass;
+    if (upstreamBodyLength) extraHeaders["X-Live-Upstream-Body-Length"] = String(upstreamBodyLength);
+    if (safeHeaders.server) extraHeaders["X-Live-Response-Server"] = safeHeaders.server;
+    if (safeHeaders.cfRay) extraHeaders["X-Live-Response-Cf-Ray"] = safeHeaders.cfRay;
+    if (safeHeaders.retryAfter) extraHeaders["X-Live-Response-Retry-After"] = safeHeaders.retryAfter;
+    return relayError(upstream.status, "HTTP_ERROR", cors, { upstreamStatus: upstream.status }, extraHeaders);
   }
 
   const reader = upstream.body?.getReader();
@@ -197,6 +219,7 @@ async function handle(request: Request): Promise<Response> {
     sanitizedLog("LIVE_UPSTREAM_NO_BODY", { host: upstreamUrl.host });
     return relayError(502, "NO_BODY", cors, { upstreamStatus: upstream.status });
   }
+
 
   const first = await readFirstChunkWithTimeout(reader, LIVE_FIRST_BYTE_TIMEOUT_MS);
   if (first.timedOut || !first.chunk || first.chunk.byteLength === 0) {
