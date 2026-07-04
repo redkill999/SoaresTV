@@ -321,6 +321,10 @@ export type WebLiveProviderOverride = {
   ignoreWebIncompatibleFlag?: boolean;
   preventAutoWebBlacklist?: boolean;
   preventHostWideHlsBlacklist?: boolean;
+  /** Ignora `disableHlsConversion` (preset ou persistido) para este host no Web Desktop. */
+  ignoreDisableHlsConversion?: boolean;
+  /** Ignora `preferTs` (preset ou persistido) para este host no Web Desktop. */
+  ignorePreferTs?: boolean;
 };
 
 const WEB_LIVE_PROVIDER_OVERRIDES: Record<string, WebLiveProviderOverride> = {
@@ -329,6 +333,8 @@ const WEB_LIVE_PROVIDER_OVERRIDES: Record<string, WebLiveProviderOverride> = {
     ignoreWebIncompatibleFlag: true,
     preventAutoWebBlacklist: true,
     preventHostWideHlsBlacklist: true,
+    ignoreDisableHlsConversion: true,
+    ignorePreferTs: true,
   },
 };
 
@@ -342,9 +348,8 @@ export function getWebLiveProviderOverride(
   return suffix ? WEB_LIVE_PROVIDER_OVERRIDES[suffix] : null;
 }
 
-// Migração pontual: apaga APENAS `webIncompatibleLive` do perfil persistido
-// dos hosts que ganharam override Web-Live. Não toca outros campos, outros
-// hosts, favoritos, histórico, conta ou cache.
+// Migração pontual v1 — apaga APENAS `webIncompatibleLive` do perfil persistido
+// dos hosts que ganharam override Web-Live. Não toca outros campos.
 for (const overrideHost of Object.keys(WEB_LIVE_PROVIDER_OVERRIDES)) {
   for (const key of Object.keys(memory)) {
     const bare = key.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
@@ -357,5 +362,48 @@ for (const overrideHost of Object.keys(WEB_LIVE_PROVIDER_OVERRIDES)) {
     }
   }
 }
+
+// Migração pontual v2 (suportejetflixWebLiveV2): remove APENAS flags que
+// bloqueavam HLS no Web Desktop para suportejetflix.site e variantes
+// (disableHlsConversion, preferTs, webIncompatibleLive, bypassProxyForLive,
+// disableProxy). Não toca conta, credenciais, favoritos, histórico,
+// categorias, configurações gerais ou perfis de outros hosts. Executa
+// exatamente uma vez por dispositivo, gated pela chave abaixo.
+const MIGRATION_KEY_V2 = "iptv.migration.suportejetflixWebLiveV2";
+try {
+  if (typeof localStorage !== "undefined" && !localStorage.getItem(MIGRATION_KEY_V2)) {
+    const TARGETS = new Set(["suportejetflix.site"]);
+    const STRIP: (keyof HostProfile)[] = [
+      "disableHlsConversion",
+      "preferTs",
+      "webIncompatibleLive",
+      "bypassProxyForLive",
+      "disableProxy",
+    ];
+    let mutated = false;
+    for (const key of Object.keys(memory)) {
+      const bare = key.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+      const matches = TARGETS.has(bare) || [...TARGETS].some((t) => bare.endsWith(`.${t}`));
+      if (!matches) continue;
+      const cur = memory[key];
+      let touched = false;
+      const next: HostProfile = { ...cur };
+      for (const flag of STRIP) {
+        if (next[flag] !== undefined) {
+          delete next[flag];
+          touched = true;
+        }
+      }
+      if (touched) {
+        memory[key] = next;
+        mutated = true;
+        console.log("[HOST PROFILE] migração v2 aplicada", { host: key, removed: STRIP.filter((f) => cur[f] !== undefined) });
+      }
+    }
+    if (mutated) writeStorage(memory);
+    localStorage.setItem(MIGRATION_KEY_V2, "1");
+  }
+} catch { /* noop */ }
+
 
 
