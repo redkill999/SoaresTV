@@ -1,14 +1,27 @@
-// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Isolar módulo para exercitar migração e overrides sem estado global compartilhado.
+// Shim mínimo de localStorage para o ambiente node do vitest — o módulo
+// host-profile lê/escreve `localStorage` no top-level (migração + presets).
+class MemoryStorage {
+  private map = new Map<string, string>();
+  getItem(k: string) { return this.map.has(k) ? this.map.get(k)! : null; }
+  setItem(k: string, v: string) { this.map.set(k, String(v)); }
+  removeItem(k: string) { this.map.delete(k); }
+  clear() { this.map.clear(); }
+  key(i: number) { return Array.from(this.map.keys())[i] ?? null; }
+  get length() { return this.map.size; }
+}
+if (typeof (globalThis as { localStorage?: unknown }).localStorage === "undefined") {
+  (globalThis as { localStorage: MemoryStorage }).localStorage = new MemoryStorage();
+}
+
 async function loadModule() {
   vi.resetModules();
   return await import("@/lib/host-profile");
 }
 
 beforeEach(() => {
-  try { localStorage.clear(); } catch { /* jsdom-only */ }
+  try { localStorage.clear(); } catch { /* noop */ }
 });
 
 describe("getWebLiveProviderOverride — suportejetflix.site", () => {
