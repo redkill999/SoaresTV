@@ -59,40 +59,58 @@ function SeriesPage() {
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `series-cats:${acct}`;
   const listCacheKey = `series-list:${acct}:all`;
+  const nonEmptyArr = <T,>(v: T[] | undefined | null): v is T[] => Array.isArray(v) && v.length > 0;
   const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
   const listPersisted = useMemo(() => (acct ? loadPersisted<Series[]>(listCacheKey) : null), [listCacheKey, acct]);
+  const catsInitialData = nonEmptyArr(catsPersisted?.data) ? catsPersisted!.data : undefined;
+  const listInitialData = nonEmptyArr(listPersisted?.data) ? listPersisted!.data : undefined;
   const catsQ = useQuery({
     queryKey: ["series-cats", acct],
     enabled: !!creds,
     queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_series_categories")),
-    initialData: catsPersisted?.data,
-    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    initialData: catsInitialData,
+    initialDataUpdatedAt: catsInitialData ? catsPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: catsInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
   const listQ = useQuery({
     queryKey: ["series-list", acct, "all"],
     enabled: !!creds,
-    queryFn: withPersist(listCacheKey, () => api<Series[]>(creds!, "get_series")),
-    initialData: listPersisted?.data,
-    initialDataUpdatedAt: listPersisted?.updatedAt,
+    queryFn: withPersist(
+      listCacheKey,
+      () => api<Series[]>(creds!, "get_series"),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
+    initialData: listInitialData,
+    initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
     retry: 1,
+    refetchOnMount: listInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
-  // Fallback per-category (painéis grandes falham no "all" no APK TV).
   const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
   const perCatKey = `series-list:${acct}:cat:${cat}`;
   const perCatPersisted = useMemo(
     () => (perCatEnabled ? loadPersisted<Series[]>(perCatKey) : null),
     [perCatEnabled, perCatKey],
   );
+  const perCatInitial = nonEmptyArr(perCatPersisted?.data) ? perCatPersisted!.data : undefined;
   const perCatQ = useQuery({
     queryKey: ["series-list", acct, "cat", cat],
     enabled: perCatEnabled,
-    queryFn: withPersist(perCatKey, () => api<Series[]>(creds!, "get_series", { category_id: cat })),
-    initialData: perCatPersisted?.data,
-    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    queryFn: withPersist(
+      perCatKey,
+      () => api<Series[]>(creds!, "get_series", { category_id: cat }),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
+    initialData: perCatInitial,
+    initialDataUpdatedAt: perCatInitial ? perCatPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: perCatInitial ? false : "always",
+    refetchOnReconnect: true,
   });
+  const hasPerCategoryData = Array.isArray(perCatQ.data) && perCatQ.data.length > 0;
 
   const favs = useFavorites();
   const history = useHistory();
