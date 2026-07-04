@@ -456,6 +456,14 @@ export function VideoPlayer({
       const relayErrorCode = res.headers.get("x-live-relay-error");
       const relayVersion = res.headers.get("x-live-relay-version") ?? "-";
       const ct = res.headers.get("content-type") ?? "-";
+      const serverFirstChunkRead = res.headers.get("x-live-relay-first-chunk-read") === "true";
+      const serverFirstChunkBytes = Number(res.headers.get("x-live-relay-first-chunk-bytes") ?? 0) || 0;
+      const serverMpegTsSync = res.headers.get("x-live-relay-mpegts-sync") === "true";
+      const serverBodyMode = res.headers.get("x-live-relay-body-mode") ?? "-";
+      pushDbg(
+        `relayTest headers relayVersion=${relayVersion} serverFirstChunkRead=${serverFirstChunkRead} ` +
+        `serverFirstChunkBytes=${serverFirstChunkBytes} serverMpegTsSync=${serverMpegTsSync} serverBodyMode=${serverBodyMode}`,
+      );
       if (!res.ok) {
         pushDbg(
           `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
@@ -482,6 +490,12 @@ export function VideoPlayer({
         `relayFirstByteReceived=${relayFirstByteReceived} ` +
         `relayFirstByteMs=${relayFirstByteMs} relayFirstChunkBytes=${relayFirstChunkBytes}`,
       );
+      if (!relayFirstByteReceived && serverFirstChunkRead && responseReceived) {
+        pushDbg(
+          "O ambiente atual recebeu os cabeçalhos e o backend leu o chunk, mas o corpo progressivo do stream não chegou. " +
+          "No Preview, publique o projeto e repita. Se ocorrer também no publicado, o runtime bloqueia streaming long-lived.",
+        );
+      }
       try { await reader.cancel("manual-test-complete"); } catch { /* noop */ }
     } catch (e) {
       const errName = e instanceof Error ? e.name : "?";
