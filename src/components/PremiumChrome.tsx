@@ -11,6 +11,7 @@
  */
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Tv, RefreshCw, Lock, Mail, Video, AlarmClock,
   RotateCcw, LayoutGrid,
@@ -18,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { store } from "@/lib/storage";
+import { clearPersisted } from "@/lib/query-persist";
 
 type StatusKey = "alarm" | "rec" | "vpn" | "msg" | "update";
 
@@ -33,6 +35,7 @@ export function PremiumChrome({
   hideFooter?: boolean;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [openStatus, setOpenStatus] = useState<StatusKey | null>(null);
   const [recOn, setRecOn] = useState(false);
   const [alarmMin, setAlarmMin] = useState(0);
@@ -81,9 +84,13 @@ export function PremiumChrome({
 
   const runUpdate = () => {
     try {
+      // Limpa caches de catálogo (IndexedDB + memória) e o cache do React Query.
+      // NÃO apaga credenciais, favoritos, histórico ou lista M3U salvas em `store`.
       Object.keys(localStorage)
         .filter((k) => k.startsWith("m3u-cache:") || k.startsWith("xtream-cache:") || k.startsWith("rq-"))
         .forEach((k) => localStorage.removeItem(k));
+      clearPersisted(); // IndexedDB qcache
+      queryClient.clear(); // memória do React Query
       toast.success("Conteúdos atualizados");
       setTimeout(() => navigate({ to: "/loading", replace: true }), 300);
     } catch { toast.error("Falha ao atualizar"); }

@@ -59,40 +59,58 @@ function SeriesPage() {
   const acct = creds ? `${creds.server}|${creds.username}` : "";
   const catsCacheKey = `series-cats:${acct}`;
   const listCacheKey = `series-list:${acct}:all`;
+  const nonEmptyArr = <T,>(v: T[] | undefined | null): v is T[] => Array.isArray(v) && v.length > 0;
   const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
   const listPersisted = useMemo(() => (acct ? loadPersisted<Series[]>(listCacheKey) : null), [listCacheKey, acct]);
+  const catsInitialData = nonEmptyArr(catsPersisted?.data) ? catsPersisted!.data : undefined;
+  const listInitialData = nonEmptyArr(listPersisted?.data) ? listPersisted!.data : undefined;
   const catsQ = useQuery({
     queryKey: ["series-cats", acct],
     enabled: !!creds,
     queryFn: withPersist(catsCacheKey, () => api<LiveCategory[]>(creds!, "get_series_categories")),
-    initialData: catsPersisted?.data,
-    initialDataUpdatedAt: catsPersisted?.updatedAt,
+    initialData: catsInitialData,
+    initialDataUpdatedAt: catsInitialData ? catsPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: catsInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
   const listQ = useQuery({
     queryKey: ["series-list", acct, "all"],
     enabled: !!creds,
-    queryFn: withPersist(listCacheKey, () => api<Series[]>(creds!, "get_series")),
-    initialData: listPersisted?.data,
-    initialDataUpdatedAt: listPersisted?.updatedAt,
+    queryFn: withPersist(
+      listCacheKey,
+      () => api<Series[]>(creds!, "get_series"),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
+    initialData: listInitialData,
+    initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
     retry: 1,
+    refetchOnMount: listInitialData ? false : "always",
+    refetchOnReconnect: true,
   });
-  // Fallback per-category (painéis grandes falham no "all" no APK TV).
   const perCatEnabled = !!creds && cat !== "all" && cat !== "favorites" && cat !== "recent";
   const perCatKey = `series-list:${acct}:cat:${cat}`;
   const perCatPersisted = useMemo(
     () => (perCatEnabled ? loadPersisted<Series[]>(perCatKey) : null),
     [perCatEnabled, perCatKey],
   );
+  const perCatInitial = nonEmptyArr(perCatPersisted?.data) ? perCatPersisted!.data : undefined;
   const perCatQ = useQuery({
     queryKey: ["series-list", acct, "cat", cat],
     enabled: perCatEnabled,
-    queryFn: withPersist(perCatKey, () => api<Series[]>(creds!, "get_series", { category_id: cat })),
-    initialData: perCatPersisted?.data,
-    initialDataUpdatedAt: perCatPersisted?.updatedAt,
+    queryFn: withPersist(
+      perCatKey,
+      () => api<Series[]>(creds!, "get_series", { category_id: cat }),
+      { shouldPersist: (data) => Array.isArray(data) && data.length > 0 },
+    ),
+    initialData: perCatInitial,
+    initialDataUpdatedAt: perCatInitial ? perCatPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    refetchOnMount: perCatInitial ? false : "always",
+    refetchOnReconnect: true,
   });
+  const hasPerCategoryData = Array.isArray(perCatQ.data) && perCatQ.data.length > 0;
 
   const favs = useFavorites();
   const history = useHistory();
@@ -144,14 +162,14 @@ function SeriesPage() {
 
   const filtered = useMemo(() => {
     const source: Series[] =
-      perCatEnabled && perCatQ.data ? perCatQ.data : (listQ.data ?? []);
+      perCatEnabled && hasPerCategoryData ? (perCatQ.data as Series[]) : (listQ.data ?? []);
     let list: Series[] = source;
     if (deferredSearch) list = filterBySearch(list, (x) => x.name, deferredSearch);
     if (cat === "favorites") list = list.filter((s) => favIds.has(String(s.series_id)));
     else if (cat === "recent") {
       const order = new Map(recentIds.map((id, i) => [id, i]));
       list = list.filter((s) => order.has(String(s.series_id))).sort((a, b) => order.get(String(a.series_id))! - order.get(String(b.series_id))!);
-    } else if (cat !== "all" && !perCatQ.data) {
+    } else if (cat !== "all" && !hasPerCategoryData) {
       list = list.filter((s) => String(s.category_id) === cat);
     }
     if (parentalActive && (cat === "all" || cat === "favorites" || cat === "recent")) {
@@ -159,7 +177,11 @@ function SeriesPage() {
     }
     if (sort === "az" || sort === "za") list = getSorted(list, (x) => x.name, sort);
     return list;
-  }, [listQ.data, perCatQ.data, perCatEnabled, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
+  }, [listQ.data, perCatQ.data, perCatEnabled, hasPerCategoryData, deferredSearch, sort, cat, favIds, recentIds, parentalActive, lockedCats]);
+
+  const activeError = perCatEnabled ? perCatQ.error : listQ.error;
+  const activeIsError = perCatEnabled ? perCatQ.isError : listQ.isError;
+  const retryActive = () => { if (perCatEnabled) void perCatQ.refetch(); else void listQ.refetch(); };
 
   return (
     <PremiumChrome>
@@ -205,6 +227,21 @@ function SeriesPage() {
               {Array.from({ length: 18 }).map((_, i) => (
                 <div key={i} className="aspect-square rounded-sm bg-white/[0.05] animate-pulse" />
               ))}
+            </div>
+          ) : filtered.length === 0 && activeIsError ? (
+            <div className="py-16 text-center text-white/70">
+              <Clapperboard className="size-10 mx-auto mb-3 opacity-40" />
+              <p className="mb-3">Não foi possível carregar as séries {perCatEnabled ? "desta categoria" : ""}.</p>
+              {activeError instanceof Error && (
+                <p className="text-xs text-white/40 mb-3">{activeError.message}</p>
+              )}
+              <button
+                type="button"
+                onClick={retryActive}
+                className="rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
+              >
+                Tentar novamente
+              </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-white/60">
