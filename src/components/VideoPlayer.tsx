@@ -465,16 +465,35 @@ export function VideoPlayer({
         `serverFirstChunkBytes=${serverFirstChunkBytes} serverMpegTsSync=${serverMpegTsSync} serverBodyMode=${serverBodyMode}`,
       );
       if (!res.ok) {
+        const errClass = res.headers.get("x-live-upstream-error-class") ?? "-";
+        const respServer = res.headers.get("x-live-response-server") ?? "-";
+        const respCfRay = res.headers.get("x-live-response-cf-ray") ?? "-";
+        const respRetryAfter = res.headers.get("x-live-response-retry-after") ?? "-";
         pushDbg(
           `relayTest relayHttpStatus=${res.status} relayContentType=${ct} relayVersion=${relayVersion} ` +
-          `relayErrorCode=${relayErrorCode ?? "-"} relayFirstByteReceived=false`,
+          `relayErrorCode=${relayErrorCode ?? "-"} upstreamErrorClass=${errClass} ` +
+          `responseServer=${respServer} responseCfRay=${respCfRay} responseRetryAfter=${respRetryAfter} ` +
+          `relayFirstByteReceived=false`,
         );
         if (res.status === 504 && relayErrorCode === "NO_FIRST_BYTE") {
           pushDbg("O servidor do canal não enviou dados ao relay dentro do prazo.");
+        } else if (res.status === 403) {
+          const msg: Record<string, string> = {
+            CONNECTION_LIMIT: "Limite de conexões atingido. Feche outros players e tente novamente.",
+            AUTH_REJECTED: "O servidor recusou a autenticação desta conta.",
+            IP_BLOCKED_OR_DATACENTER: "O servidor recusou a conexão da infraestrutura Web publicada. O aplicativo Android pode continuar funcionando normalmente.",
+            RATE_LIMITED: "O servidor limitou temporariamente as tentativas. Aguarde e tente novamente.",
+            WAF_CHALLENGE: "O provedor apresentou desafio de segurança (WAF) para esta conexão.",
+            GEO_BLOCKED: "O provedor bloqueou a região do IP de saída.",
+            ACCESS_DENIED: "O servidor recusou o acesso a este canal.",
+            UNKNOWN_403: "O servidor recusou esta conexão com HTTP 403.",
+          };
+          pushDbg(msg[errClass] ?? "O servidor recusou esta conexão com HTTP 403.");
         }
         try { await res.body?.cancel(); } catch { /* noop */ }
         return;
       }
+
       const reader = res.body?.getReader();
       if (!reader) {
         pushDbg(`relayTest relayHttpStatus=${res.status} relayVersion=${relayVersion} relayFirstByteReceived=false (sem body no navegador)`);
