@@ -575,14 +575,24 @@ export function VideoPlayer({
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
+    // FIX (APK celular full-bleed): "default" no phone/tablet usa cover
+    // pra preencher toda a tela física (inclusive atrás do notch), sem
+    // deformar. TV/desktop mantém contain como antes.
+    let defaultFit = "object-contain";
+    try {
+      const dt = (window as unknown as { __deviceType?: string }).__deviceType
+        ?? document.documentElement.getAttribute("data-device-type");
+      if (dt === "phone" || dt === "tablet") defaultFit = "object-cover";
+    } catch { /* SSR */ }
     switch (settings.aspectRatio) {
       case "16:9":   return `${base} object-contain`;
       case "4:3":    return `${base} object-contain`;
       case "fill":   return `${base} object-cover`;
       case "stretch":return `${base} object-fill`;
-      default:       return `${base} object-contain`;
+      default:       return `${base} ${defaultFit}`;
     }
   }, [settings.aspectRatio]);
+
 
   useEffect(() => {
     // No APK, o ExoPlayer nativo cuida do playback — pulamos MSE.
