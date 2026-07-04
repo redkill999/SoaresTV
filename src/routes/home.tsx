@@ -1,9 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { store, type M3UPlaylist, type HistItem } from "@/lib/storage";
 import { api, xtreamCredsFromUrl } from "@/lib/xtream";
 import { clearPersisted } from "@/lib/query-persist";
+import {
+  getCapabilities,
+  subscribeCapabilities,
+  capabilityUnavailableReason,
+  type Capabilities,
+  type CapabilityKey,
+} from "@/lib/capabilities";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
