@@ -356,13 +356,58 @@ export function normalizeLiveStreamsResponse(input: unknown): LiveStream[] {
     .filter(isValidLiveStream);
 }
 
-async function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): Promise<T> {
+// FIX CRÍTICO (skeleton infinito em Live no APK):
+// get_live_streams NÃO pode aguardar download/parse da M3U completa.
+// Este merge agora é 100% síncrono e só usa cache em memória (m3uCache.get()).
+// Se não houver cache já hidratado → devolve a resposta Xtream original
+// imediatamente. Baixar M3U ao selecionar categoria travava a WebView.
+//
+// A flag `m3uMergeTriggered` (WeakMap por resposta) fica exposta para
+// diagnóstico. Nunca dispara fetch/loadM3U/IDB — apenas leitura de Map.
+export const __m3uMergeDiagnostics = new WeakMap<object, { triggered: boolean }>();
+
+function getAlreadyLoadedM3UEntriesSync(creds: XtreamCreds): M3UEntry[] {
+  if (!isBrowser()) return [];
+  try {
+    const cached = m3uCache.get();
+    if (!cached?.entries?.length) return [];
+    // Só usa se a M3U em memória bate com uma das listas salvas dessa conta.
+    const lists = store.getM3U();
+    const match = lists.some(
+      (list) =>
+        list.url === cached.url &&
+        sameXtreamAccount(
+          xtreamCredsFromUrl(list.url, list.username, list.password),
+          creds,
+        ),
+    );
+    return match ? cached.entries : [];
+  } catch {
+    return [];
+  }
+}
+
+function maybePreserveLiveUrls<T>(c: XtreamCreds, action: string | undefined, data: T): T {
   if (action !== "get_live_streams") return data;
-  let normalized: LiveStream[];
-  try { normalized = normalizeLiveStreamsResponse(data); }
-  catch { return data; }
-  try { return (await preserveOriginalLiveUrls(c, normalized)) as T; }
-  catch { return normalized as unknown as T; }
+  if (!Array.isArray(data)) return data;
+  const entries = getAlreadyLoadedM3UEntriesSync(c);
+  if (!entries.length) {
+    // Nenhum merge disparado — 0 I/O, retorno instantâneo.
+    if (typeof data === "object" && data !== null) {
+      __m3uMergeDiagnostics.set(data as unknown as object, { triggered: false });
+    }
+    return data;
+  }
+  try {
+    const normalized = normalizeLiveStreamsResponse(data);
+    const merged = mergeLiveStreamsWithM3UUrls(normalized, entries) as unknown as T;
+    if (typeof merged === "object" && merged !== null) {
+      __m3uMergeDiagnostics.set(merged as unknown as object, { triggered: true });
+    }
+    return merged;
+  } catch {
+    return data;
+  }
 }
 
 
