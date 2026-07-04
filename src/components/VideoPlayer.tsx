@@ -1306,7 +1306,9 @@ export function VideoPlayer({
                     // Padrão típico de host incompatível com Web: proxy 404/424
                     // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
                     // Marca o host para futuras sessões pularem o loop de tentativas.
-                    if (isLive && triedDirect) {
+                    // Exceção: hosts com webOverride (ex.: suportejetflix.site) —
+                    // uma falha isolada de canal NÃO condena o provedor inteiro.
+                    if (isLive && triedDirect && !webOverride) {
                       const h = hostOf(workingSrc);
                       if (h) {
                         rememberWebIncompatibleLive(h);
@@ -1321,6 +1323,7 @@ export function VideoPlayer({
                     }
                     return;
                   }
+
 
                   triedDirect = true;
                   playDirect();
