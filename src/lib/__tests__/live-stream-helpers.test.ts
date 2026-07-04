@@ -220,3 +220,72 @@ describe("FORBIDDEN_RESPONSE_HEADERS", () => {
     }
   });
 });
+
+describe("V8 classify403Body", () => {
+  it("detecta CONNECTION_LIMIT", () => {
+    expect(classify403Body("Maximum Connections Reached")).toBe("CONNECTION_LIMIT");
+    expect(classify403Body("too many connections")).toBe("CONNECTION_LIMIT");
+  });
+  it("detecta ACCESS_DENIED", () => {
+    expect(classify403Body("Access Denied")).toBe("ACCESS_DENIED");
+    expect(classify403Body("Forbidden")).toBe("ACCESS_DENIED");
+  });
+  it("detecta WAF_CHALLENGE", () => {
+    expect(classify403Body("Attention Required! | Cloudflare")).toBe("WAF_CHALLENGE");
+    expect(classify403Body("Sucuri WebSite Firewall - CloudProxy")).toBe("WAF_CHALLENGE");
+  });
+  it("detecta RATE_LIMITED", () => {
+    expect(classify403Body("rate limit exceeded")).toBe("RATE_LIMITED");
+  });
+  it("detecta AUTH_REJECTED", () => {
+    expect(classify403Body("Invalid credentials")).toBe("AUTH_REJECTED");
+  });
+  it("detecta IP_BLOCKED_OR_DATACENTER", () => {
+    expect(classify403Body("datacenter IP blocked")).toBe("IP_BLOCKED_OR_DATACENTER");
+  });
+  it("cai em UNKNOWN_403 sem termos conhecidos", () => {
+    expect(classify403Body("something unusual happened")).toBe("UNKNOWN_403");
+  });
+  it("limite máximo é 512 bytes", () => {
+    expect(UPSTREAM_ERROR_BODY_MAX_BYTES).toBe(512);
+  });
+});
+
+describe("V8 pickSafeResponseHeaders", () => {
+  it("inclui apenas headers seguros e nunca set-cookie/authorization", () => {
+    const h = new Headers({
+      server: "nginx",
+      "cf-ray": "abc-123",
+      "retry-after": "30",
+      "set-cookie": "sensitive=1",
+      authorization: "Bearer x",
+      location: "https://other.example.com/blocked?token=SECRET",
+    });
+    const s = pickSafeResponseHeaders(h);
+    expect(s.server).toBe("nginx");
+    expect(s.cfRay).toBe("abc-123");
+    expect(s.retryAfter).toBe("30");
+    expect(s.locationHost).toBe("other.example.com");
+    expect(s.locationPath).toBe("/blocked");
+    // Nunca vaza:
+    expect(JSON.stringify(s)).not.toContain("sensitive");
+    expect(JSON.stringify(s)).not.toContain("Bearer");
+    expect(JSON.stringify(s)).not.toContain("SECRET");
+  });
+});
+
+describe("V8 buildUpstreamRequestHeaders (Preview == Publicado)", () => {
+  it("retorna EXATAMENTE o mesmo conjunto de headers em qualquer ambiente", () => {
+    const a = buildUpstreamRequestHeaders("UA/1");
+    const b = buildUpstreamRequestHeaders("UA/1");
+    expect(a).toEqual(b);
+    expect(Object.keys(a).sort()).toEqual(
+      ["Accept", "Accept-Encoding", "Cache-Control", "Pragma", "User-Agent"],
+    );
+    // Não envia Origin/Referer/Cookie/X-Forwarded-For.
+    expect(a).not.toHaveProperty("Origin");
+    expect(a).not.toHaveProperty("Referer");
+    expect(a).not.toHaveProperty("Cookie");
+    expect(a).not.toHaveProperty("X-Forwarded-For");
+  });
+});
