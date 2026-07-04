@@ -126,12 +126,21 @@ function LivePage() {
       : undefined;
 
   const categoriesQ = useQuery({
-    queryKey: ["live-cats", acct],
+    queryKey: QK.cats(acct),
     enabled: !!creds,
-    queryFn: withPersist(K.cats(acct), () => api<LiveCategory[]>(creds!, "get_live_categories")),
+    queryFn: withPersist(K.cats(acct), () =>
+      timed("get_live_categories", () => api<LiveCategory[]>(creds!, "get_live_categories"), {
+        countOf: (v) => (Array.isArray(v) ? v.length : 0),
+      }),
+    ),
     initialData: catsPersisted?.data,
     initialDataUpdatedAt: catsPersisted?.updatedAt,
     staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   const parental = store.getParental();
@@ -147,16 +156,32 @@ function LivePage() {
   useEffect(() => { countsMapRef.current = countsMap; }, [countsMap]);
   const [countsBump, setCountsBump] = useState(0); // força re-render quando escrevemos
 
-  // Resolve categoria automaticamente quando `cat === AUTO`.
+  // Idempotência da resolução AUTO: guarda por conta em qual acct já resolvemos.
+  // Evita reexecução em refetch de categorias, troca de foco, ou re-render.
+  // Ao trocar de conta, `acct` muda → resetamos ref para permitir nova resolução.
+  const autoResolvedForAcctRef = useRef<string | null>(null);
   useEffect(() => {
-    if (cat !== AUTO || !categoriesQ.data) return;
-    const remembered = acct ? readLastCat(acct) : null;
+    if (autoResolvedForAcctRef.current && autoResolvedForAcctRef.current !== acct) {
+      autoResolvedForAcctRef.current = null;
+      setCat(AUTO);
+      setAllOptIn(false);
+    }
+  }, [acct]);
+
+  // Resolve categoria automaticamente quando `cat === AUTO`. Executa UMA VEZ por conta.
+  useEffect(() => {
+    if (cat !== AUTO || !categoriesQ.data || !acct) return;
+    if (autoResolvedForAcctRef.current === acct) return;
+    const remembered = readLastCat(acct);
     const isPickable = (id: string) => !lockedCats.has(id);
     const pick =
       (remembered && categoriesQ.data.find((c) => c.category_id === remembered && isPickable(c.category_id))?.category_id) ||
       categoriesQ.data.find((c) => isPickable(c.category_id))?.category_id ||
       (native ? null : "all");
-    if (pick) setCat(pick);
+    if (pick) {
+      autoResolvedForAcctRef.current = acct;
+      setCat(pick);
+    }
   }, [cat, categoriesQ.data, acct, lockedCats, native]);
 
   // streamsQ ("all") só roda:
@@ -164,13 +189,21 @@ function LivePage() {
   //  - no APK quando o usuário pediu explicitamente "Todas" (allOptIn).
   const streamsEnabled = !!creds && (!native || allOptIn) && cat === "all";
   const streamsQ = useQuery({
-    queryKey: ["live-streams", acct, "all"],
+    queryKey: QK.all(acct),
     enabled: streamsEnabled,
-    queryFn: withPersist(K.all(acct), () => api<LiveStream[]>(creds!, "get_live_streams")),
+    queryFn: withPersist(K.all(acct), () =>
+      timed("get_live_streams", () => api<LiveStream[]>(creds!, "get_live_streams"), {
+        countOf: (v) => (Array.isArray(v) ? v.length : 0),
+      }),
+    ),
     initialData: listInitialData,
     initialDataUpdatedAt: listInitialData ? listPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    gcTime: 15 * 60_000,
     retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Per-category query: leve, roda sempre que uma categoria específica é selecionada.
@@ -185,13 +218,23 @@ function LivePage() {
       ? perCatPersisted.data
       : undefined;
   const perCatQ = useQuery({
-    queryKey: ["live-streams", acct, "cat", cat],
+    queryKey: QK.cat(acct, cat),
     enabled: perCatEnabled,
-    queryFn: withPersist(perCatKey, () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat })),
+    queryFn: withPersist(perCatKey, () =>
+      timed(
+        "get_live_streams",
+        () => api<LiveStream[]>(creds!, "get_live_streams", { category_id: cat }),
+        { category_id: cat, countOf: (v) => (Array.isArray(v) ? v.length : 0) },
+      ),
+    ),
     initialData: perCatInitial,
     initialDataUpdatedAt: perCatInitial ? perCatPersisted?.updatedAt : undefined,
     staleTime: 10 * 60_000,
+    gcTime: 15 * 60_000,
     retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
   // Ao completar perCatQ, atualiza contador persistido e memoriza last cat.
