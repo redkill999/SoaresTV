@@ -830,6 +830,19 @@ export function VideoPlayer({
     // monta uma fila fixa: HLS-proxy → HLS-direto → TS-proxy → TS-direto.
     // APK/TV/celular e VOD/séries seguem intactos (webOverride é null).
     let overrideCandidateTypes: string[] = [];
+    // Relay dedicado para Live MPEG-TS (spec V4). Usado APENAS para o
+    // candidato ts-proxy do override — HLS e VOD continuam pelo /api/stream.
+    const liveRelayUrl = (rawUrl: string): string => {
+      const uaPart = forcedUA ? `&ua=${encodeURIComponent(forcedUA)}` : "";
+      const path = `/api/live-stream?u=${encodeURIComponent(rawUrl)}${uaPart}`;
+      try {
+        return typeof window !== "undefined"
+          ? new URL(path, window.location.origin).toString()
+          : path;
+      } catch {
+        return path;
+      }
+    };
     if (webOverride) {
       const isHls = isHlsUrl(workingSrc);
       const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
@@ -845,17 +858,17 @@ export function VideoPlayer({
               ? [
                   ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
                   ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
-                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ]
               : [
-                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
                   ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
                 ])
           : [
               ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
               ["hls-direct", hlsUrl],
-              ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+              ["ts-proxy", tsUrl ? liveRelayUrl(tsUrl) : null],
               ["ts-direct", tsUrl],
             ];
       const seen = new Set<string>();
@@ -870,10 +883,11 @@ export function VideoPlayer({
       playbackCandidates = ordered;
       overrideCandidateTypes = types;
       pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v3 hostMatched=true environment=web-desktop ` +
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v4 hostMatched=true environment=web-desktop ` +
         `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
         `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
         `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `relaySameOrigin=true relayPath="/api/live-stream" ` +
         `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
       );
     }
