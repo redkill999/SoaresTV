@@ -561,7 +561,7 @@ interface CancelSignal { aborted: boolean }
  * (em listas de 60-80 MB o split chega a dobrar o uso de memória e
  * derruba o WebView do APK). Cada linha é processada e descartada.
  *
- * Suporta: BOM, CRLF, #EXTINF (com atributos tvg-*/catchup*),
+ * Suporta: BOM, CRLF, #EXTINF (com atributos tvg-* e catchup-*),
  * #EXTVLCOPT (user-agent/referer), #KODIPROP, #EXTGRP, url-tvg no header,
  * URLs relativas (resolvidas via baseUrl) e cancelamento cooperativo.
  */
