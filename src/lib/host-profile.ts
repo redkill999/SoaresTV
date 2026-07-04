@@ -294,7 +294,7 @@ export function rememberPreferredPlayer(host: string, strategy: PlaybackStrategy
  *  futuros canais desse provedor pulam direto pro .ts via mpegts.js. */
 export function rememberHlsUnsupported(host: string): void {
   const override = getWebLiveProviderOverride(host);
-  if (override?.preventHostWideHlsBlacklist) {
+  if (override?.preventHostWideHlsBlacklist || override?.preventHostWideLearning) {
     console.log("[HOST PROFILE] rememberHlsUnsupported ignorado (override)", { host });
     return;
   }
@@ -304,7 +304,7 @@ export function rememberHlsUnsupported(host: string): void {
 /** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
 export function rememberWebIncompatibleLive(host: string): void {
   const override = getWebLiveProviderOverride(host);
-  if (override?.preventAutoWebBlacklist) {
+  if (override?.preventAutoWebBlacklist || override?.preventHostWideLearning) {
     console.log("[HOST PROFILE] rememberWebIncompatibleLive ignorado (override)", { host });
     return;
   }
@@ -317,7 +317,7 @@ export function rememberWebIncompatibleLive(host: string): void {
 // =========================================================================
 
 export type WebLiveProviderOverride = {
-  strategy: "hls-proxy-first";
+  strategy: "hls-proxy-first" | "ts-proxy-first";
   ignoreWebIncompatibleFlag?: boolean;
   preventAutoWebBlacklist?: boolean;
   preventHostWideHlsBlacklist?: boolean;
@@ -325,16 +325,34 @@ export type WebLiveProviderOverride = {
   ignoreDisableHlsConversion?: boolean;
   /** Ignora `preferTs` (preset ou persistido) para este host no Web Desktop. */
   ignorePreferTs?: boolean;
+  /** Não inventar `.m3u8` a partir de `.ts`; não gerar candidatos HLS artificiais. */
+  skipSyntheticHls?: boolean;
+  /** Ignorar `bypassProxyForLive` — força reprodução via /api/stream. */
+  ignoreBypassProxyForLive?: boolean;
+  /** Não incluir candidatos diretos (ts-direct/hls-direct) na fila. */
+  preventDirectCandidates?: boolean;
+  /** Não executar probe (`?probe=1`) antes de iniciar o mpegts.js. */
+  disablePrePlaybackProbe?: boolean;
+  /** Timeout (ms) do watchdog de primeiro quadro para este override. */
+  firstFrameTimeoutMs?: number;
+  /** Falha isolada não pode aprender/persistir flags globais para o host. */
+  preventHostWideLearning?: boolean;
 };
 
 const WEB_LIVE_PROVIDER_OVERRIDES: Record<string, WebLiveProviderOverride> = {
   "suportejetflix.site": {
-    strategy: "hls-proxy-first",
+    strategy: "ts-proxy-first",
     ignoreWebIncompatibleFlag: true,
     preventAutoWebBlacklist: true,
     preventHostWideHlsBlacklist: true,
     ignoreDisableHlsConversion: true,
     ignorePreferTs: true,
+    skipSyntheticHls: true,
+    ignoreBypassProxyForLive: true,
+    preventDirectCandidates: true,
+    disablePrePlaybackProbe: true,
+    firstFrameTimeoutMs: 20_000,
+    preventHostWideLearning: true,
   },
 };
 
@@ -404,6 +422,45 @@ try {
     localStorage.setItem(MIGRATION_KEY_V2, "1");
   }
 } catch { /* noop */ }
+
+// Migração pontual v3 (suportejetflixWebLiveV3): remove novamente do perfil
+// persistido de suportejetflix.site as flags que impedem o override
+// ts-proxy-first (webIncompatibleLive, disableProxy aprendido, e o restante
+// das flags HLS-only da tentativa anterior). Não toca em outros hosts, conta,
+// credenciais, favoritos, histórico ou cache. Executa uma vez por dispositivo.
+const MIGRATION_KEY_V3 = "iptv.migration.suportejetflixWebLiveV3";
+try {
+  if (typeof localStorage !== "undefined" && !localStorage.getItem(MIGRATION_KEY_V3)) {
+    const TARGETS = new Set(["suportejetflix.site"]);
+    const STRIP: (keyof HostProfile)[] = [
+      "webIncompatibleLive",
+      "disableProxy",
+      "disableHlsConversion",
+      "preferTs",
+      "bypassProxyForLive",
+    ];
+    let mutated = false;
+    for (const key of Object.keys(memory)) {
+      const bare = key.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+      const matches = TARGETS.has(bare) || [...TARGETS].some((t) => bare.endsWith(`.${t}`));
+      if (!matches) continue;
+      const cur = memory[key];
+      const next: HostProfile = { ...cur };
+      let touched = false;
+      for (const flag of STRIP) {
+        if (next[flag] !== undefined) { delete next[flag]; touched = true; }
+      }
+      if (touched) {
+        memory[key] = next;
+        mutated = true;
+        console.log("[HOST PROFILE] migração v3 aplicada", { host: key });
+      }
+    }
+    if (mutated) writeStorage(memory);
+    localStorage.setItem(MIGRATION_KEY_V3, "1");
+  }
+} catch { /* noop */ }
+
 
 
 

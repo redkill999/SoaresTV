@@ -25,9 +25,16 @@ beforeEach(() => {
 });
 
 describe("getWebLiveProviderOverride — suportejetflix.site", () => {
-  it("host exato encontra override", async () => {
+  it("host exato encontra override ts-proxy-first", async () => {
     const { getWebLiveProviderOverride } = await loadModule();
-    expect(getWebLiveProviderOverride("suportejetflix.site")?.strategy).toBe("hls-proxy-first");
+    const o = getWebLiveProviderOverride("suportejetflix.site")!;
+    expect(o.strategy).toBe("ts-proxy-first");
+    expect(o.skipSyntheticHls).toBe(true);
+    expect(o.preventDirectCandidates).toBe(true);
+    expect(o.disablePrePlaybackProbe).toBe(true);
+    expect(o.ignoreBypassProxyForLive).toBe(true);
+    expect(o.preventHostWideLearning).toBe(true);
+    expect(o.firstFrameTimeoutMs).toBe(20_000);
   });
   it("www.suportejetflix.site encontra override", async () => {
     const { getWebLiveProviderOverride } = await loadModule();
@@ -125,6 +132,29 @@ describe("migração + guards de blacklist para suportejetflix.site", () => {
     const o = getWebLiveProviderOverride("suportejetflix.site")!;
     expect(o.ignoreDisableHlsConversion).toBe(true);
     expect(o.ignorePreferTs).toBe(true);
+  });
+
+  it("migração v3 limpa flags legadas de suportejetflix.site e grava chave", async () => {
+    localStorage.setItem(
+      "iptv.hostProfiles.v1",
+      JSON.stringify({
+        "suportejetflix.site": {
+          webIncompatibleLive: true, disableProxy: true,
+          disableHlsConversion: true, preferTs: true, bypassProxyForLive: true,
+        },
+        "outro-host.tv": { webIncompatibleLive: true },
+      }),
+    );
+    const { getHostProfile } = await loadModule();
+    expect(localStorage.getItem("iptv.migration.suportejetflixWebLiveV3")).toBe("1");
+    const p = getHostProfile("suportejetflix.site");
+    expect(p.webIncompatibleLive).toBeUndefined();
+    expect(p.disableProxy).toBeUndefined();
+    expect(p.disableHlsConversion).toBeUndefined();
+    expect(p.preferTs).toBeUndefined();
+    expect(p.bypassProxyForLive).toBeUndefined();
+    // Outros hosts intactos.
+    expect(getHostProfile("outro-host.tv").webIncompatibleLive).toBe(true);
   });
 
 });

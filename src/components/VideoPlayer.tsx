@@ -832,14 +832,32 @@ export function VideoPlayer({
     let overrideCandidateTypes: string[] = [];
     if (webOverride) {
       const isHls = isHlsUrl(workingSrc);
-      const hlsUrl = isHls ? workingSrc : toHlsCandidate(workingSrc, "live");
       const tsUrl = isHls ? workingSrc.replace(/\.m3u8(\?|$)/i, ".ts$1") : workingSrc;
-      const entries: Array<[string, string | null]> = [
-        ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
-        ["hls-direct", hlsUrl],
-        ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
-        ["ts-direct", tsUrl],
-      ];
+      const hlsUrl = webOverride.skipSyntheticHls
+        ? (isHls ? workingSrc : null)
+        : (isHls ? workingSrc : toHlsCandidate(workingSrc, "live"));
+      const preventDirect = !!webOverride.preventDirectCandidates;
+      // Estratégia ts-proxy-first para .ts original: fila = [ts-proxy].
+      // Se URL original já for .m3u8 (raro para este provedor), usar HLS proxy.
+      const entries: Array<[string, string | null]> =
+        webOverride.strategy === "ts-proxy-first"
+          ? (isHls
+              ? [
+                  ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["hls-direct", hlsUrl] as [string, string | null]]),
+                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
+                ]
+              : [
+                  ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+                  ...(preventDirect ? [] : [["ts-direct", tsUrl] as [string, string | null]]),
+                ])
+          : [
+              ["hls-proxy", hlsUrl ? proxiedX(hlsUrl, "live") : null],
+              ["hls-direct", hlsUrl],
+              ["ts-proxy", tsUrl ? proxiedX(tsUrl, "live") : null],
+              ["ts-direct", tsUrl],
+            ];
       const seen = new Set<string>();
       const ordered: string[] = [];
       const types: string[] = [];
@@ -852,8 +870,10 @@ export function VideoPlayer({
       playbackCandidates = ordered;
       overrideCandidateTypes = types;
       pushDbg(
-        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v1 hostMatched=true environment=web-desktop ` +
-        `strategy=${webOverride.strategy} staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
+        `ETAPA 4.OVR providerOverride=suportejetflix-web-live-v3 hostMatched=true environment=web-desktop ` +
+        `strategy=${webOverride.strategy} syntheticHlsSkipped=${!!webOverride.skipSyntheticHls} ` +
+        `directCandidatesSkipped=${preventDirect} probeSkipped=${!!webOverride.disablePrePlaybackProbe} ` +
+        `staleWebBlacklistIgnored=${!!liveHostProfile.webIncompatibleLive} ` +
         `candidateCount=${ordered.length} candidateTypes=[${types.join(",")}]`,
       );
     }
@@ -929,10 +949,13 @@ export function VideoPlayer({
       return 0;
     };
 
-    const playMpegTs = async (url: string) => {
+    const playMpegTs = async (url: string, candidateType: string = "ts-proxy") => {
       if (!isLive) return false;
       try {
-        const probeUrl = probeUrlForCandidate(url);
+        // Probe pré-reprodução: pulado quando o override pede (evita gastar
+        // uma conexão simultânea e não encurtar o watchdog do primeiro quadro).
+        const skipProbe = !!webOverride?.disablePrePlaybackProbe;
+        const probeUrl = skipProbe ? null : probeUrlForCandidate(url);
         if (probeUrl) {
           try {
             pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
@@ -950,9 +973,12 @@ export function VideoPlayer({
             const msg = err instanceof Error ? err.message : String(err);
             pushDbg(`PROBE erro=${msg.slice(0, 160)}`);
           }
+        } else if (skipProbe) {
+          pushDbg(`PROBE skipped (override) candidate=${candidateType}`);
         }
         const mpegts = await loadMpegts();
         if (cancelled || !mpegts.isSupported()) return false;
+        pushDbg(`mpegts loaded candidate=${candidateType}`);
         destroyTsPlayer();
         video.pause();
         video.removeAttribute("src");
@@ -976,8 +1002,12 @@ export function VideoPlayer({
             // a URL é proxiada e Range é negociado de forma imprevisível.
             enableWorker: false,
             enableStashBuffer: false,
+            lazyLoad: false,
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 30,
+            autoCleanupMinBackwardDuration: 15,
             liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMaxLatency: 10,
             liveBufferLatencyMinRemain: 1,
           },
         );
@@ -989,18 +1019,25 @@ export function VideoPlayer({
         });
 
         tsPlayer.attachMediaElement(video);
+        pushDbg(`mpegts attached candidate=${candidateType}`);
         tsPlayer.load();
+        pushDbg(`mpegts loaded/starting candidate=${candidateType}`);
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
           playPromise.then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
+        // Watchdog do primeiro quadro só arma AGORA — após attach/load/play.
+        // Antes de load(), qualquer atraso de import do mpegts contava contra
+        // o timeout e disparava fallback indevido.
+        armFirstFrameWatchdog(candidateType);
         return true;
       } catch {
         return false;
       }
     };
+
 
     const playDirect = () => {
       if (hls) {
@@ -1069,13 +1106,15 @@ export function VideoPlayer({
       // proxy devolve video/mp2t, mas <video> sozinho não demuxa TS no Chrome;
       // precisa passar pelo mpegts.js. VOD continua intocado.
       if (isLive || /\.ts(\?|&|$)/i.test(decodedUrl)) {
-        armFirstFrameWatchdog(candidateType);
-        void playMpegTs(url).then((handled) => {
+        // NÃO armar watchdog aqui: playMpegTs arma internamente APÓS
+        // attach/load/play, garantindo os 20s reais para o primeiro quadro.
+        void playMpegTs(url, candidateType).then((handled) => {
           if (!handled && !cancelled) {
             video.pause();
             video.currentTime = 0;
             video.src = url;
             video.load();
+            armFirstFrameWatchdog(candidateType);
             video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
           }
         });
@@ -1118,6 +1157,25 @@ export function VideoPlayer({
     const armFirstFrameWatchdog = (candidateType: string) => {
       if (!webOverride) return;
       clearFirstFrameWatchdog();
+      const timeoutMs = webOverride.firstFrameTimeoutMs ?? 10_000;
+      pushDbg(`watchdog armed candidate=${candidateType} timeoutMs=${timeoutMs}`);
+      // requestVideoFrameCallback: prova canônica de que o decoder entregou
+      // um quadro renderizável. Cancela o watchdog antes do timeout.
+      try {
+        const vAny = video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (cb: (now: number, meta: unknown) => void) => number;
+        };
+        if (typeof vAny.requestVideoFrameCallback === "function") {
+          vAny.requestVideoFrameCallback(() => {
+            if (cancelled) return;
+            pushDbg(
+              `first-frame candidate=${candidateType} via=rVFC ` +
+              `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
+            );
+            clearFirstFrameWatchdog();
+          });
+        }
+      } catch { /* noop */ }
       firstFrameTimer = setTimeout(() => {
         firstFrameTimer = null;
         if (cancelled) return;
@@ -1130,7 +1188,7 @@ export function VideoPlayer({
           `videoWidth=${video.videoWidth} videoHeight=${video.videoHeight}`,
         );
         advanceCandidate(`first-frame-timeout:${candidateType}`);
-      }, 10_000);
+      }, timeoutMs);
     };
 
     const onVideoError = () => {
