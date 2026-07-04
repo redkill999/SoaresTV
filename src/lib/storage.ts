@@ -373,25 +373,75 @@ export function getCurrentProviderId(): string | null {
 
 export const store = {
   getCreds: () => deobfuscateCreds(read<XtreamCreds | null>(K.creds, null)),
-  setCreds: (c: XtreamCreds | null) => write(K.creds, obfuscateCreds(c)),
+  setCreds: (c: XtreamCreds | null) => {
+    write(K.creds, obfuscateCreds(c));
+    // Provedor mudou → agenda re-migração para os PRÓXIMOS itens carimbarem
+    // com o novo providerId. Itens já carimbados não são tocados.
+    if (c) resetContentRefMigration();
+  },
 
   getM3U: () => deobfuscateList(read<M3UPlaylist[]>(K.m3u, [])),
-  setM3U: (l: M3UPlaylist[]) => write(K.m3u, obfuscateList(l)),
+  setM3U: (l: M3UPlaylist[]) => {
+    write(K.m3u, obfuscateList(l));
+    if (l.length > 0) resetContentRefMigration();
+  },
 
 
-  getFavs: () => read<FavItem[]>(K.favs, []),
+  getFavs: () => { migrateLegacyItems(); return read<FavItem[]>(K.favs, []); },
   toggleFav: (item: FavItem) => {
+    // Legacy API: continua funcionando. Enriquece com providerId+stableId
+    // do provedor ATIVO se possível — evita gerar novos itens "órfãos".
+    migrateLegacyItems();
     const cur = read<FavItem[]>(K.favs, []);
     const exists = cur.some((x) => sameItem(x, item));
-    const next = exists
-      ? cur.filter((x) => !sameItem(x, item))
-      : [{ ...item, id: String(item.id) }, ...cur];
+    if (exists) {
+      write(K.favs, cur.filter((x) => !sameItem(x, item)));
+      return cur;
+    }
+    const pid = getCurrentProviderIdInternal();
+    const enriched: FavItem = {
+      ...item,
+      id: String(item.id),
+      providerId: item.providerId ?? pid ?? undefined,
+      stableId:
+        item.stableId ??
+        (pid ? stableIdFromLegacy(pid, item.type, String(item.id)) : undefined),
+    };
+    const next = [enriched, ...cur];
+    write(K.favs, next);
+    return next;
+  },
+  /** Toggle usando ContentReference (novo caminho, colision-free entre provedores). */
+  toggleFavRef: (ref: import("./content-ref").ContentReference) => {
+    const cur = read<FavItem[]>(K.favs, []);
+    const idx = cur.findIndex((x) => x.stableId === ref.stableId);
+    if (idx >= 0) {
+      const next = cur.slice(); next.splice(idx, 1); write(K.favs, next);
+      return next;
+    }
+    // Mapeia contentType → legacy type para retrocompat com telas antigas.
+    const legacyType: FavItem["type"] =
+      ref.contentType === "movie" ? "movie" :
+      ref.contentType === "series" || ref.contentType === "episode" ? "series" :
+      "live";
+    const item: FavItem = {
+      type: legacyType,
+      id: String(ref.contentId),
+      name: ref.name,
+      logo: ref.logo,
+      providerId: ref.providerId,
+      stableId: ref.stableId,
+    };
+    const next = [item, ...cur];
     write(K.favs, next);
     return next;
   },
   isFav: (type: FavItem["type"], id: string | number) =>
     read<FavItem[]>(K.favs, []).some((x) => x.type === type && x.id === String(id)),
+  isFavRef: (ref: Pick<import("./content-ref").ContentReference, "stableId">) =>
+    read<FavItem[]>(K.favs, []).some((x) => x.stableId === ref.stableId),
   subscribeFavs: (fn: Listener) => subscribe(K.favs, fn),
+
 
   getHistory: () => read<HistItem[]>(K.hist, []),
   pushHistory: (item: HistItem) => {
