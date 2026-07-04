@@ -1,143 +1,176 @@
-# live-relay
+# live-relay — MPEG-TS relay for suportejetflix.site (Web Desktop)
 
-Standalone Node.js 20 + Fastify service that streams MPEG-TS Live channels
-from **suportejetflix.site** to the browser for the Lovable web app when the
-managed runtime cannot deliver long-lived progressive bodies.
+Standalone Node.js 20 + Fastify service. Runs **outside** the Lovable app, on
+infrastructure with a **static public IPv4**. Its only job is to open a single
+long-lived MPEG-TS connection to the IPTV provider and pipe bytes progressively
+to the browser.
 
-This service is **isolated**. It only handles:
-
+Only these flows use it:
 - host `suportejetflix.site`
-- Live (`.ts`) streams
-- Web Desktop browsers
+- Live channels (MPEG-TS)
+- Web Desktop browser
 
-The APK, Android TV, Movies, Series, categories, and every other provider
-inside the Lovable app **do not** touch this service.
+APK, Android TV, movies, series, other providers do **not** touch this service.
 
----
+## Why this exists
 
-## How it fits together
+The published Lovable runtime (Cloudflare Worker edge) does not deliver
+long-lived progressive MPEG-TS bodies to the browser: headers arrive but the
+body never streams. In addition, the provider's Cloudflare policy rejects the
+published deployment's egress IP with HTTP 403. Both problems are solved by
+running the relay on a normal Node.js host with a fixed IPv4 that the provider
+whitelists.
 
-```
-Browser ── GET /api/live-token ─────────────► Lovable app  (HMAC signs a token
-                                                            with providerId,
-                                                            streamId, exp, nonce)
-Browser ── GET <RELAY>/live/<token> ────────► live-relay   (verifies HMAC,
-                                                            reconstructs upstream
-                                                            URL with env creds,
-                                                            pipes one connection)
-live-relay ── GET https://suportejetflix.site/live/USER/PASS/ID.ts (single upstream)
-```
+## Security model
 
-- Credentials (`PROVIDER_USER` / `PROVIDER_PASS`) live only on the relay
-  process. They never appear in the token, in the URL the browser sees,
-  in headers, or in any log line.
-- Token TTL is 60 seconds (issued by the Lovable app).
-- Closing the browser tab aborts the upstream immediately.
+- **AES-256-GCM opaque token.** The Lovable backend encrypts
+  `{host, port, protocol, username, password, streamId, expiresAt, nonce}` with
+  `LIVE_RELAY_ENCRYPTION_KEY`. The browser never sees the URL or credentials —
+  only the base64url ciphertext.
+- **60-second token TTL** and **single-use nonce** (replay-protected 5 min).
+- **Host allowlist** enforced against the decrypted `host`.
+- **SSRF guard**: DNS resolution + block private / loopback / link-local /
+  cloud-metadata ranges.
+- **CORS**: only origins in `ALLOWED_ORIGINS` may call `/live/:token`.
+- **Rate limit** per IP + `MAX_CONCURRENT` cap.
+- **Sanitized logs** (Pino redact): URL, user, password, token never appear.
 
----
-
-## Deploy
-
-### 1. Configure the shared secret
-
-Pick a strong random string and store it in **two** places with the exact
-same value:
-
-- Inside the Lovable app: Cloud → Secrets → `LIVE_RELAY_TOKEN_SECRET`.
-- In the relay environment: `LIVE_RELAY_TOKEN_SECRET`.
-
-### 2. Configure the relay environment
-
-Copy `.env.example` to `.env` and fill in every variable — see comments
-in the file. The most important:
-
-| Variable                    | Purpose                                              |
-| --------------------------- | ---------------------------------------------------- |
-| `LIVE_RELAY_TOKEN_SECRET`   | HMAC key, must match the app.                        |
-| `PROVIDER_USER`             | Xtream username for the account you want streamed.   |
-| `PROVIDER_PASS`             | Xtream password for that account.                    |
-| `PROVIDER_HOST`             | Allowlisted upstream host (default suportejetflix).  |
-| `ALLOWED_ORIGINS`           | Comma list of browser Origins allowed to consume.    |
-| `FIRST_BYTE_TIMEOUT_MS`     | Fail fast if upstream is silent (default 8000).      |
-| `MAX_CONCURRENT`            | Cap on simultaneous upstream connections.            |
-
-### 3. Run
-
-**Local:**
-
-```bash
-cd live-relay
-npm install
-npm run dev
-# open http://localhost:8787/health
-```
-
-**Docker:**
-
-```bash
-docker build -t live-relay .
-docker run --rm -p 8787:8787 --env-file .env live-relay
-```
-
-**Fly.io / Render / Railway / VPS:** any Node.js 20 host that supports
-long-lived HTTP connections works. Serverless platforms that buffer the
-whole response (Vercel/Netlify/Cloudflare Workers) are **not** suitable —
-that is the exact problem this service exists to work around.
-
-### 4. Point the Lovable app at the relay
-
-In the Lovable project, add a build variable:
+## Files
 
 ```
-VITE_LIVE_RELAY_BASE_URL=https://your-relay.example.com
+live-relay/
+├── src/
+│   ├── server.ts       # Fastify entry point
+│   ├── token.ts        # AES-256-GCM verification
+│   ├── ssrf-guard.ts   # DNS + private-range guard (also exported as ssrf.ts)
+│   └── ssrf.ts         # re-export alias
+├── Dockerfile
+├── docker-compose.yml
+├── healthcheck.sh
+├── .env.example
+├── package.json
+└── tsconfig.json
 ```
 
-Then re-publish the app. The app will start minting tokens and requesting
-`${VITE_LIVE_RELAY_BASE_URL}/live/<token>` **only** for suportejetflix Live
-on Web Desktop.
+## Deploy — step by step
 
----
+### 1. Generate `LIVE_RELAY_ENCRYPTION_KEY`
 
-## Endpoints
+```
+openssl rand -base64 48
+```
 
-### `GET /health`
-Returns `{ ok, version, providerHost, activeConnections, maxConcurrent }`.
+Put the **same value** in:
+- Lovable Cloud → Secrets → `LIVE_RELAY_ENCRYPTION_KEY`
+- the relay host env (`.env` beside `docker-compose.yml`)
 
-### `GET /live/:token`
-Verifies the token, opens a single upstream, and pipes MPEG-TS bytes
-progressively. Response headers:
+Never expose this key to the browser. Do **not** create a `VITE_LIVE_RELAY_ENCRYPTION_KEY`.
 
-- `Content-Type: video/mp2t`
-- `Cache-Control: no-store, no-cache, must-revalidate, no-transform`
-- `X-Accel-Buffering: no`
-- `X-Live-Relay-Version: v1`
-- `X-Live-Relay-Upstream-Status: <n>`
+### 2. Provision a host with static IPv4
 
-Never sent: `Content-Length`, `Content-Encoding`, `Transfer-Encoding`,
-`Connection`, `Keep-Alive`, `Accept-Ranges`.
+Use a VPS, dedicated server or L4 load balancer — any provider that gives you
+a **stable public IPv4** and allows long-lived HTTP responses. Serverless
+runtimes that buffer responses are **not** supported.
 
----
+Confirm the IP is stable:
 
-## Security
+```
+curl -4 https://ifconfig.io
+```
 
-- HMAC-SHA256 token verification with timing-safe compare.
-- SSRF guard: refuses to open connections against private, loopback,
-  link-local, CGNAT, or multicast addresses.
-- Explicit provider host allowlist (`PROVIDER_HOST`).
-- Origin allowlist for browser callers.
-- Per-IP rate limit (default 60 req / minute).
-- Concurrent connection cap (default 50).
-- Structured logs redact any accidental token/user/pass/URL fields.
-- No credential, no URL, no token payload is ever logged.
+### 3. Ask the IPTV provider to whitelist that IPv4
 
----
+This is the definitive fix for the 403. Send the provider the exact IPv4 with
+a note that it will be the sole egress IP of the Web relay. Do **not** attempt
+to bypass Cloudflare with IP rotation, spoofed X-Forwarded-For, cookies or
+alternative DNS — those are blocked by design.
 
-## Troubleshooting
+### 4. Configure the relay
 
-- **401 TOKEN_INVALID** — the HMAC secret does not match, or the token
-  expired (60 s TTL). Re-issue by reopening the channel.
-- **403 HOST_NOT_ALLOWED / ORIGIN_NOT_ALLOWED** — `PROVIDER_HOST` or
-  `ALLOWED_ORIGINS` misconfigured.
-- **502 FIRST_BYTE_TIMEOUT** — upstream did not send any bytes within
-  `FIRST_BYTE_TIMEOUT_MS`; check provider status.
-- **503 TOO_MANY_CONNECTIONS** — raise `MAX_CONCURRENT` if capacity allows.
+```
+cp .env.example .env
+# edit LIVE_RELAY_ENCRYPTION_KEY, ALLOWED_UPSTREAM_HOSTS, ALLOWED_ORIGINS
+```
+
+### 5. Run
+
+```
+docker compose up -d --build
+./healthcheck.sh http://127.0.0.1:8787/health
+```
+
+Expected:
+
+```
+healthy: {"ok":true,"version":"v2-aes-gcm",...}
+```
+
+### 6. Test upstream connectivity directly from the relay host
+
+Before wiring the frontend, verify the provider accepts this IP:
+
+```
+curl -v -I "https://<provider-host>/live/<user>/<pass>/<streamId>.ts" \
+     -H "User-Agent: XCIPTV/7.0 (Linux; Android 13)"
+```
+
+- HTTP 200 + `Content-Type: video/mp2t` → IP was whitelisted, proceed.
+- HTTP 403 → IP still blocked. Do **not** deploy the frontend integration yet.
+
+### 7. HTTPS
+
+Terminate TLS with Caddy, Nginx or Cloudflare Tunnel in front of the relay.
+The browser must reach `https://relay.example.com/live/<token>`. Modern
+browsers refuse mixed content from an HTTPS Lovable page.
+
+### 8. Configure the app
+
+Set the following Lovable **build** secret (Workspace → Build Secrets):
+
+```
+VITE_LIVE_RELAY_BASE_URL=https://relay.example.com
+```
+
+Re-publish the Lovable project. Without this variable, the frontend never
+attempts the external relay path — every other player behavior is unchanged.
+
+### 9. Verify end to end
+
+Open the published site → Live tab → open a channel on a **desktop browser**.
+The player will:
+
+1. request `/api/live-relay-token`
+2. open `https://relay.example.com/live/<token>` with MPEGTS.js
+3. show `firstFrameReceived=true` within ~2 s
+
+If the relay returns HTTP 403 → the provider still hasn't authorized this IP.
+
+## Runtime endpoints
+
+| Method | Path              | Purpose                              |
+| ------ | ----------------- | ------------------------------------ |
+| GET    | `/health`         | Liveness + counters (no auth)        |
+| GET    | `/live/:token`    | Progressive MPEG-TS stream           |
+| OPTIONS| `/live/:token`    | CORS preflight                       |
+
+## Error contract
+
+| Status | Code                     | Meaning                                                |
+| ------ | ------------------------ | ------------------------------------------------------ |
+| 401    | `TOKEN_INVALID`          | Token expired / mangled / wrong key                    |
+| 401    | `NONCE_REPLAY`           | Token already used                                     |
+| 403    | `ORIGIN_NOT_ALLOWED`     | Browser Origin not in allowlist                        |
+| 403    | `HOST_NOT_ALLOWED`       | Decrypted host not in `ALLOWED_UPSTREAM_HOSTS`         |
+| 403    | `UPSTREAM_FORBIDDEN`     | Provider rejected the relay IP — request whitelisting  |
+| 400    | `SSRF_BLOCKED`           | Host resolved to a private/loopback range              |
+| 502    | `FETCH_ERROR`            | Network error connecting to upstream                   |
+| 502    | `FIRST_BYTE_TIMEOUT`     | Upstream accepted but sent no bytes within timeout     |
+| 503    | `TOO_MANY_CONNECTIONS`   | Local concurrency cap reached                          |
+
+## What this relay never does
+
+- No `text()` / `arrayBuffer()` / `blob()` on the upstream body.
+- No in-memory buffering of the full stream.
+- No automatic retry after HTTP 403.
+- No logging of URL / user / password / token / full response body.
+- No connection to APK / Android TV / movies / series / other providers.

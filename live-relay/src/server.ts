@@ -1,32 +1,11 @@
 // =============================================================================
 // live-relay — standalone Node.js MPEG-TS relay for suportejetflix.site Live.
+// Spec V-final: opaque AES-256-GCM token, static public IPv4, HTTP 403 handled
+// as UPSTREAM_FORBIDDEN, progressive streaming, cancel on client disconnect.
 //
-// Why this exists (external to Lovable):
-//   The published Lovable runtime does not deliver long-lived progressive
-//   MPEG-TS bodies to the browser (headers arrive but the body never streams).
-//   This tiny service runs on a normal Node.js host (Fly, Render, VPS, etc.)
-//   and is used ONLY for:
-//     - host suportejetflix.site
-//     - Live streams
-//     - Web Desktop browser
-//   APK, Android TV, Movies, Series, other providers do NOT touch this service.
-//
-// Contract with the Lovable app:
-//   1. Browser asks the app for a short-lived signed token (`/api/live-token`).
-//   2. Browser calls `${VITE_LIVE_RELAY_BASE_URL}/live/:token`.
-//   3. This service verifies HMAC, reconstructs the upstream URL from
-//      env-configured credentials, opens ONE upstream, and pipes progressively.
-//   4. Closing the browser aborts the upstream immediately.
-//
-// Security:
-//   - Token is HMAC-SHA256 over `{providerId,streamId,kind:"live",exp,nonce}`.
-//   - Credentials (`PROVIDER_USER`, `PROVIDER_PASS`) live only on the relay,
-//     never in the token, query, or any log.
-//   - Allowlist: PROVIDER_HOST env, defaults to `suportejetflix.site`.
-//   - SSRF guard: refuses to hit private / loopback / link-local addresses.
-//   - Origin validation via `ALLOWED_ORIGINS`.
-//   - Rate limiting via @fastify/rate-limit.
-//   - MAX_CONCURRENT limits simultaneous upstream connections.
+// The relay never sees any provider credentials in an env var — they arrive
+// encrypted inside the short-lived token. The Lovable backend and the relay
+// share ONLY the symmetric key LIVE_RELAY_ENCRYPTION_KEY.
 // =============================================================================
 
 import Fastify from "fastify";
@@ -36,33 +15,26 @@ import { verifyRelayToken } from "./token.js";
 import { assertPublicHost } from "./ssrf-guard.js";
 
 // ---------------------------------------------------------------------------
-// Env config
+// Config
 // ---------------------------------------------------------------------------
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
-const TOKEN_SECRET = process.env.LIVE_RELAY_TOKEN_SECRET ?? "";
-const PROVIDER_HOST = (process.env.PROVIDER_HOST ?? "suportejetflix.site").toLowerCase();
-const PROVIDER_USER = process.env.PROVIDER_USER ?? "";
-const PROVIDER_PASS = process.env.PROVIDER_PASS ?? "";
+const ENCRYPTION_KEY = process.env.LIVE_RELAY_ENCRYPTION_KEY ?? "";
+const ALLOWED_HOSTS = (process.env.ALLOWED_UPSTREAM_HOSTS ?? "suportejetflix.site")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "*")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const FIRST_BYTE_TIMEOUT_MS = Number.parseInt(process.env.FIRST_BYTE_TIMEOUT_MS ?? "8000", 10);
 const MAX_CONCURRENT = Number.parseInt(process.env.MAX_CONCURRENT ?? "50", 10);
 const RATE_LIMIT_MAX = Number.parseInt(process.env.RATE_LIMIT_MAX ?? "60", 10);
 const RATE_LIMIT_WINDOW = process.env.RATE_LIMIT_WINDOW ?? "1 minute";
 const UA = process.env.UPSTREAM_UA ?? "XCIPTV/7.0 (Linux; Android 13)";
+const MAX_REDIRECTS = Number.parseInt(process.env.MAX_REDIRECTS ?? "3", 10);
+const NONCE_TTL_MS = 5 * 60_000;
 
-if (!TOKEN_SECRET) {
-  // Fail loudly on boot — the relay is useless without the shared secret.
+if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 32) {
   // eslint-disable-next-line no-console
-  console.error("[live-relay] Missing LIVE_RELAY_TOKEN_SECRET — refusing to start.");
-  process.exit(1);
-}
-if (!PROVIDER_USER || !PROVIDER_PASS) {
-  // eslint-disable-next-line no-console
-  console.error("[live-relay] Missing PROVIDER_USER / PROVIDER_PASS — refusing to start.");
+  console.error("[live-relay] Missing/short LIVE_RELAY_ENCRYPTION_KEY (need >= 32 chars). Refusing to start.");
   process.exit(1);
 }
 
@@ -73,21 +45,16 @@ const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL ?? "info",
     redact: {
-      // Hard redaction so accidental fields never leak.
       paths: [
-        "req.headers.authorization",
-        "req.headers.cookie",
-        "req.query.token",
-        "*.token",
-        "*.password",
-        "*.pass",
-        "*.user",
-        "*.upstreamUrl",
+        "req.headers.authorization", "req.headers.cookie",
+        "req.query.token", "req.params.token",
+        "*.token", "*.password", "*.pass", "*.user", "*.username",
+        "*.upstreamUrl", "*.url",
       ],
       remove: true,
     },
   },
-  disableRequestLogging: true, // we log a sanitized line ourselves
+  disableRequestLogging: true,
   trustProxy: true,
 });
 
@@ -98,12 +65,25 @@ await app.register(rateLimit, {
 });
 
 // ---------------------------------------------------------------------------
+// State: nonce replay-protection window + active connection counter
+// ---------------------------------------------------------------------------
+let activeConnections = 0;
+const seenNonces = new Map<string, number>(); // nonce → expiry epoch ms
+function checkAndRecordNonce(nonce: string, expiresAtSec: number): boolean {
+  const now = Date.now();
+  for (const [k, exp] of seenNonces) if (exp < now) seenNonces.delete(k);
+  if (seenNonces.has(nonce)) return false;
+  seenNonces.set(nonce, Math.min(now + NONCE_TTL_MS, expiresAtSec * 1000 + 5_000));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
 app.get("/health", async () => ({
   ok: true,
-  version: "v1",
-  providerHost: PROVIDER_HOST,
+  version: "v2-aes-gcm",
+  allowedUpstreamHosts: ALLOWED_HOSTS,
   activeConnections,
   maxConcurrent: MAX_CONCURRENT,
 }));
@@ -124,7 +104,8 @@ app.options("/live/:token", async (req, reply) => {
     .code(204)
     .header("Access-Control-Allow-Methods", "GET, OPTIONS")
     .header("Access-Control-Allow-Headers", "Content-Type, Range, Accept, Origin")
-    .header("Access-Control-Expose-Headers", "X-Live-Relay-Version, X-Live-Relay-Upstream-Status, X-Live-Relay-First-Chunk-Bytes")
+    .header("Access-Control-Expose-Headers",
+      "X-Live-Relay-Version, X-Live-Relay-Upstream-Status, X-Live-Relay-Error")
     .header("Vary", "Origin");
   if (origin) reply.header("Access-Control-Allow-Origin", origin);
   return reply.send();
@@ -133,51 +114,54 @@ app.options("/live/:token", async (req, reply) => {
 // ---------------------------------------------------------------------------
 // Main streaming endpoint
 // ---------------------------------------------------------------------------
-let activeConnections = 0;
-
 app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
   const origin = pickAllowedOrigin(req);
   if (!ALLOWED_ORIGINS.includes("*") && !origin) {
     reply.code(403);
-    return { ok: false, errorCode: "ORIGIN_NOT_ALLOWED" };
+    return { code: "ORIGIN_NOT_ALLOWED", message: "Origem não autorizada." };
   }
   if (activeConnections >= MAX_CONCURRENT) {
     reply.code(503);
-    return { ok: false, errorCode: "TOO_MANY_CONNECTIONS" };
+    return { code: "TOO_MANY_CONNECTIONS", message: "Relay temporariamente saturado." };
   }
 
-  // 1) verify token
-  const parsed = verifyRelayToken(req.params.token, TOKEN_SECRET);
+  // 1) decrypt + validate token
+  const parsed = verifyRelayToken(req.params.token, ENCRYPTION_KEY);
   if (!parsed.ok) {
     app.log.info({ event: "TOKEN_REJECTED", reason: parsed.reason }, "token rejected");
     reply.code(401);
-    return { ok: false, errorCode: "TOKEN_INVALID" };
+    return { code: "TOKEN_INVALID", message: "Token expirado ou inválido." };
   }
-  const { providerId, streamId } = parsed.payload;
+  const { host, port, protocol, username, password, streamId, nonce, expiresAt } = parsed.payload;
 
-  // 2) allowlist providerId
-  if (providerId !== PROVIDER_HOST && !providerId.endsWith(`.${PROVIDER_HOST}`)) {
-    app.log.info({ event: "HOST_NOT_ALLOWED", providerId }, "host not allowed");
+  // 2) anti-replay
+  if (!checkAndRecordNonce(nonce, expiresAt)) {
+    app.log.info({ event: "NONCE_REPLAY" }, "nonce replay");
+    reply.code(401);
+    return { code: "NONCE_REPLAY", message: "Token já utilizado." };
+  }
+
+  // 3) host allowlist
+  const allowed = ALLOWED_HOSTS.includes(host)
+    || ALLOWED_HOSTS.some((h) => host.endsWith(`.${h}`));
+  if (!allowed) {
+    app.log.info({ event: "HOST_NOT_ALLOWED", host }, "host not allowed");
     reply.code(403);
-    return { ok: false, errorCode: "HOST_NOT_ALLOWED" };
+    return { code: "HOST_NOT_ALLOWED", message: "Host não autorizado." };
   }
 
-  // 3) SSRF guard: refuse to open upstream on private ranges
-  try { await assertPublicHost(providerId); } catch {
-    app.log.info({ event: "SSRF_BLOCKED", providerId }, "ssrf blocked");
+  // 4) SSRF guard
+  try { await assertPublicHost(host); } catch {
+    app.log.info({ event: "SSRF_BLOCKED", host }, "ssrf blocked");
     reply.code(400);
-    return { ok: false, errorCode: "SSRF_BLOCKED" };
+    return { code: "SSRF_BLOCKED", message: "Destino privado bloqueado." };
   }
 
-  // 4) reconstruct upstream URL SERVER-SIDE from env credentials.
-  //    The URL, user and pass NEVER leave this process (not in logs, not in
-  //    headers, not in the response). URL is not built into any string that
-  //    might land in an error message.
-  const upstreamHost = providerId;
-  const originHeader = `https://${upstreamHost}`;
+  // 5) reconstruct upstream URL — NEVER logged, NEVER placed in a response
+  const portPart = port ? `:${port}` : "";
   const streamUrl =
-    `https://${upstreamHost}/live/${encodeURIComponent(PROVIDER_USER)}/` +
-    `${encodeURIComponent(PROVIDER_PASS)}/${streamId}.ts`;
+    `${protocol}://${host}${portPart}/live/` +
+    `${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`;
 
   const upstreamController = new AbortController();
   const startedAt = Date.now();
@@ -191,19 +175,12 @@ app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
     if (!upstreamController.signal.aborted) {
       try { upstreamController.abort(reason); } catch { /* noop */ }
     }
-    app.log.info({
-      event: "RELAY_CLOSED",
-      reason,
-      providerHost: upstreamHost,
-      streamId,
-      activeConnections,
-    }, "relay closed");
+    app.log.info({ event: "RELAY_CLOSED", reason, host, streamId, activeConnections },
+      "relay closed");
   };
-
-  // Abort upstream as soon as the browser disconnects.
   req.raw.on("close", () => cleanup("client-close"));
 
-  // 5) open upstream + first-byte timeout
+  // 6) first-byte timeout
   const firstByteTimer = setTimeout(() => {
     if (!upstreamController.signal.aborted) upstreamController.abort("first-byte-timeout");
   }, FIRST_BYTE_TIMEOUT_MS);
@@ -212,7 +189,7 @@ app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
   try {
     upstream = await fetch(streamUrl, {
       method: "GET",
-      redirect: "follow",
+      redirect: "follow", // Node's fetch honors a low default; MAX_REDIRECTS documented.
       cache: "no-store",
       signal: upstreamController.signal,
       headers: {
@@ -220,22 +197,49 @@ app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
         Accept: "*/*",
         "Accept-Encoding": "identity",
         "Cache-Control": "no-cache",
-        Referer: `${originHeader}/`,
-        Origin: originHeader,
+        Pragma: "no-cache",
       },
     });
   } catch (err) {
     clearTimeout(firstByteTimer);
     cleanup("fetch-error");
     const aborted = (err as { name?: string })?.name === "AbortError";
-    app.log.info({
-      event: "UPSTREAM_FETCH_ERROR",
-      providerHost: upstreamHost,
-      streamId,
-      aborted,
-    }, "upstream fetch error");
+    app.log.info({ event: "UPSTREAM_FETCH_ERROR", host, streamId, aborted },
+      "upstream fetch error");
     reply.code(502);
-    return { ok: false, errorCode: aborted ? "FIRST_BYTE_TIMEOUT" : "FETCH_ERROR" };
+    return {
+      code: aborted ? "FIRST_BYTE_TIMEOUT" : "FETCH_ERROR",
+      message: aborted
+        ? "O servidor do canal não respondeu no prazo."
+        : "Falha ao conectar ao servidor do canal.",
+    };
+  }
+  void MAX_REDIRECTS; // documented; Node's fetch caps at 20 by default
+
+  // 7) Spec §8 — HTTP 403: sanitized UPSTREAM_FORBIDDEN, no retry, no player.
+  if (upstream.status === 403) {
+    clearTimeout(firstByteTimer);
+    const responseServer = upstream.headers.get("server") ?? "-";
+    const cfRay = upstream.headers.get("cf-ray") ?? "-";
+    try { await upstream.body?.cancel(); } catch { /* noop */ }
+    cleanup("upstream-403");
+    app.log.warn({
+      event: "UPSTREAM_FORBIDDEN",
+      host, streamId,
+      upstreamStatus: 403,
+      responseServer,
+      cfRay,
+      classification: cfRay !== "-" ? "cloudflare-block" : "provider-block",
+      adminHint: "O IP público do relay precisa ser liberado pelo provedor.",
+    }, "upstream 403 — relay IP not authorized");
+    reply.code(403);
+    reply.header("X-Live-Relay-Error", "UPSTREAM_FORBIDDEN");
+    return {
+      code: "UPSTREAM_FORBIDDEN",
+      message: "O provedor recusou o IP do relay. Solicite a liberação do IP ao administrador do serviço.",
+      upstreamStatus: 403,
+      responseServer,
+    };
   }
 
   if (!upstream.ok || !upstream.body) {
@@ -244,26 +248,22 @@ app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
     cleanup("upstream-not-ok");
     app.log.info({
       event: "UPSTREAM_HTTP_ERROR",
-      providerHost: upstreamHost,
-      streamId,
-      upstreamStatus: upstream.status,
+      host, streamId, upstreamStatus: upstream.status,
     }, "upstream not ok");
     reply.code(upstream.status);
-    return { ok: false, errorCode: "UPSTREAM_ERROR", upstreamStatus: upstream.status };
+    return { code: "UPSTREAM_ERROR", upstreamStatus: upstream.status,
+      message: `Servidor do canal respondeu ${upstream.status}.` };
   }
 
   const firstByteMs = Date.now() - startedAt;
   clearTimeout(firstByteTimer);
 
   app.log.info({
-    event: "UPSTREAM_OPEN",
-    providerHost: upstreamHost,
-    streamId,
-    upstreamStatus: upstream.status,
-    firstByteMs,
+    event: "UPSTREAM_OPEN", host, streamId,
+    upstreamStatus: upstream.status, firstByteMs,
   }, "upstream open");
 
-  // 6) write headers with NO Content-Length / Content-Encoding / Transfer-Encoding
+  // 8) progressive pipe — no buffering, no text()/arrayBuffer()/blob()
   reply.raw.writeHead(200, {
     "Content-Type": "video/mp2t",
     "Cache-Control": "no-store, no-cache, must-revalidate, no-transform",
@@ -271,27 +271,36 @@ app.get<{ Params: { token: string } }>("/live/:token", async (req, reply) => {
     Expires: "0",
     "X-Accel-Buffering": "no",
     "X-Content-Type-Options": "nosniff",
-    "X-Live-Relay-Version": "v1",
+    "X-Live-Relay-Version": "v2-aes-gcm",
     "X-Live-Relay-Upstream-Status": String(upstream.status),
     ...(origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
   });
 
-  // 7) progressive pipe (Web ReadableStream → Node Readable → raw response)
-  const nodeStream = Readable.fromWeb(upstream.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>);
+  const nodeStream = Readable.fromWeb(
+    upstream.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>,
+  );
   nodeStream.on("error", () => cleanup("upstream-error"));
   reply.raw.on("close", () => cleanup("response-close"));
   nodeStream.pipe(reply.raw);
 
-  // Signal to Fastify that we own the raw response.
   return reply;
 });
 
 // ---------------------------------------------------------------------------
-// Boot
+// Graceful shutdown
 // ---------------------------------------------------------------------------
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, async () => {
+    app.log.info({ event: "SHUTDOWN", signal: sig }, "shutting down");
+    try { await app.close(); } catch { /* noop */ }
+    process.exit(0);
+  });
+}
+
 try {
   await app.listen({ port: PORT, host: HOST });
-  app.log.info({ event: "READY", port: PORT, providerHost: PROVIDER_HOST }, "live-relay ready");
+  app.log.info({ event: "READY", port: PORT, allowedUpstreamHosts: ALLOWED_HOSTS },
+    "live-relay ready");
 } catch (err) {
   app.log.error(err);
   process.exit(1);

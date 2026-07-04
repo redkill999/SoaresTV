@@ -23,6 +23,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiStreamRouteImport } from './routes/api/stream'
 import { Route as ApiLiveTokenRouteImport } from './routes/api/live-token'
 import { Route as ApiLiveStreamRouteImport } from './routes/api/live-stream'
+import { Route as ApiLiveRelayTokenRouteImport } from './routes/api/live-relay-token'
 import { Route as ApiLiveDiagnoseRouteImport } from './routes/api/live-diagnose'
 import { Route as PlayerTypeIdRouteImport } from './routes/player.$type.$id'
 
@@ -96,6 +97,11 @@ const ApiLiveStreamRoute = ApiLiveStreamRouteImport.update({
   path: '/api/live-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLiveRelayTokenRoute = ApiLiveRelayTokenRouteImport.update({
+  id: '/api/live-relay-token',
+  path: '/api/live-relay-token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiLiveDiagnoseRoute = ApiLiveDiagnoseRouteImport.update({
   id: '/api/live-diagnose',
   path: '/api/live-diagnose',
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
+  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
   '/api/live-stream': typeof ApiLiveStreamRoute
   '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
+  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
   '/api/live-stream': typeof ApiLiveStreamRoute
   '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/series': typeof SeriesRoute
   '/settings': typeof SettingsRoute
   '/api/live-diagnose': typeof ApiLiveDiagnoseRoute
+  '/api/live-relay-token': typeof ApiLiveRelayTokenRoute
   '/api/live-stream': typeof ApiLiveStreamRoute
   '/api/live-token': typeof ApiLiveTokenRoute
   '/api/stream': typeof ApiStreamRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/series'
     | '/settings'
     | '/api/live-diagnose'
+    | '/api/live-relay-token'
     | '/api/live-stream'
     | '/api/live-token'
     | '/api/stream'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/series'
     | '/settings'
     | '/api/live-diagnose'
+    | '/api/live-relay-token'
     | '/api/live-stream'
     | '/api/live-token'
     | '/api/stream'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/series'
     | '/settings'
     | '/api/live-diagnose'
+    | '/api/live-relay-token'
     | '/api/live-stream'
     | '/api/live-token'
     | '/api/stream'
@@ -232,6 +244,7 @@ export interface RootRouteChildren {
   SeriesRoute: typeof SeriesRoute
   SettingsRoute: typeof SettingsRoute
   ApiLiveDiagnoseRoute: typeof ApiLiveDiagnoseRoute
+  ApiLiveRelayTokenRoute: typeof ApiLiveRelayTokenRoute
   ApiLiveStreamRoute: typeof ApiLiveStreamRoute
   ApiLiveTokenRoute: typeof ApiLiveTokenRoute
   ApiStreamRoute: typeof ApiStreamRoute
@@ -338,6 +351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLiveStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/live-relay-token': {
+      id: '/api/live-relay-token'
+      path: '/api/live-relay-token'
+      fullPath: '/api/live-relay-token'
+      preLoaderRoute: typeof ApiLiveRelayTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/live-diagnose': {
       id: '/api/live-diagnose'
       path: '/api/live-diagnose'
@@ -368,6 +388,7 @@ const rootRouteChildren: RootRouteChildren = {
   SeriesRoute: SeriesRoute,
   SettingsRoute: SettingsRoute,
   ApiLiveDiagnoseRoute: ApiLiveDiagnoseRoute,
+  ApiLiveRelayTokenRoute: ApiLiveRelayTokenRoute,
   ApiLiveStreamRoute: ApiLiveStreamRoute,
   ApiLiveTokenRoute: ApiLiveTokenRoute,
   ApiStreamRoute: ApiStreamRoute,
