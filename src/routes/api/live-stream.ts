@@ -309,12 +309,8 @@ async function handle(request: Request): Promise<Response> {
   // firstPullAt fica visível nos logs após o primeiro pull do navegador.
   void firstPullAt;
   return new Response(body, { status: 200, headers });
-
-  headers.set("X-Live-First-Byte-Ms", String(firstByteMs));
-  headers.set("X-Live-First-Chunk-Bytes", String(firstChunk.byteLength));
-  headers.set("X-Live-Ts-Sync-Found", String(syncOffset >= 0));
-  return new Response(body, { status: 200, headers });
 }
+
 
 export const Route = createFileRoute("/api/live-stream")({
   server: {
