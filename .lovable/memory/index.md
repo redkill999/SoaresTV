@@ -9,6 +9,8 @@ Proxy `/api/stream` NUNCA retorna 5xx: fetch-fail e upstream 5xx são rebaixados
 
 ## Memories
 - [TV mode trigger](mem://constraints/tv-mode-trigger) — condição `isTV` em TV_MODE_SCRIPT; não reincluir heurística de tela grande
+- [TV device detection](mem://constraints/tv-device-detection) — isTvDevice() em tv-dpad.ts não pode usar noTouch fallback; só UA de Smart TV + window.__deviceType
+- [D-pad escapa inputs em TV](mem://constraints/dpad-input-escape) — `if (typing) return` em handleKey só bloqueia fora de tvMode; Up/Down precisam navegar de inputs em TV
 - [Proxy status 4xx-only](mem://constraints/proxy-error-status) — src/routes/api/stream.ts nunca pode responder com 5xx
 - [Desktop scroll + Voltar XCIPTV](mem://features/desktop-scroll-back-button) — 5 regras validadas para /live, /movies, /series funcionarem em navegador desktop sem quebrar mobile/TV
 - [Renderização progressiva](mem://features/progressive-rendering) — chunks de 240 via useProgressive para abrir catálogos instantaneamente em todos os dispositivos
