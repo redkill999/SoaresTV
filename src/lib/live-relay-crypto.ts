@@ -91,8 +91,12 @@ export async function decryptRelayToken(
   let plaintext: ArrayBuffer;
   try {
     const key = await deriveKey(secret);
-    plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+    // Copy into fresh ArrayBuffers so TS's strict BufferSource typing accepts them.
+    const ivBuf = new Uint8Array(iv).buffer;
+    const cipherBuf = new Uint8Array(cipher).buffer;
+    plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuf }, key, cipherBuf);
   } catch { return { ok: false, reason: "decrypt" }; }
+
   let payload: LiveRelayTokenPayload;
   try {
     payload = JSON.parse(new TextDecoder().decode(plaintext)) as LiveRelayTokenPayload;
