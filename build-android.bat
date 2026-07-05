@@ -140,6 +140,12 @@ if exist "android-template\styles.xml" (
 )
 call :fix_styles_xml || goto :fail
 call npx cap sync android >> "%LOG_FILE%" 2>&1
+call node scripts/android-landscape.mjs >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+  echo [ERRO] Falha ao aplicar patch fullscreen/landscape.
+  goto :fail
+)
+
 call node scripts/patch-video-player.mjs > "%TEMP%\soarestv-patch-video-player.log" 2>&1
 set "PATCH_RC=!errorlevel!"
 type "%TEMP%\soarestv-patch-video-player.log"
