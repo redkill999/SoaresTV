@@ -128,12 +128,12 @@ patchFile(fragmentPath, [
     ),
   },
   {
-    name: "6) Watchdog BUFFERING 18s força playerExit (mostra diagnóstico)",
+    name: "6) Watchdog BUFFERING 45s força playerExit (mostra diagnóstico)",
     required: true,
     mustContainAfter: "JEEP_BUFFER_WATCHDOG",
     apply: (s) => s.replace(
       `        @Override\n        public void onPlayerStateChanged(boolean playWhenReady, int state) {`,
-      `        // JEEP_BUFFER_WATCHDOG: se ExoPlayer ficar > 18s em BUFFERING sem
+      `        // JEEP_BUFFER_WATCHDOG: se ExoPlayer ficar > 45s em BUFFERING sem
         // sair, força playerExit() e posta playerItemError. Sem isso o overlay
         // nativo cobre a WebView indefinidamente e o usuário não vê diagnóstico.
         private android.os.Handler _bufferHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -154,12 +154,12 @@ patchFile(fragmentPath, [
           _bufferTimeout = new Runnable() {
             @Override
             public void run() {
-              Log.e(TAG, "JEEP_BUFFER_WATCHDOG: 18s em BUFFERING; forçando exit");
+              Log.e(TAG, "JEEP_BUFFER_WATCHDOG: 45s em BUFFERING; forçando exit");
               try {
                 Map<String, Object> info = new HashMap<String, Object>() {{
                   put("fromPlayerId", playerId);
                   put("currentTime", "0");
-                  put("message", "ExoPlayer travou em BUFFERING (18s)");
+                  put("message", "ExoPlayer travou em BUFFERING (45s)");
                   put("errorCode", "BUFFER_TIMEOUT");
                   put("videoType", vType != null ? vType : "");
                   put("url", uri != null ? uri.toString() : "");
@@ -169,7 +169,7 @@ patchFile(fragmentPath, [
               try { playerExit(); } catch (Exception ignored) {}
             }
           };
-          _bufferHandler.postDelayed(_bufferTimeout, 18000);
+          _bufferHandler.postDelayed(_bufferTimeout, 45000);
         }
         private void _cancelBufferWatchdog() {
           if (_bufferTimeout != null) { _bufferHandler.removeCallbacks(_bufferTimeout); _bufferTimeout = null; }
