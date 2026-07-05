@@ -484,13 +484,13 @@ export function VideoPlayer({
         if (nativeLiveWatchdogRef.current) clearTimeout(nativeLiveWatchdogRef.current);
         nativeLiveWatchdogRef.current = setTimeout(() => {
           if (!nativeOpenedRef.current || nativeLivePlayedRef.current) return;
-          pushDbg("ETAPA 9 native watchdog manual: sem evento PLAY; fechando ExoPlayer para mostrar diagnóstico");
+          pushDbg("ETAPA 9 native watchdog manual: sem evento READY/PLAY; fechando ExoPlayer para mostrar diagnóstico");
           nativeOpenedRef.current = false;
           setPlayerMode("web");
           showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
           void stopNative().catch(() => undefined);
           setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
-        }, 12_000);
+        }, 35_000);
       }
       return;
     }
