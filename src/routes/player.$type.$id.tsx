@@ -137,6 +137,12 @@ function PlayerPage() {
     if (type === "live") {
       if (validCustomSrc) return validCustomSrc;
       if (!creds) return "";
+      // Log de validação: só monta URL LIVE com credenciais reais.
+      // eslint-disable-next-line no-console
+      console.log("LIVE STREAM READY:", {
+        hasCreds: !!creds.username && !!creds.password && !!creds.server,
+        streamId: id,
+      });
       return streamUrl.live(creds, id);
     }
     if (validCustomSrc) return validCustomSrc;
