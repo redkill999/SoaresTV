@@ -404,6 +404,7 @@ export function VideoPlayer({
     return playNative({
       url: src,
       userAgent: ua,
+      isLive: isLiveSrc,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
       onEvent: (name, data) => {
         try {
@@ -412,7 +413,11 @@ export function VideoPlayer({
         } catch {
           pushDbg(`NATIVE ${name}`);
         }
-        if (name === "jeepCapVideoPlayerPlay" || /\bplay/i.test(name)) {
+        if (
+          name === "jeepCapVideoPlayerReady" ||
+          name === "jeepCapVideoPlayerPlay" ||
+          /\b(?:ready|play)\b/i.test(name)
+        ) {
           nativeLivePlayedRef.current = true;
           if (nativeLiveWatchdogRef.current) {
             clearTimeout(nativeLiveWatchdogRef.current);
