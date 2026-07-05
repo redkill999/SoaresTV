@@ -121,8 +121,15 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       await new Promise<void>((r) => setTimeout(r, 80));
     } catch { /* não-native ou plugin ausente: segue normal */ }
 
-    const headers: Record<string, string> = {};
-    if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
+    const headers: Record<string, string> = {
+      Accept: "*/*",
+      "Accept-Encoding": "identity",
+      Connection: "keep-alive",
+      "Icy-MetaData": "1",
+    };
+    if (opts.userAgent) {
+      headers["User-Agent"] = opts.userAgent;
+    }
 
     type InitArgs = {
       mode: "fullscreen";
@@ -138,6 +145,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       showControls?: boolean;
       displayMode?: string;
       startAtSec?: number;
+      chromecast?: boolean;
     };
 
     const args: InitArgs = {
@@ -147,10 +155,11 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       componentTag: "div",
       headers: Object.keys(headers).length ? headers : undefined,
       rate: 1,
-      exitOnEnd: true,
+      exitOnEnd: !opts.isLive,
       loopOnEnd: false,
-      pipEnabled: true,
-      bkmodeEnabled: true,
+      pipEnabled: !opts.isLive,
+      bkmodeEnabled: false,
+      chromecast: false,
       showControls: true,
       displayMode: "all",
     };
