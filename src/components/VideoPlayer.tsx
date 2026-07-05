@@ -385,7 +385,9 @@ export function VideoPlayer({
   // web (hls.js/mpegts) que continua existindo.
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
+    nativeRuntimeRef.current = native;
     if (!native) return false;
+
     nativeLivePlayedRef.current = false;
     if (nativeLiveWatchdogRef.current) {
       clearTimeout(nativeLiveWatchdogRef.current);
