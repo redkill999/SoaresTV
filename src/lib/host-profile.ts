@@ -210,7 +210,27 @@ if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs
   writeStorage(memory);
   console.log("[HOST PROFILE] limpou flags TS-only quebradas de flipex.pro");
 }
+// Limpeza pontual (05/07): uma versão com bug de rememberWebIncompatibleLive
+// gravou forceNativeForLive/bypassProxyForLive junto de webIncompatibleLive em
+// hosts do usuário durante falhas no APK — isso forçava ExoPlayer para LIVE e
+// quebrava os canais. Remove essas flags aprendidas; o app reaprende se for o
+// caso real (presets built-in são re-aplicados logo abaixo e não são afetados).
+{
+  let cleaned = false;
+  for (const [host, prof] of Object.entries(memory)) {
+    if (prof?.webIncompatibleLive && (prof.forceNativeForLive || prof.bypassProxyForLive)) {
+      const { webIncompatibleLive: _w, forceNativeForLive: _f, bypassProxyForLive: _b, ...rest } = prof;
+      memory[host] = rest;
+      cleaned = true;
+    }
+  }
+  if (cleaned) {
+    writeStorage(memory);
+    console.log("[HOST PROFILE] limpou flags webIncompatibleLive/forceNativeForLive gravadas por bug");
+  }
+}
 // Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
+
 // sobrescrevendo: preset → storage → updateHostProfile.
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
@@ -296,13 +316,13 @@ export function rememberHlsUnsupported(host: string): void {
   updateHostProfile(host, { disableHlsConversion: true, preferTs: true });
 }
 
-/** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
+/** Marca host cuja reprodução LIVE não funciona em navegador desktop.
+ *  IMPORTANTE: só marca webIncompatibleLive. NÃO setar forceNativeForLive/
+ *  bypassProxyForLive aqui — isso forçava ExoPlayer para LIVE no APK e
+ *  quebrou os canais (o pipeline web via proxy é o caminho que funciona). */
 export function rememberWebIncompatibleLive(host: string): void {
-  updateHostProfile(host, {
-    webIncompatibleLive: true,
-    forceNativeForLive: true,
-    bypassProxyForLive: true,
-  });
+  updateHostProfile(host, { webIncompatibleLive: true });
 }
+
 
 
