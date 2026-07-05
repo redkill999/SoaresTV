@@ -201,24 +201,18 @@ function HomePage() {
   };
 
   return (
-    <div
-      className="home-wrapper relative flex h-dvh max-h-dvh w-full items-center justify-center overflow-hidden bg-black text-white"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-      }}
-    >
-      {/* Canvas ocupa 100% da viewport. Imagem esticada (object-fill)
-          preenche tudo sem barras pretas; hotspots em % seguem a imagem. */}
-      <div className="relative home-canvas h-full w-full">
-        <img
-          src={homeBg.url}
-          alt="SoaresTV"
-          draggable={false}
-          className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
-        />
+    <div className="home-edge-to-edge home-wrapper fixed inset-0 h-dvh w-dvw overflow-hidden bg-black text-white">
+      {/* Fundo full-bleed: cobre camera/notch, sem safe-area. */}
+      <img
+        src={homeBg.url}
+        alt="SoaresTV"
+        draggable={false}
+        className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
+      />
+
+      {/* Conteudo clicavel respeita safe-area para nao ficar atras da camera. */}
+      <div className="home-safe-content home-canvas relative z-10 h-full w-full">
+
 
 
 
