@@ -224,15 +224,8 @@ function LiveGrid({ filtered, creds }: { filtered: LiveStream[]; creds: XtreamCr
             id={String(s.stream_id)}
             name={s.name}
             image={s.stream_icon}
-            // FONTE ÚNICA (LIVE): 1º url real da M3U; 2º fallback controlado
-            // streamUrl.live com credenciais já hidratadas. Nenhum tile LIVE sem src.
-            src={
-              typeof s.url === "string" && s.url.length > 10
-                ? s.url
-                : creds && creds.server && creds.username && creds.password
-                  ? streamUrl.live(creds, s.stream_id)
-                  : undefined
-            }
+            // FONTE ÚNICA: streaming layer isolada (src M3U → Xtream .ts).
+            src={tryResolveStreamUrl({ src: s.url, stream_id: s.stream_id }, creds) || undefined}
           />
         ))}
       </div>
