@@ -229,7 +229,7 @@ function LiveGrid({ filtered, creds }: { filtered: LiveStream[]; creds: XtreamCr
             src={
               typeof s.url === "string" && s.url.length > 10
                 ? s.url
-                : creds
+                : creds && creds.server && creds.username && creds.password
                   ? streamUrl.live(creds, s.stream_id)
                   : undefined
             }
