@@ -227,10 +227,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     const initTimeout = new Promise<false>((resolve) => {
       setTimeout(() => {
         if (initSettled) return;
-        opts.onEvent?.("initPlayer:timeout", "initPlayer não respondeu em 8s; fechando overlay nativo");
+        opts.onEvent?.("initPlayer:timeout", "initPlayer não respondeu em 15s; fechando overlay nativo");
         void closeFullscreen(mod);
         resolve(false);
-      }, 8_000);
+      }, 15_000);
     });
     const res = await Promise.race([
       initFn(args).then((value) => {
