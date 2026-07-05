@@ -627,14 +627,15 @@ export function VideoPlayer({
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && liveHostProfile.webIncompatibleLive) {
-      pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
+    if (isLive && !nativeRuntimeRef.current && liveHostProfile.webIncompatibleLive) {
+      pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando somente navegador real`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
         "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
       );
       return;
     }
+
 
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
