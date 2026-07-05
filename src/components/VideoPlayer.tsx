@@ -335,6 +335,8 @@ export function VideoPlayer({
   const [holdNativeDebug, setHoldNativeDebug] = useState(false);
   const keepDebugOverlayRef = useRef(false);
   const manualNativeStartRef = useRef(false);
+  const nativeRuntimeRef = useRef(false);
+
   // [DEBUG TEMP] Coleta de etapas do pipeline de reprodução, exibido em overlay
   // quando ocorre erro. Limpo no início de cada nova fonte (src).
   const dbgRef = useRef<string[]>([]);
@@ -383,7 +385,9 @@ export function VideoPlayer({
   // web (hls.js/mpegts) que continua existindo.
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
+    nativeRuntimeRef.current = native;
     if (!native) return false;
+
     nativeLivePlayedRef.current = false;
     if (nativeLiveWatchdogRef.current) {
       clearTimeout(nativeLiveWatchdogRef.current);
@@ -448,7 +452,11 @@ export function VideoPlayer({
   }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic]);
 
 
-  const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
+  const shouldUseNativePlayer =
+    isLiveSrc ||
+    settings.defaultPlayer === "exo" ||
+    !!srcHostProfile.forceNativeForLive;
+
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
@@ -516,16 +524,11 @@ export function VideoPlayer({
       // (caso histórico em que o overlay nativo travava sem feedback). Para
       // VOD (filme/série) o ExoPlayer é aberto diretamente — o gate adicionava
       // ~probe + clique manual e atrasava a reprodução sem benefício real.
-      if (isLiveSrc && !manualNativeStartRef.current) {
-        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (LIVE): não abrir overlay nativo automaticamente`);
-        setPlayerMode("web");
-        setHoldNativeDebug(true);
-        showStreamDiagnostic(`Diagnóstico canal LIVE ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
-        void probeNativeLiveStream(src, (line) => {
-          if (!cancelled) pushDbg(line);
-        }, () => cancelled);
-        return;
+      if (isLiveSrc) {
+        pushDbg("ETAPA 4 LIVE/APK: abrindo ExoPlayer automaticamente");
       }
+
+
 
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
@@ -624,14 +627,15 @@ export function VideoPlayer({
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && liveHostProfile.webIncompatibleLive) {
-      pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando Web Desktop`);
+    if (isLive && !nativeRuntimeRef.current && liveHostProfile.webIncompatibleLive) {
+      pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando somente navegador real`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
         "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
       );
       return;
     }
+
 
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
