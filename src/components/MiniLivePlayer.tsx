@@ -3,7 +3,8 @@ import { Maximize2, Tv, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { getShortEpg, streamUrl, type EpgListing } from "@/lib/xtream";
+import { getShortEpg, type EpgListing } from "@/lib/xtream";
+import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import type { XtreamCreds } from "@/lib/storage";
 
 export function MiniLivePlayer({
