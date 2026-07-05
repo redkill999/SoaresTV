@@ -121,15 +121,11 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       await new Promise<void>((r) => setTimeout(r, 80));
     } catch { /* não-native ou plugin ausente: segue normal */ }
 
-    const headers: Record<string, string> = {
-      Accept: "*/*",
-      "Accept-Encoding": "identity",
-      Connection: "keep-alive",
-      "Icy-MetaData": "1",
-    };
-    if (opts.userAgent) {
-      headers["User-Agent"] = opts.userAgent;
-    }
+    // REVERT: mais cedo hoje o APK reproduzia LIVE liso apenas com User-Agent.
+    // Ao acrescentar Icy-MetaData/Accept-Encoding/Connection alguns provedores
+    // passaram a devolver 400/403 no ExoPlayer. Voltando ao header mínimo.
+    const headers: Record<string, string> = {};
+    if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
 
     type InitArgs = {
       mode: "fullscreen";
@@ -145,9 +141,11 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       showControls?: boolean;
       displayMode?: string;
       startAtSec?: number;
-      chromecast?: boolean;
     };
 
+    // REVERT: exitOnEnd/pipEnabled/bkmodeEnabled voltam aos valores originais
+    // (que estavam funcionando em LIVE). O parâmetro opts.isLive permanece na
+    // API para futuras diferenciações, mas hoje não altera o initPlayer.
     const args: InitArgs = {
       mode: "fullscreen",
       url: opts.url,
@@ -155,11 +153,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       componentTag: "div",
       headers: Object.keys(headers).length ? headers : undefined,
       rate: 1,
-      exitOnEnd: !opts.isLive,
+      exitOnEnd: true,
       loopOnEnd: false,
-      pipEnabled: !opts.isLive,
-      bkmodeEnabled: false,
-      chromecast: false,
+      pipEnabled: true,
+      bkmodeEnabled: true,
       showControls: true,
       displayMode: "all",
     };
