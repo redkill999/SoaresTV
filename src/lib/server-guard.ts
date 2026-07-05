@@ -87,6 +87,10 @@ function isBlockedIPv6(hostname: string): boolean {
 /**
  * Lança se a URL fornecida aponta para um destino inseguro (SSRF).
  * Reutilizar em qualquer fetch server-side com host controlado pelo cliente.
+ *
+ * BYPASS OBRIGATÓRIO: mídia LIVE IPTV (/live/ ou .ts) e hosts IPTV liberados
+ * nunca são bloqueados — o guard só atua em API interna, metadata e
+ * endpoints não-stream.
  */
 export function assertSafeUpstreamUrl(input: string | URL): URL {
   let u: URL;
@@ -98,6 +102,12 @@ export function assertSafeUpstreamUrl(input: string | URL): URL {
   if (!/^https?:$/.test(u.protocol)) throw new Error("bad protocol");
   const host = u.hostname;
   if (!host) throw new Error("empty host");
+
+  // EXCEÇÃO LIVE: nunca bloquear stream ao vivo nem hosts IPTV liberados.
+  if (isLiveMediaUrl(u) || isIptvAllowedHost(host)) {
+    return u;
+  }
+
   if (isBlockedHostname(host)) throw new Error("blocked host");
   const v4 = parseIPv4(host);
   if (v4 && isBlockedIPv4(v4)) throw new Error("blocked ip");
