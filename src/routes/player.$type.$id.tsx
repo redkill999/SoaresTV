@@ -8,6 +8,7 @@ import { ParentalGate } from "@/components/ParentalGate";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import { findCategoryIdFor, isItemLocked } from "@/lib/parental";
 import { ArrowLeft } from "lucide-react";
 
