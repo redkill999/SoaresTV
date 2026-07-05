@@ -12,6 +12,8 @@
 export type NativePlayOptions = {
   url: string;
   userAgent?: string;
+  /** Stream ao vivo — muda defaults do initPlayer (sem PIP, sem exitOnEnd). */
+  isLive?: boolean;
   /** Em segundos. Apenas VOD/série. */
   startAtSec?: number;
   /** Callback ao fechar o overlay (Back ou botão sair). */
@@ -119,8 +121,15 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       await new Promise<void>((r) => setTimeout(r, 80));
     } catch { /* não-native ou plugin ausente: segue normal */ }
 
-    const headers: Record<string, string> = {};
-    if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
+    const headers: Record<string, string> = {
+      Accept: "*/*",
+      "Accept-Encoding": "identity",
+      Connection: "keep-alive",
+      "Icy-MetaData": "1",
+    };
+    if (opts.userAgent) {
+      headers["User-Agent"] = opts.userAgent;
+    }
 
     type InitArgs = {
       mode: "fullscreen";
@@ -136,6 +145,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       showControls?: boolean;
       displayMode?: string;
       startAtSec?: number;
+      chromecast?: boolean;
     };
 
     const args: InitArgs = {
@@ -145,10 +155,11 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       componentTag: "div",
       headers: Object.keys(headers).length ? headers : undefined,
       rate: 1,
-      exitOnEnd: true,
+      exitOnEnd: !opts.isLive,
       loopOnEnd: false,
-      pipEnabled: true,
-      bkmodeEnabled: true,
+      pipEnabled: !opts.isLive,
+      bkmodeEnabled: false,
+      chromecast: false,
       showControls: true,
       displayMode: "all",
     };
@@ -216,10 +227,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     const initTimeout = new Promise<false>((resolve) => {
       setTimeout(() => {
         if (initSettled) return;
-        opts.onEvent?.("initPlayer:timeout", "initPlayer não respondeu em 8s; fechando overlay nativo");
+        opts.onEvent?.("initPlayer:timeout", "initPlayer não respondeu em 15s; fechando overlay nativo");
         void closeFullscreen(mod);
         resolve(false);
-      }, 8_000);
+      }, 15_000);
     });
     const res = await Promise.race([
       initFn(args).then((value) => {

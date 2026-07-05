@@ -158,7 +158,7 @@ function LivePage() {
   const retryActive = () => { if (perCatEnabled) void perCatQ.refetch(); };
 
   return (
-    <PremiumChrome>
+    <PremiumChrome showBack={false}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
