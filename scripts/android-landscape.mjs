@@ -109,3 +109,41 @@ if (xml === before) {
   writeFileSync(manifestPath, xml);
   console.log("✅ AndroidManifest.xml patchado: landscape + icone TV (banner/leanback).");
 }
+
+// ---------------------------------------------------------------------------
+// Fullscreen imersivo real: aplica MainActivity.java e styles.xml do template.
+// Copia SEMPRE (mesmo se destino existir) — evita que o Capacitor sobrescreva
+// com a versao padrao e reintroduza faixa preta sobre a camera frontal.
+// ---------------------------------------------------------------------------
+const mainActivitySource = resolve("android-template/MainActivity.java");
+const mainActivityDestination = resolve(
+  "android/app/src/main/java/com/soarestv/app/MainActivity.java",
+);
+const stylesSource = resolve("android-template/styles.xml");
+const stylesDestination = resolve("android/app/src/main/res/values/styles.xml");
+
+function copyRequiredFile(source, destination, label) {
+  if (!existsSync(source)) {
+    console.error(`❌ Arquivo obrigatorio nao encontrado: ${source}`);
+    process.exit(1);
+  }
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(source, destination);
+  console.log(`✅ ${label} aplicado em ${destination}`);
+}
+
+copyRequiredFile(mainActivitySource, mainActivityDestination, "MainActivity fullscreen");
+copyRequiredFile(stylesSource, stylesDestination, "Tema edge-to-edge");
+
+const finalMainActivity = readFileSync(mainActivityDestination, "utf8");
+if (!finalMainActivity.includes("LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS")) {
+  console.error("❌ MainActivity sem suporte ao display cutout.");
+  process.exit(1);
+}
+const finalStyles = readFileSync(stylesDestination, "utf8");
+if (!finalStyles.includes("windowLayoutInDisplayCutoutMode")) {
+  console.error("❌ Tema Android sem suporte ao display cutout.");
+  process.exit(1);
+}
+console.log("✅ Validacao fullscreen OK (cutout + edge-to-edge).");
+
