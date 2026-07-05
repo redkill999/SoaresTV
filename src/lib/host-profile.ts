@@ -298,6 +298,11 @@ export function rememberHlsUnsupported(host: string): void {
 
 /** Marca host cuja reprodução LIVE não funciona em navegador desktop. */
 export function rememberWebIncompatibleLive(host: string): void {
-  updateHostProfile(host, { webIncompatibleLive: true });
+  updateHostProfile(host, {
+    webIncompatibleLive: true,
+    forceNativeForLive: true,
+    bypassProxyForLive: true,
+  });
 }
+
 
