@@ -12,6 +12,8 @@
 export type NativePlayOptions = {
   url: string;
   userAgent?: string;
+  /** Stream ao vivo — muda defaults do initPlayer (sem PIP, sem exitOnEnd). */
+  isLive?: boolean;
   /** Em segundos. Apenas VOD/série. */
   startAtSec?: number;
   /** Callback ao fechar o overlay (Back ou botão sair). */
