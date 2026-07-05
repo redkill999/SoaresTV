@@ -3,8 +3,36 @@
 // runtime não expõe DNS direto, então bloqueamos por hostname literal e por
 // IP literal (IPv4/IPv6) — cobre 99% dos ataques práticos (metadata endpoint,
 // loopback, faixas privadas). Também validamos cada hop de redirect.
+//
+// EXCEÇÃO LIVE/IPTV: mídia ao vivo (/live/ no path, segmentos .ts) NUNCA é
+// bloqueada — painéis IPTV redirecionam streams para IPs de balanceamento em
+// faixas CGNAT/privadas, e o bloqueio cortava o stream no meio (ExoPlayer
+// recebia stream vazio/interrompido). O guard continua ativo para APIs,
+// metadata e endpoints não-stream.
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "ip6-localhost", "ip6-loopback"]);
+
+// Hosts IPTV explicitamente liberados — NUNCA bloquear (nem seus subdomínios).
+const IPTV_ALLOWED_HOSTS = new Set(["multopt100.top"]);
+
+function isIptvAllowedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/\.$/, "");
+  if (IPTV_ALLOWED_HOSTS.has(h)) return true;
+  for (const allowed of IPTV_ALLOWED_HOSTS) {
+    if (h.endsWith(`.${allowed}`)) return true;
+  }
+  return false;
+}
+
+/**
+ * true se a URL é mídia LIVE de IPTV: path contendo /live/ (Xtream live,
+ * inclusive .m3u8 de live) ou segmento MPEG-TS (.ts). Essas URLs passam
+ * DIRETO, sem filtro SSRF — fluxo obrigatório: Xtream live URL → ExoPlayer.
+ */
+export function isLiveMediaUrl(u: URL): boolean {
+  const p = u.pathname.toLowerCase();
+  return p.includes("/live/") || p.endsWith(".ts");
+}
 
 function isBlockedHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/\.$/, "");
