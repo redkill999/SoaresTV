@@ -97,6 +97,28 @@ body {
   background-attachment: fixed;
 }
 
+/* Full-bleed root: garante que o fundo do APK preencha ate a area da camera
+   frontal em landscape. safe-area vai APENAS no conteudo, nao no fundo. */
+.home-edge-to-edge {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  min-width: 100dvw;
+  min-height: 100dvh;
+  background: #000;
+  overflow: hidden;
+}
+
+.home-safe-content {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+
 /* Helpers de safe-area (notch / câmera frontal em landscape no APK).
    Use .safe-px nas barras superiores/inferiores e nos containers que
    precisam respeitar o entalhe sem deixar borda preta visível. */

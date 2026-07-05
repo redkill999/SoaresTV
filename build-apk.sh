@@ -44,11 +44,9 @@ if [ ! -d "android" ]; then
   bunx cap add android
 fi
 
-log "3/5 — Sincronizando Capacitor (bunx cap sync android)"
-bunx cap sync android
+log "3/5 — Sincronizando Capacitor + patches (bun run android:sync)"
+bun run android:sync
 
-log "3b/5 — Patch landscape + permissões (android-landscape.mjs)"
-node scripts/android-landscape.mjs
 # Validação: aborta se o patch não pegou
 if ! grep -q 'android:screenOrientation="landscape"' android/app/src/main/AndroidManifest.xml; then
   err "AndroidManifest não ficou em landscape após o patch."

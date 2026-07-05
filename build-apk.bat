@@ -58,12 +58,9 @@ if not exist "android" (
 )
 
 echo.
-echo [3/5] Sincronizando Capacitor (bunx cap sync android)...
-call bunx cap sync android || goto :fail
+echo [3/5] Sincronizando Capacitor + patches (bun run android:sync)...
+call bun run android:sync || goto :fail
 
-echo.
-echo [3b/5] Aplicando patch landscape + permissoes (android-landscape.mjs)...
-call node scripts/android-landscape.mjs || goto :fail
 
 REM Validacao: garante que o patch funcionou
 findstr /C:"android:screenOrientation=\"landscape\"" "android\app\src\main\AndroidManifest.xml" >nul 2>nul
