@@ -335,6 +335,8 @@ export function VideoPlayer({
   const [holdNativeDebug, setHoldNativeDebug] = useState(false);
   const keepDebugOverlayRef = useRef(false);
   const manualNativeStartRef = useRef(false);
+  const nativeRuntimeRef = useRef(false);
+
   // [DEBUG TEMP] Coleta de etapas do pipeline de reprodução, exibido em overlay
   // quando ocorre erro. Limpo no início de cada nova fonte (src).
   const dbgRef = useRef<string[]>([]);
