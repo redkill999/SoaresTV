@@ -3,8 +3,36 @@
 // runtime não expõe DNS direto, então bloqueamos por hostname literal e por
 // IP literal (IPv4/IPv6) — cobre 99% dos ataques práticos (metadata endpoint,
 // loopback, faixas privadas). Também validamos cada hop de redirect.
+//
+// EXCEÇÃO LIVE/IPTV: mídia ao vivo (/live/ no path, segmentos .ts) NUNCA é
+// bloqueada — painéis IPTV redirecionam streams para IPs de balanceamento em
+// faixas CGNAT/privadas, e o bloqueio cortava o stream no meio (ExoPlayer
+// recebia stream vazio/interrompido). O guard continua ativo para APIs,
+// metadata e endpoints não-stream.
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "ip6-localhost", "ip6-loopback"]);
+
+// Hosts IPTV explicitamente liberados — NUNCA bloquear (nem seus subdomínios).
+const IPTV_ALLOWED_HOSTS = new Set(["multopt100.top"]);
+
+function isIptvAllowedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/\.$/, "");
+  if (IPTV_ALLOWED_HOSTS.has(h)) return true;
+  for (const allowed of IPTV_ALLOWED_HOSTS) {
+    if (h.endsWith(`.${allowed}`)) return true;
+  }
+  return false;
+}
+
+/**
+ * true se a URL é mídia LIVE de IPTV: path contendo /live/ (Xtream live,
+ * inclusive .m3u8 de live) ou segmento MPEG-TS (.ts). Essas URLs passam
+ * DIRETO, sem filtro SSRF — fluxo obrigatório: Xtream live URL → ExoPlayer.
+ */
+export function isLiveMediaUrl(u: URL): boolean {
+  const p = u.pathname.toLowerCase();
+  return p.includes("/live/") || p.endsWith(".ts");
+}
 
 function isBlockedHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/\.$/, "");
@@ -59,6 +87,10 @@ function isBlockedIPv6(hostname: string): boolean {
 /**
  * Lança se a URL fornecida aponta para um destino inseguro (SSRF).
  * Reutilizar em qualquer fetch server-side com host controlado pelo cliente.
+ *
+ * BYPASS OBRIGATÓRIO: mídia LIVE IPTV (/live/ ou .ts) e hosts IPTV liberados
+ * nunca são bloqueados — o guard só atua em API interna, metadata e
+ * endpoints não-stream.
  */
 export function assertSafeUpstreamUrl(input: string | URL): URL {
   let u: URL;
@@ -70,6 +102,12 @@ export function assertSafeUpstreamUrl(input: string | URL): URL {
   if (!/^https?:$/.test(u.protocol)) throw new Error("bad protocol");
   const host = u.hostname;
   if (!host) throw new Error("empty host");
+
+  // EXCEÇÃO LIVE: nunca bloquear stream ao vivo nem hosts IPTV liberados.
+  if (isLiveMediaUrl(u) || isIptvAllowedHost(host)) {
+    return u;
+  }
+
   if (isBlockedHostname(host)) throw new Error("blocked host");
   const v4 = parseIPv4(host);
   if (v4 && isBlockedIPv4(v4)) throw new Error("blocked ip");
@@ -85,6 +123,10 @@ export function isSafeUpstreamUrl(input: string | URL): boolean {
 /**
  * fetch com validação anti-SSRF em cada hop de redirect. Substitui
  * `redirect: "follow"` — cada Location é revalidada antes de seguir.
+ *
+ * LIVE: se a URL original é mídia ao vivo (/live/ ou .ts), TODOS os hops de
+ * redirect passam sem filtro SSRF — painéis IPTV redirecionam para URLs de
+ * token/balanceamento sem /live/ no path, e revalidar cortava o stream.
  */
 export async function safeFetch(
   input: string | URL,
@@ -92,7 +134,9 @@ export async function safeFetch(
   opts: { maxRedirects?: number } = {},
 ): Promise<Response> {
   const maxRedirects = opts.maxRedirects ?? 5;
-  let current = assertSafeUpstreamUrl(input).toString();
+  const initialUrl = assertSafeUpstreamUrl(input);
+  const isLiveMedia = isLiveMediaUrl(initialUrl) || isIptvAllowedHost(initialUrl.hostname);
+  let current = initialUrl.toString();
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const res = await fetch(current, { ...init, redirect: "manual" });
     if (res.status >= 300 && res.status < 400) {
@@ -100,7 +144,8 @@ export async function safeFetch(
       if (!loc) return res;
       try { await res.body?.cancel(); } catch { /* noop */ }
       const next = new URL(loc, current);
-      assertSafeUpstreamUrl(next);
+      // Mídia LIVE: segue o redirect direto, sem filtro SSRF.
+      if (!isLiveMedia) assertSafeUpstreamUrl(next);
       current = next.toString();
       continue;
     }
