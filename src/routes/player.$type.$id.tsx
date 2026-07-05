@@ -131,19 +131,23 @@ function PlayerPage() {
     },
   });
 
-  const validCustomSrc = customSrc && /^https?:\/\//i.test(customSrc) ? customSrc : "";
+  // FONTE ÚNICA DE VERDADE (LIVE): src da M3U só é usado se for http(s) válido
+  // e com comprimento real; senão, fallback controlado para streamUrl.live.
+  const validCustomSrc =
+    typeof customSrc === "string" && customSrc.length > 10 && /^https?:\/\//i.test(customSrc)
+      ? customSrc
+      : "";
   const isCatchup = !!validCustomSrc;
   const url = useMemo(() => {
     if (type === "live") {
-      if (validCustomSrc) return validCustomSrc;
-      if (!creds) return "";
-      // Log de validação: só monta URL LIVE com credenciais reais.
+      const finalSrc = validCustomSrc || (creds ? streamUrl.live(creds, id) : "");
       // eslint-disable-next-line no-console
-      console.log("LIVE STREAM READY:", {
-        hasCreds: !!creds.username && !!creds.password && !!creds.server,
+      console.log("[LIVE DEBUG]", {
+        hasSrc: !!validCustomSrc,
+        finalSrc,
         streamId: id,
       });
-      return streamUrl.live(creds, id);
+      return finalSrc;
     }
     if (validCustomSrc) return validCustomSrc;
     if (!creds) return "";

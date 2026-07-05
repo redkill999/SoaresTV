@@ -37,7 +37,24 @@ export function MiniLivePlayer({
     if (v) v.muted = muted;
   }, [muted, streamId]);
 
-  const src = originalSrc || (creds && streamId ? streamUrl.live(creds, streamId) : "");
+  // FONTE ÚNICA DE VERDADE (LIVE): 1º src M3U válido; 2º streamUrl.live(creds, id).
+  // Nunca mistura as duas fontes sem fallback controlado.
+  const src =
+    typeof originalSrc === "string" && originalSrc.length > 10
+      ? originalSrc
+      : creds && streamId
+        ? streamUrl.live(creds, streamId)
+        : "";
+
+  useEffect(() => {
+    if (!streamId) return;
+    // eslint-disable-next-line no-console
+    console.log("[LIVE DEBUG]", {
+      hasSrc: !!originalSrc,
+      finalSrc: src,
+      streamId,
+    });
+  }, [originalSrc, src, streamId]);
 
   const now = Math.floor(Date.now() / 1000);
   const current = epgQ.data?.find((e: EpgListing) => {
@@ -52,7 +69,8 @@ export function MiniLivePlayer({
     navigate({
       to: "/player/$type/$id",
       params: { type: "live", id: String(streamId) },
-      search: originalSrc ? { name: name ?? "Canal", src: originalSrc } : { name: name ?? "Canal" },
+      // Envia a MESMA url final resolvida (fonte única) para o player fullscreen.
+      search: src ? { name: name ?? "Canal", src } : { name: name ?? "Canal" },
     });
   };
 
@@ -61,8 +79,16 @@ export function MiniLivePlayer({
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         {/* Video */}
         <div ref={videoWrapRef} className="relative aspect-video bg-black">
-          {creds && streamId ? (
+          {creds && streamId && src ? (
             <VideoPlayer key={String(streamId)} src={src} poster={logo} kind="live" />
+          ) : creds && streamId && !src ? (
+            <div className="absolute inset-0 grid place-items-center text-destructive">
+              <div className="text-center px-4">
+                <Tv className="size-10 mx-auto mb-2 opacity-60" />
+                <p className="text-sm font-semibold">Erro: URL do canal indisponível</p>
+                <p className="text-xs text-muted-foreground mt-1">Sem src M3U e sem credenciais para montar o stream.</p>
+              </div>
+            </div>
           ) : (
             <div className="absolute inset-0 grid place-items-center text-muted-foreground">
               <div className="text-center">

@@ -7,7 +7,7 @@ import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
-import { apiList, type LiveCategory, type LiveStream, xtreamCredsFromUrl } from "@/lib/xtream";
+import { apiList, streamUrl, type LiveCategory, type LiveStream, xtreamCredsFromUrl } from "@/lib/xtream";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
 import { filterBySearch, getSorted } from "@/lib/search-index";
@@ -202,7 +202,7 @@ function LivePage() {
                 {cat === "all" ? "Selecione uma categoria à esquerda." : "Nenhum canal encontrado."}
               </div>
             ) : (
-              <LiveGrid filtered={filtered} />
+              <LiveGrid filtered={filtered} creds={creds} />
             )}
           </div>
         </div>
@@ -212,7 +212,7 @@ function LivePage() {
   );
 }
 
-function LiveGrid({ filtered }: { filtered: LiveStream[] }) {
+function LiveGrid({ filtered, creds }: { filtered: LiveStream[]; creds: XtreamCreds | null }) {
   const { visible, sentinelRef, hasMore } = useProgressive(filtered);
   return (
     <>
@@ -224,7 +224,15 @@ function LiveGrid({ filtered }: { filtered: LiveStream[] }) {
             id={String(s.stream_id)}
             name={s.name}
             image={s.stream_icon}
-            src={s.url}
+            // FONTE ÚNICA (LIVE): 1º url real da M3U; 2º fallback controlado
+            // streamUrl.live com credenciais já hidratadas. Nenhum tile LIVE sem src.
+            src={
+              typeof s.url === "string" && s.url.length > 10
+                ? s.url
+                : creds && creds.server && creds.username && creds.password
+                  ? streamUrl.live(creds, s.stream_id)
+                  : undefined
+            }
           />
         ))}
       </div>

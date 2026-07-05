@@ -30,6 +30,9 @@ export const XciptvTile = memo(function XciptvTile({
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
   const hasImage = !!image && !errored;
+  // Só propaga src real (M3U) — string http(s) com comprimento válido.
+  // Se ausente, o player usa o fallback controlado streamUrl.live(creds, id).
+  const validSrc = typeof src === "string" && src.length > 10 ? src : undefined;
   const pct =
     typeof progress === "number" && Number.isFinite(progress)
       ? Math.max(0, Math.min(1, progress)) * 100
@@ -39,9 +42,9 @@ export const XciptvTile = memo(function XciptvTile({
     <Link
       to="/player/$type/$id"
       params={{ type, id }}
-      search={type === "live" && src ? { name, src } : { name }}
+      search={type === "live" && validSrc ? { name, src: validSrc } : { name }}
       onClick={() => {
-        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image, src });
+        if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image, src: validSrc });
       }}
       className="group block focus:outline-none"
     >
