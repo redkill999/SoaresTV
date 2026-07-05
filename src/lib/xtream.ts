@@ -614,9 +614,21 @@ export function xtreamCredsFromUrl(
   }
 }
 
+function assertLiveCreds(c: XtreamCreds | null | undefined, id: number | string): asserts c is XtreamCreds {
+  if (!c || !c.server || !c.username || !c.password) {
+    throw new Error(`LIVE tentou montar URL sem credenciais carregadas (stream=${id})`);
+  }
+}
+
 export const streamUrl = {
-  live: (c: XtreamCreds, id: number | string) =>
-    `${normalizeServer(c.server)}/live/${c.username}/${c.password}/${id}.ts`,
+  live: (c: XtreamCreds, id: number | string) => {
+    assertLiveCreds(c, id);
+    const url = `${normalizeServer(c.server)}/live/${c.username}/${c.password}/${id}.ts`;
+    if (url.includes("***USER***") || url.includes("***PASS***")) {
+      throw new Error("URL LIVE inválida — placeholders não substituídos");
+    }
+    return url;
+  },
   movie: (c: XtreamCreds, id: number | string, ext = "mp4") =>
     `${normalizeServer(c.server)}/movie/${c.username}/${c.password}/${id}.${ext}`,
   episode: (c: XtreamCreds, id: number | string, ext = "mp4") =>
