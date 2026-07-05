@@ -457,10 +457,14 @@ export function VideoPlayer({
   }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic]);
 
 
+  // REVERT (estado que funcionava no APK): LIVE toca pelo pipeline web
+  // (proxy /api/stream + hls.js/mpegts) dentro da WebView. ExoPlayer nativo
+  // só é usado quando o usuário escolhe "exo" nas configurações ou quando o
+  // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
+  // LIVE foi o que quebrou os canais no APK.
   const shouldUseNativePlayer =
-    isLiveSrc ||
-    settings.defaultPlayer === "exo" ||
-    !!srcHostProfile.forceNativeForLive;
+    settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
+
 
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
