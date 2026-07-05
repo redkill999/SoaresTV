@@ -123,6 +123,10 @@ export function isSafeUpstreamUrl(input: string | URL): boolean {
 /**
  * fetch com validação anti-SSRF em cada hop de redirect. Substitui
  * `redirect: "follow"` — cada Location é revalidada antes de seguir.
+ *
+ * LIVE: se a URL original é mídia ao vivo (/live/ ou .ts), TODOS os hops de
+ * redirect passam sem filtro SSRF — painéis IPTV redirecionam para URLs de
+ * token/balanceamento sem /live/ no path, e revalidar cortava o stream.
  */
 export async function safeFetch(
   input: string | URL,
@@ -130,7 +134,9 @@ export async function safeFetch(
   opts: { maxRedirects?: number } = {},
 ): Promise<Response> {
   const maxRedirects = opts.maxRedirects ?? 5;
-  let current = assertSafeUpstreamUrl(input).toString();
+  const initialUrl = assertSafeUpstreamUrl(input);
+  const isLiveMedia = isLiveMediaUrl(initialUrl) || isIptvAllowedHost(initialUrl.hostname);
+  let current = initialUrl.toString();
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const res = await fetch(current, { ...init, redirect: "manual" });
     if (res.status >= 300 && res.status < 400) {
@@ -138,7 +144,8 @@ export async function safeFetch(
       if (!loc) return res;
       try { await res.body?.cancel(); } catch { /* noop */ }
       const next = new URL(loc, current);
-      assertSafeUpstreamUrl(next);
+      // Mídia LIVE: segue o redirect direto, sem filtro SSRF.
+      if (!isLiveMedia) assertSafeUpstreamUrl(next);
       current = next.toString();
       continue;
     }
