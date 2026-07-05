@@ -452,7 +452,11 @@ export function VideoPlayer({
   }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic]);
 
 
-  const shouldUseNativePlayer = settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
+  const shouldUseNativePlayer =
+    isLiveSrc ||
+    settings.defaultPlayer === "exo" ||
+    !!srcHostProfile.forceNativeForLive;
+
 
   // Rastreia se o player nativo (ExoPlayer overlay) foi de fato aberto.
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
