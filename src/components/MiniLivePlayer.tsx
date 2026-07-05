@@ -69,7 +69,8 @@ export function MiniLivePlayer({
     navigate({
       to: "/player/$type/$id",
       params: { type: "live", id: String(streamId) },
-      search: originalSrc ? { name: name ?? "Canal", src: originalSrc } : { name: name ?? "Canal" },
+      // Envia a MESMA url final resolvida (fonte única) para o player fullscreen.
+      search: src ? { name: name ?? "Canal", src } : { name: name ?? "Canal" },
     });
   };
 
