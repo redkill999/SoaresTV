@@ -524,16 +524,11 @@ export function VideoPlayer({
       // (caso histórico em que o overlay nativo travava sem feedback). Para
       // VOD (filme/série) o ExoPlayer é aberto diretamente — o gate adicionava
       // ~probe + clique manual e atrasava a reprodução sem benefício real.
-      if (isLiveSrc && !manualNativeStartRef.current) {
-        pushDbg(`ETAPA 4 debug pré-ExoPlayer ativo (LIVE): não abrir overlay nativo automaticamente`);
-        setPlayerMode("web");
-        setHoldNativeDebug(true);
-        showStreamDiagnostic(`Diagnóstico canal LIVE ativo antes do ExoPlayer. Copie este painel ou toque em Abrir ExoPlayer.`);
-        void probeNativeLiveStream(src, (line) => {
-          if (!cancelled) pushDbg(line);
-        }, () => cancelled);
-        return;
+      if (isLiveSrc) {
+        pushDbg("ETAPA 4 LIVE/APK: abrindo ExoPlayer automaticamente");
       }
+
+
 
       const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
