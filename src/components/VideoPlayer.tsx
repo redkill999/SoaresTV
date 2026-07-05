@@ -520,6 +520,10 @@ export function VideoPlayer({
     (async () => {
       const native = await isNativeApp();
       if (cancelled) return;
+      // Registra o runtime nativo ANTES do pipeline web rodar: o guard de
+      // webIncompatibleLive só vale para navegador real — no APK o pipeline
+      // web (proxy) deve rodar normalmente.
+      nativeRuntimeRef.current = native;
       pushDbg(`ETAPA 3 isNativeApp=${native} shouldUseNative=${shouldUseNativePlayer}`);
       if (!native) {
         setPlayerMode("web");
