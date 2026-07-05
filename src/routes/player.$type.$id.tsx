@@ -8,6 +8,7 @@ import { ParentalGate } from "@/components/ParentalGate";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
 import { api, streamUrl } from "@/lib/xtream";
+import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import { findCategoryIdFor, isItemLocked } from "@/lib/parental";
 import { ArrowLeft } from "lucide-react";
 
@@ -140,13 +141,9 @@ function PlayerPage() {
   const isCatchup = !!validCustomSrc;
   const url = useMemo(() => {
     if (type === "live") {
-      const finalSrc = validCustomSrc || (creds ? streamUrl.live(creds, id) : "");
+      const finalSrc = tryResolveStreamUrl({ src: validCustomSrc, stream_id: id }, creds);
       // eslint-disable-next-line no-console
-      console.log("[LIVE DEBUG]", {
-        hasSrc: !!validCustomSrc,
-        finalSrc,
-        streamId: id,
-      });
+      console.log("[LIVE DEBUG]", { hasSrc: !!validCustomSrc, finalSrc, streamId: id });
       return finalSrc;
     }
     if (validCustomSrc) return validCustomSrc;

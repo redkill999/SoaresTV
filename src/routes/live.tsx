@@ -7,7 +7,8 @@ import { XciptvHeader } from "@/components/xciptv/XciptvHeader";
 import { XciptvCategoryList } from "@/components/xciptv/XciptvCategoryList";
 import { XciptvTile } from "@/components/xciptv/XciptvTile";
 import { store, type XtreamCreds } from "@/lib/storage";
-import { apiList, streamUrl, type LiveCategory, type LiveStream, xtreamCredsFromUrl } from "@/lib/xtream";
+import { apiList, type LiveCategory, type LiveStream, xtreamCredsFromUrl } from "@/lib/xtream";
+import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import { useFavorites, useHistory } from "@/hooks/use-favorites";
 import { useProgressive } from "@/hooks/use-progressive";
 import { filterBySearch, getSorted } from "@/lib/search-index";
@@ -224,15 +225,8 @@ function LiveGrid({ filtered, creds }: { filtered: LiveStream[]; creds: XtreamCr
             id={String(s.stream_id)}
             name={s.name}
             image={s.stream_icon}
-            // FONTE ÚNICA (LIVE): 1º url real da M3U; 2º fallback controlado
-            // streamUrl.live com credenciais já hidratadas. Nenhum tile LIVE sem src.
-            src={
-              typeof s.url === "string" && s.url.length > 10
-                ? s.url
-                : creds && creds.server && creds.username && creds.password
-                  ? streamUrl.live(creds, s.stream_id)
-                  : undefined
-            }
+            // FONTE ÚNICA: streaming layer isolada (src M3U → Xtream .ts).
+            src={tryResolveStreamUrl({ src: s.url, stream_id: s.stream_id }, creds) || undefined}
           />
         ))}
       </div>

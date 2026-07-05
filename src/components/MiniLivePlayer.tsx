@@ -3,7 +3,8 @@ import { Maximize2, Tv, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { getShortEpg, streamUrl, type EpgListing } from "@/lib/xtream";
+import { getShortEpg, type EpgListing } from "@/lib/xtream";
+import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import type { XtreamCreds } from "@/lib/storage";
 
 export function MiniLivePlayer({
@@ -37,14 +38,8 @@ export function MiniLivePlayer({
     if (v) v.muted = muted;
   }, [muted, streamId]);
 
-  // FONTE ÚNICA DE VERDADE (LIVE): 1º src M3U válido; 2º streamUrl.live(creds, id).
-  // Nunca mistura as duas fontes sem fallback controlado.
-  const src =
-    typeof originalSrc === "string" && originalSrc.length > 10
-      ? originalSrc
-      : creds && streamId
-        ? streamUrl.live(creds, streamId)
-        : "";
+  // FONTE ÚNICA: streaming layer isolada resolve LIVE (src M3U → Xtream .ts).
+  const src = tryResolveStreamUrl({ src: originalSrc, stream_id: streamId }, creds);
 
   useEffect(() => {
     if (!streamId) return;
