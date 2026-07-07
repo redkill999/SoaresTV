@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
 import { Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
-import { store, type AspectRatio } from "@/lib/storage";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
