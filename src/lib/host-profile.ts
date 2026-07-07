@@ -98,13 +98,6 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // multop100.top: ExoPlayer não abre neste APK/host; LIVE começa pelo TS web,
-  // mas se o TS encerrar em ~30s o VideoPlayer avança para a variante HLS.
-  "multop100.top": {
-    bypassProxyForLive: true,
-    disableHlsConversion: true,
-    preferTs: true,
-  },
   // flipex.pro: origem OK mas os canais LIVE redirecionam (302) para um CDN
   // (eagflix.lat) que bloqueia IPs de datacenter/edge (404 no proxy) e não
   // envia CORS (bloqueio direto no browser). Confirmadamente NÃO reproduz no
@@ -236,15 +229,42 @@ if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs
     console.log("[HOST PROFILE] limpou flags webIncompatibleLive/forceNativeForLive gravadas por bug");
   }
 }
+// Limpeza pontual: multop100.top foi marcado por tentativas anteriores como
+// TS-only / ExoPlayer. O diagnóstico mostrou que ExoPlayer não abre e o TS
+// encerra em ~30s; portanto esse host deve voltar ao padrão HLS-first via proxy.
+if (memory["multop100.top"]?.forceNativeForLive || memory["multop100.top"]?.disableHlsConversion || memory["multop100.top"]?.preferTs || memory["multop100.top"]?.bypassProxyForLive) {
+  const cur = memory["multop100.top"];
+  const {
+    forceNativeForLive: _fn,
+    disableHlsConversion: _dh,
+    preferTs: _pt,
+    bypassProxyForLive: _bp,
+    ...rest
+  } = cur;
+  memory["multop100.top"] = rest;
+  writeStorage(memory);
+  console.log("[HOST PROFILE] limpou flags quebradas de multop100.top");
+}
 // Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
 
 // sobrescrevendo: preset → storage → updateHostProfile.
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
 }
-// Override obrigatório: este host NÃO pode manter forceNativeForLive salvo de
-// versões anteriores, porque o ExoPlayer não abre e deixa o canal sem imagem.
-memory["multop100.top"] = { ...memory["multop100.top"], ...HOST_PRESETS["multop100.top"], forceNativeForLive: false };
+// Override obrigatório: este host NÃO pode manter flags salvas de TS-only nem
+// forceNativeForLive, porque isso quebrou a abertura dos canais no APK.
+if (memory["multop100.top"]) {
+  const cur = memory["multop100.top"];
+  const {
+    forceNativeForLive: _fn,
+    disableHlsConversion: _dh,
+    preferTs: _pt,
+    bypassProxyForLive: _bp,
+    ...rest
+  } = cur;
+  memory["multop100.top"] = rest;
+  writeStorage(memory);
+}
 // flipex.pro não responde HTTPS no host do painel. Overrides antigos/salvos de
 // forceHttps/forceHttp=false quebram LIVE e VOD no Web Desktop; este preset é
 // intencionalmente mandatório para restaurar o comportamento HTTP funcional.
