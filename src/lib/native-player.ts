@@ -280,3 +280,21 @@ export async function stopNative(): Promise<void> {
   await closeFullscreen(mod);
   hasActivePlayer = false;
 }
+
+// Lê o currentTime do ExoPlayer nativo (overlay fullscreen). Usado pelo
+// watchdog de stall do LIVE em VideoPlayer.tsx. Retorna null se plugin
+// indisponível ou se a chamada falhar/timeoutar.
+export async function getNativeCurrentTime(): Promise<number | null> {
+  const mod = await loadPlugin();
+  if (!mod) return null;
+  try {
+    const player = mod as unknown as {
+      getCurrentTime?: (a: { playerId: string }) => Promise<{ value?: number } | undefined>;
+    };
+    const res = await raceTimeout(player.getCurrentTime?.({ playerId: PLAYER_ID }), 2_000);
+    const v = Number((res as { value?: number } | undefined)?.value);
+    return Number.isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}

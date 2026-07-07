@@ -4,7 +4,7 @@ import { Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
-import { playNative, stopNative } from "@/lib/native-player";
+import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 
@@ -360,6 +360,22 @@ export function VideoPlayer({
   const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
   const nativeLiveWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeLivePlayedRef = useRef(false);
+  // Watchdog contínuo de stall para reprodução LIVE via ExoPlayer nativo.
+  // Mesmo padrão do apkLiveProgressTimer do caminho web, mas usando
+  // getNativeCurrentTime() do plugin capacitor-video-player.
+  const nativeLiveStallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nativeLiveLastTimeRef = useRef<number>(0);
+  const nativeLiveStillTicksRef = useRef<number>(0);
+  const nativeLivePausedRef = useRef<boolean>(false);
+  const nativeLiveReloadEventsRef = useRef<number[]>([]);
+  const nativeLiveReloadingRef = useRef<boolean>(false);
+  const stopNativeLiveStallWatchdog = useCallback(() => {
+    if (nativeLiveStallIntervalRef.current) {
+      clearInterval(nativeLiveStallIntervalRef.current);
+      nativeLiveStallIntervalRef.current = null;
+    }
+    nativeLiveStillTicksRef.current = 0;
+  }, []);
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
@@ -383,6 +399,43 @@ export function VideoPlayer({
   //  - bypassa o proxy /api/stream (vai direto pro painel via http)
   // Se o plugin falhar (plugin ausente, URL incompatível), caímos pro caminho
   // web (hls.js/mpegts) que continua existindo.
+  // Ref indireto para o reloader do watchdog nativo — evita ciclo de deps
+  // (startNativeLiveStallWatchdog precisa ser criado antes de openNative,
+  // mas o reloader depende de openNative).
+  const reloadNativeLiveRef = useRef<() => void>(() => {});
+
+  const startNativeLiveStallWatchdog = useCallback(() => {
+    if (!isLiveSrc) return;
+    stopNativeLiveStallWatchdog();
+    nativeLiveLastTimeRef.current = 0;
+    nativeLiveStillTicksRef.current = 0;
+    nativeLivePausedRef.current = false;
+    nativeLiveStallIntervalRef.current = setInterval(() => {
+      if (!nativeOpenedRef.current) { stopNativeLiveStallWatchdog(); return; }
+      if (nativeLivePausedRef.current || nativeLiveReloadingRef.current) return;
+      void (async () => {
+        const t = await getNativeCurrentTime();
+        if (t == null) return;
+        // Primeiro tick: apenas semear baseline.
+        if (nativeLiveLastTimeRef.current === 0 && nativeLiveStillTicksRef.current === 0) {
+          nativeLiveLastTimeRef.current = t;
+          return;
+        }
+        if (t > nativeLiveLastTimeRef.current + 0.25) {
+          nativeLiveLastTimeRef.current = t;
+          nativeLiveStillTicksRef.current = 0;
+          return;
+        }
+        nativeLiveStillTicksRef.current += 1;
+        pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
+        if (nativeLiveStillTicksRef.current >= 2) {
+          nativeLiveStillTicksRef.current = 0;
+          reloadNativeLiveRef.current();
+        }
+      })();
+    }, 4_000);
+  }, [isLiveSrc, pushDbg, stopNativeLiveStallWatchdog]);
+
   const openNative = useCallback(async () => {
     const native = await isNativeApp();
     nativeRuntimeRef.current = native;
@@ -393,6 +446,8 @@ export function VideoPlayer({
       clearTimeout(nativeLiveWatchdogRef.current);
       nativeLiveWatchdogRef.current = null;
     }
+    stopNativeLiveStallWatchdog();
+    nativeLivePausedRef.current = false;
     const compat = getCompatForUrl(src);
     const ua =
       compat.userAgent && compat.userAgent !== "auto"
@@ -413,16 +468,30 @@ export function VideoPlayer({
         } catch {
           pushDbg(`NATIVE ${name}`);
         }
+        if (name === "jeepCapVideoPlayerPause" || /\bpause\b/i.test(name)) {
+          nativeLivePausedRef.current = true;
+        }
         if (
           name === "jeepCapVideoPlayerReady" ||
           name === "jeepCapVideoPlayerPlay" ||
           /\b(?:ready|play)\b/i.test(name)
         ) {
           nativeLivePlayedRef.current = true;
+          nativeLivePausedRef.current = false;
           if (nativeLiveWatchdogRef.current) {
             clearTimeout(nativeLiveWatchdogRef.current);
             nativeLiveWatchdogRef.current = null;
           }
+          if (isLiveSrc && nativeOpenedRef.current) {
+            startNativeLiveStallWatchdog();
+          }
+        }
+        if (
+          name === "jeepCapVideoPlayerEnded" ||
+          name === "jeepCapVideoPlayerExit" ||
+          /\b(?:ended|exit)\b/i.test(name)
+        ) {
+          stopNativeLiveStallWatchdog();
         }
         // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que
         // estava cobrindo o WebView) e mostra o painel de diagnóstico em tela.
@@ -437,6 +506,7 @@ export function VideoPlayer({
             clearTimeout(nativeLiveWatchdogRef.current);
             nativeLiveWatchdogRef.current = null;
           }
+          stopNativeLiveStallWatchdog();
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
@@ -449,12 +519,54 @@ export function VideoPlayer({
           clearTimeout(nativeLiveWatchdogRef.current);
           nativeLiveWatchdogRef.current = null;
         }
+        stopNativeLiveStallWatchdog();
         if (kind !== "live" && pos > 0) {
           onProgressRef.current?.(pos, Math.max(pos + 1, pos));
         }
       },
     });
-  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic, startNativeLiveStallWatchdog, stopNativeLiveStallWatchdog]);
+
+  // Reload do canal LIVE no ExoPlayer nativo ao detectar stall. Limitado a
+  // 2 tentativas por janela de 90s (mesma lógica do apkLiveFreezeEvents do
+  // caminho web). Após o limite, cai para diagnóstico.
+  const reloadNativeLive = useCallback(async () => {
+    if (nativeLiveReloadingRef.current) return;
+    if (!nativeOpenedRef.current || !isLiveSrc) return;
+    const now = Date.now();
+    const arr = nativeLiveReloadEventsRef.current;
+    while (arr.length && now - arr[0] > 90_000) arr.shift();
+    if (arr.length >= 2) {
+      pushDbg(`NATIVE LIVE stall reload limite (${arr.length}/90s) -> diagnóstico`);
+      stopNativeLiveStallWatchdog();
+      nativeOpenedRef.current = false;
+      void stopNative().catch(() => undefined);
+      setPlayerMode("web");
+      showStreamDiagnostic("Canal LIVE congelando repetidamente no ExoPlayer. Veja o diagnóstico abaixo.");
+      return;
+    }
+    arr.push(now);
+    nativeLiveReloadingRef.current = true;
+    stopNativeLiveStallWatchdog();
+    pushDbg(`NATIVE LIVE stall detectado -> reload #${arr.length}`);
+    try { await stopNative(); } catch { /* ignore */ }
+    await new Promise<void>((r) => setTimeout(r, 300));
+    const ok = await openNative();
+    nativeLiveReloadingRef.current = false;
+    if (!ok) {
+      nativeOpenedRef.current = false;
+      setPlayerMode("web");
+      showStreamDiagnostic("Falha ao recarregar o canal LIVE no ExoPlayer.");
+    } else {
+      nativeOpenedRef.current = true;
+    }
+  }, [isLiveSrc, openNative, pushDbg, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
+
+  useEffect(() => {
+    reloadNativeLiveRef.current = () => { void reloadNativeLive(); };
+  }, [reloadNativeLive]);
+
+
 
 
   // REVERT (estado que funcionava no APK): LIVE toca pelo pipeline web
@@ -507,6 +619,10 @@ export function VideoPlayer({
     let cancelled = false;
     setPlayerMode("deciding");
     nativeOpenedRef.current = false;
+    // Reset watchdog de stall nativo por canal (novo src = zera contagem 90s).
+    nativeLiveReloadEventsRef.current = [];
+    nativeLiveReloadingRef.current = false;
+    stopNativeLiveStallWatchdog();
     // [DEBUG TEMP] reset por src
     dbgRef.current = [];
     setDbgLines([]);
@@ -586,8 +702,9 @@ export function VideoPlayer({
         clearTimeout(nativeLiveWatchdogRef.current);
         nativeLiveWatchdogRef.current = null;
       }
+      stopNativeLiveStallWatchdog();
     };
-  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
