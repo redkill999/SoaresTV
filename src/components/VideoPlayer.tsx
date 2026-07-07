@@ -2103,17 +2103,7 @@ export function VideoPlayer({
           }}
         />
       )}
-      {isLiveSrc && !debugPanelOpen && (
-        <button
-          type="button"
-          onClick={() => openManualDebug("fixo")}
-          aria-label="Abrir diagnóstico"
-          title="Abrir diagnóstico"
-          className="fixed right-3 top-3 z-[2147483647] h-12 min-w-12 rounded-full bg-destructive px-3 font-bold text-destructive-foreground shadow-lg ring-2 ring-white/70"
-        >
-          DIAG
-        </button>
-      )}
+      {/* Botão DIAG removido a pedido do usuário — diagnóstico continua no console. */}
     </div>
   );
 }
