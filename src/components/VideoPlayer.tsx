@@ -1892,6 +1892,8 @@ function CustomControls({
   pipActive,
   onTogglePip,
   onInteract,
+  aspectRatio,
+  onCycleAspect,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   visible: boolean;
@@ -1899,6 +1901,8 @@ function CustomControls({
   pipActive: boolean;
   onTogglePip: () => void;
   onInteract: () => void;
+  aspectRatio: AspectRatio;
+  onCycleAspect: () => void;
 }) {
   const [paused, setPaused] = useState(true);
   const [current, setCurrent] = useState(0);
