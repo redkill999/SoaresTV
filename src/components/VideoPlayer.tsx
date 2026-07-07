@@ -1271,9 +1271,17 @@ export function VideoPlayer({
       if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
       apkLiveEndedRecoveries += 1;
       pushDbg(`APK LIVE ended detectado(${source}) #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} paused=${video.paused} ready=${video.readyState} net=${video.networkState} sinceLast=${sinceLast}ms`);
-      if (!shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
-        void fallbackToNativeFromApkFreeze(`live-ended-${source}-repeated`).then((usedNative) => {
-          if (!usedNative) reconnectCurrentLiveWeb(`live-ended-${source}-repeated`);
+      // Fonte instável: se o canal travou (ended) em menos de 60s de reprodução
+      // no APK, já vai direto pro ExoPlayer nativo em vez de tentar mais um
+      // reload web que muito provavelmente vai congelar de novo.
+      const playedShort = (video.currentTime || 0) < 60 && nativeRuntimeRef.current;
+      const shouldFallbackNow =
+        !shouldUseNativePlayer && (apkLiveEndedRecoveries >= 2 || playedShort);
+      if (shouldFallbackNow) {
+        void fallbackToNativeFromApkFreeze(
+          `live-ended-${source}${playedShort ? "-shortplay" : "-repeated"}`,
+        ).then((usedNative) => {
+          if (!usedNative) reconnectCurrentLiveWeb(`live-ended-${source}-fallbackfail`);
         });
         return;
       }
