@@ -865,7 +865,16 @@ export function VideoPlayer({
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
           pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
-          if (!cancelled) tryNextVod();
+          if (cancelled) return;
+          // Stream ao vivo pode ter erros transitórios de rede/CDN. Tenta
+          // reconectar preservando o player antes de desistir para o próximo
+          // candidato (que muitas vezes nem existe pra LIVE).
+          if (isLive && mpegtsRecoverAttempts < MAX_MPEGTS_RECOVER) {
+            mpegtsRecoverAttempts += 1;
+            pushDbg(`mpegts recover attempt=${mpegtsRecoverAttempts}`);
+            try { reloadMpegts(); return; } catch { /* fallthrough */ }
+          }
+          tryNextVod();
         });
         tsPlayer.attachMediaElement(video);
         tsPlayer.load();
@@ -875,6 +884,7 @@ export function VideoPlayer({
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
+        armMpegtsStallWatchdog();
         return true;
       } catch {
         return false;
