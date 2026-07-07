@@ -871,13 +871,14 @@ export function VideoPlayer({
           {
             isLive: true,
             enableWorker: false,
-            // Config original que rodava estável antes dos ajustes. Mudanças
-            // (stashBuffer, chasing desligado, latency alta) causaram efeitos
-            // colaterais piores que o problema original.
-            enableStashBuffer: false,
-            liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 6,
-            liveBufferLatencyMinRemain: 1,
+            // APK/WebView precisa de colchão para jitter do IPTV. Sem stash, o
+            // mpegts.js fica sensível a qualquer microcorte e o canal entra no
+            // ciclo "roda alguns segundos → congela".
+            enableStashBuffer: true,
+            stashInitialSize: 768 * 1024,
+            liveBufferLatencyChasing: false,
+            liveBufferLatencyMaxLatency: 12,
+            liveBufferLatencyMinRemain: 3,
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
