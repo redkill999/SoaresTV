@@ -871,20 +871,13 @@ export function VideoPlayer({
           {
             isLive: true,
             enableWorker: false,
-            // Stash buffer LIGADO: acumula 384KB antes de entregar ao demuxer,
-            // o que absorve jitter da CDN. Sem isso, qualquer engasgo da rede
-            // vira freeze imediato (sintoma "roda-congela-roda-congela").
-            enableStashBuffer: true,
-            stashInitialSize: 384,
-            // Latency chasing DESLIGADO: com chasing, o player pula pra frente
-            // sempre que o buffer enche, drenando o colchão que acabamos de
-            // acumular — piora justamente o cenário que ele tenta resolver.
-            // Preferimos ficar ~15-20s atrás do edge com playback estável.
-            liveBufferLatencyChasing: false,
-            liveBufferLatencyMaxLatency: 20,
-            liveBufferLatencyMinRemain: 4,
-            lazyLoad: false,
-            autoCleanupSourceBuffer: true,
+            // Config original que rodava estável antes dos ajustes. Mudanças
+            // (stashBuffer, chasing desligado, latency alta) causaram efeitos
+            // colaterais piores que o problema original.
+            enableStashBuffer: false,
+            liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMinRemain: 1,
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
