@@ -98,6 +98,15 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
+  // multop100.top: diagnóstico real do APK mostrou LIVE via mpegts/proxy
+  // encerrando por volta de 20-30s e entrando em ciclo reconnect→freeze.
+  // Para este host específico, abre LIVE direto no ExoPlayer nativo.
+  "multop100.top": {
+    bypassProxyForLive: true,
+    disableHlsConversion: true,
+    preferTs: true,
+    forceNativeForLive: true,
+  },
   // flipex.pro: origem OK mas os canais LIVE redirecionam (302) para um CDN
   // (eagflix.lat) que bloqueia IPs de datacenter/edge (404 no proxy) e não
   // envia CORS (bloqueio direto no browser). Confirmadamente NÃO reproduz no
