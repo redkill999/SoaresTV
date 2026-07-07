@@ -900,6 +900,7 @@ export function VideoPlayer({
             return url;
           }
         })();
+        lastMpegtsUrl = url;
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: true, url: absUrl },
           {
