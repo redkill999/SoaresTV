@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
-import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
+import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 
 
