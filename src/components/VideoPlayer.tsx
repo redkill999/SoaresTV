@@ -702,8 +702,9 @@ export function VideoPlayer({
         clearTimeout(nativeLiveWatchdogRef.current);
         nativeLiveWatchdogRef.current = null;
       }
+      stopNativeLiveStallWatchdog();
     };
-  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
