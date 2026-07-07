@@ -542,11 +542,19 @@ export function VideoPlayer({
             startNativeLiveStallWatchdog();
           }
         }
-        if (
-          name === "jeepCapVideoPlayerEnded" ||
-          name === "jeepCapVideoPlayerExit" ||
-          /\b(?:ended|exit)\b/i.test(name)
-        ) {
+        const nativeEnded = name === "jeepCapVideoPlayerEnded" || /\bended\b/i.test(name);
+        const nativeExit = name === "jeepCapVideoPlayerExit" || /\bexit\b/i.test(name);
+        if (nativeEnded && isLiveSrc) {
+          pushDbg("NATIVE LIVE ended recebido -> reload do ExoPlayer sem voltar ao WebView");
+          stopNativeLiveStallWatchdog();
+          if (nativeLiveWatchdogRef.current) {
+            clearTimeout(nativeLiveWatchdogRef.current);
+            nativeLiveWatchdogRef.current = null;
+          }
+          setTimeout(() => reloadNativeLiveRef.current(), 250);
+          return;
+        }
+        if (nativeEnded || nativeExit) {
           stopNativeLiveStallWatchdog();
         }
         // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que

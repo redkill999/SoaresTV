@@ -143,9 +143,9 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       startAtSec?: number;
     };
 
-    // REVERT: exitOnEnd/pipEnabled/bkmodeEnabled voltam aos valores originais
-    // (que estavam funcionando em LIVE). O parâmetro opts.isLive permanece na
-    // API para futuras diferenciações, mas hoje não altera o initPlayer.
+    // LIVE não pode fechar o overlay quando a conexão do IPTV encerra um trecho
+    // curto; o VideoPlayer recebe o evento ended e reabre o stream. Se
+    // exitOnEnd ficar true, o usuário vê o canal "sair do ar".
     const args: InitArgs = {
       mode: "fullscreen",
       url: opts.url,
@@ -153,7 +153,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       componentTag: "div",
       headers: Object.keys(headers).length ? headers : undefined,
       rate: 1,
-      exitOnEnd: true,
+      exitOnEnd: !opts.isLive,
       loopOnEnd: false,
       pipEnabled: true,
       bkmodeEnabled: true,
