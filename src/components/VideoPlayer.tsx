@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
-import { Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
+import { Bug, Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
@@ -1936,6 +1936,17 @@ export function VideoPlayer({
           pipActive={pipActive}
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
+          showDebugButton={isLiveSrc}
+          onOpenDebug={() => {
+            keepDebugOverlayRef.current = true;
+            const v = videoRef.current;
+            if (v) {
+              pushDbg(`DIAG aberto manual t=${(v.currentTime || 0).toFixed(2)} paused=${v.paused} ended=${v.ended} ready=${v.readyState} net=${v.networkState}`);
+            } else {
+              pushDbg("DIAG aberto manual sem videoRef");
+            }
+            setDebugPanelOpen(true);
+          }}
           aspectRatio={settings.aspectRatio}
           onCycleAspect={() => {
             const order: AspectRatio[] = ["default", "fill", "stretch", "16:9", "4:3"];
@@ -1963,6 +1974,8 @@ function CustomControls({
   pipActive,
   onTogglePip,
   onInteract,
+  showDebugButton,
+  onOpenDebug,
   aspectRatio,
   onCycleAspect,
 }: {
@@ -1972,6 +1985,8 @@ function CustomControls({
   pipActive: boolean;
   onTogglePip: () => void;
   onInteract: () => void;
+  showDebugButton: boolean;
+  onOpenDebug: () => void;
   aspectRatio: AspectRatio;
   onCycleAspect: () => void;
 }) {
@@ -2086,6 +2101,18 @@ function CustomControls({
         >
           <Maximize className="size-5" />
         </button>
+
+        {showDebugButton && (
+          <button
+            type="button"
+            onClick={onOpenDebug}
+            aria-label="Abrir diagnóstico"
+            title="Abrir diagnóstico"
+            className="size-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center text-white"
+          >
+            <Bug className="size-5" />
+          </button>
+        )}
 
         {pipSupported && (
           <button
