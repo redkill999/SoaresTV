@@ -16,7 +16,16 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Clapperboard } from "lucide-react";
 
 export const Route = createFileRoute("/series")({
-  head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
+  head: () => ({
+    meta: [
+      { title: "Séries — SoaresTV" },
+      { name: "description", content: "Assista séries completas na SoaresTV: temporadas e episódios organizados por gênero com histórico e continue de onde parou." },
+      { property: "og:title", content: "Séries — SoaresTV" },
+      { property: "og:description", content: "Assista séries completas na SoaresTV: temporadas e episódios organizados por gênero com histórico e continue de onde parou." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/series" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/series" }],
+  }),
   loader: ({ context }) => {
     let creds = store.getCreds();
     if (!creds) {
@@ -176,6 +185,7 @@ function SeriesPage() {
   return (
     <PremiumChrome showBack={false}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
+      <h1 className="sr-only">Catálogo de séries — SoaresTV</h1>
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="SERIES" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>

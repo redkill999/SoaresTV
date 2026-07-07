@@ -32,11 +32,13 @@ function buildLoginPlaylistUrl(server: string, username: string, password: strin
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SoaresTV — IPTV Player" },
-      { name: "description", content: "Player IPTV com Xtream Codes, M3U, EPG e mais." },
-      { property: "og:title", content: "SoaresTV — IPTV Player" },
-      { property: "og:description", content: "Player IPTV com Xtream Codes, M3U, EPG e mais." },
+      { title: "SoaresTV — Login IPTV com Xtream Codes e M3U" },
+      { name: "description", content: "Acesse a SoaresTV: player IPTV completo com login Xtream Codes ou lista M3U, guia EPG, filmes, séries e canais ao vivo em qualquer dispositivo." },
+      { property: "og:title", content: "SoaresTV — Login IPTV com Xtream Codes e M3U" },
+      { property: "og:description", content: "Player IPTV completo com login Xtream Codes ou lista M3U, guia EPG, filmes, séries e canais ao vivo em qualquer dispositivo." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/" },
     ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/" }],
   }),
   component: LoginPage,
 });
@@ -270,6 +272,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
+      <h1 className="sr-only">SoaresTV — Login IPTV com Xtream Codes e M3U</h1>
       <Toaster theme="dark" />
       {isNative && <div className="fixed inset-0 z-0 bg-black pointer-events-none" />}
 

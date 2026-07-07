@@ -22,6 +22,16 @@ import homeBg from "@/assets/home-bg.png.asset.json";
 const APP_VERSION = "1.0.0";
 
 export const Route = createFileRoute("/home")({
+  head: () => ({
+    meta: [
+      { title: "Painel — SoaresTV" },
+      { name: "description", content: "Painel principal da SoaresTV com atalhos para TV ao vivo, filmes, séries, guia de programação, favoritos e configurações da conta." },
+      { property: "og:title", content: "Painel — SoaresTV" },
+      { property: "og:description", content: "Painel principal da SoaresTV com atalhos para TV ao vivo, filmes, séries, guia de programação, favoritos e configurações da conta." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/home" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/home" }],
+  }),
   component: HomePage,
 });
 
@@ -202,11 +212,14 @@ function HomePage() {
 
   return (
     <div className="home-edge-to-edge home-wrapper fixed inset-0 h-dvh w-dvw overflow-hidden bg-black text-white">
+      <h1 className="sr-only">Painel principal SoaresTV — TV ao vivo, filmes, séries e guia</h1>
       {/* Fundo full-bleed: cobre camera/notch, sem safe-area. */}
       <img
         src={homeBg.url}
-        alt="SoaresTV"
+        alt="Painel principal da SoaresTV com atalhos para TV ao vivo, filmes, séries e guia de programação"
         draggable={false}
+        fetchPriority="high"
+        decoding="async"
         className="home-bg pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
       />
 

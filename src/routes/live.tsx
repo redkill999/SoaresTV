@@ -16,7 +16,16 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
-  head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
+  head: () => ({
+    meta: [
+      { title: "Ao Vivo — SoaresTV" },
+      { name: "description", content: "Assista a canais de TV ao vivo na SoaresTV: esportes, notícias, filmes e entretenimento em alta qualidade." },
+      { property: "og:title", content: "Ao Vivo — SoaresTV" },
+      { property: "og:description", content: "Assista a canais de TV ao vivo na SoaresTV: esportes, notícias, filmes e entretenimento em alta qualidade." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/live" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/live" }],
+  }),
   loader: ({ context }) => {
     let creds = store.getCreds();
     if (!creds) {
@@ -161,6 +170,7 @@ function LivePage() {
   return (
     <PremiumChrome showBack={false}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
+      <h1 className="sr-only">Canais de TV ao vivo — SoaresTV</h1>
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
