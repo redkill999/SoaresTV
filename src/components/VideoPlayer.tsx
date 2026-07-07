@@ -1316,12 +1316,50 @@ export function VideoPlayer({
     };
     const onWaitingGeneric = () => registerApkLiveFreezeSignal("waiting");
     const onStalledGeneric = () => registerApkLiveFreezeSignal("stalled");
+    // LIVE: upstream/proxy podem fechar a conexão MPEG-TS depois de alguns
+    // segundos (visto no APK: toca ~29s e o <video> dispara 'ended' com
+    // ready=4 net=2). Sem tratamento, o canal congela sem qualquer erro.
+    // Estratégia: soft-recover (reconecta hls/mpegts sem destruir tudo);
+    // se acontecer de novo em <60s, cai pro ExoPlayer nativo.
+    let apkLiveEndedRecoveries = 0;
+    let apkLiveLastEndedAt = 0;
+    const onEndedLive = () => {
+      if (!isLive || cancelled || nativeFallbackStarted) return;
+      const now = Date.now();
+      const sinceLast = now - apkLiveLastEndedAt;
+      apkLiveLastEndedAt = now;
+      if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
+      apkLiveEndedRecoveries += 1;
+      pushDbg(`APK LIVE ended inesperado #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} sinceLast=${sinceLast}ms`);
+      if (nativeRuntimeRef.current && !shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
+        void fallbackToNativeFromApkFreeze("live-ended-repeated");
+        return;
+      }
+      // Reconecta o stream mantendo o mesmo candidato/URL.
+      try {
+        if (tsPlayer) {
+          reloadMpegts();
+        } else if (hls) {
+          try { hls.startLoad(); } catch { /* noop */ }
+          void video.play().catch(() => undefined);
+        } else {
+          // <video> direto: recarrega src e retoma.
+          const cur = video.currentSrc || video.src;
+          if (cur) {
+            try { video.pause(); } catch { /* noop */ }
+            try { video.load(); } catch { /* noop */ }
+            void video.play().catch(() => undefined);
+          }
+        }
+      } catch { /* noop */ }
+    };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaitingGeneric);
     video.addEventListener("stalled", onStalledGeneric);
+    video.addEventListener("ended", onEndedLive);
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
