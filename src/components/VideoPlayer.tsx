@@ -619,6 +619,10 @@ export function VideoPlayer({
     let cancelled = false;
     setPlayerMode("deciding");
     nativeOpenedRef.current = false;
+    // Reset watchdog de stall nativo por canal (novo src = zera contagem 90s).
+    nativeLiveReloadEventsRef.current = [];
+    nativeLiveReloadingRef.current = false;
+    stopNativeLiveStallWatchdog();
     // [DEBUG TEMP] reset por src
     dbgRef.current = [];
     setDbgLines([]);
