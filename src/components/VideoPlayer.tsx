@@ -360,6 +360,22 @@ export function VideoPlayer({
   const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
   const nativeLiveWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeLivePlayedRef = useRef(false);
+  // Watchdog contínuo de stall para reprodução LIVE via ExoPlayer nativo.
+  // Mesmo padrão do apkLiveProgressTimer do caminho web, mas usando
+  // getNativeCurrentTime() do plugin capacitor-video-player.
+  const nativeLiveStallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nativeLiveLastTimeRef = useRef<number>(0);
+  const nativeLiveStillTicksRef = useRef<number>(0);
+  const nativeLivePausedRef = useRef<boolean>(false);
+  const nativeLiveReloadEventsRef = useRef<number[]>([]);
+  const nativeLiveReloadingRef = useRef<boolean>(false);
+  const stopNativeLiveStallWatchdog = useCallback(() => {
+    if (nativeLiveStallIntervalRef.current) {
+      clearInterval(nativeLiveStallIntervalRef.current);
+      nativeLiveStallIntervalRef.current = null;
+    }
+    nativeLiveStillTicksRef.current = 0;
+  }, []);
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
   useEffect(() => {
