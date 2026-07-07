@@ -2006,6 +2006,16 @@ function CustomControls({
           </>
         )}
 
+        <button
+          type="button"
+          onClick={onCycleAspect}
+          aria-label="Ajustar tela"
+          title={`Ajustar tela (${aspectRatio})`}
+          className="size-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center text-white"
+        >
+          <Maximize className="size-5" />
+        </button>
+
         {pipSupported && (
           <button
             type="button"
