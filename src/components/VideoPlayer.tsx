@@ -1170,6 +1170,9 @@ export function VideoPlayer({
     let apkLiveSoftRecoveries = 0;
     let apkLiveLastSoftRecoverAt = 0;
     let apkLiveHasPlayed = false;
+    let apkLiveEndedRecoveries = 0;
+    let apkLiveLastEndedAt = 0;
+    let apkLiveLastEndedPollAt = 0;
     const apkLiveFreezeEvents: number[] = [];
     const clearApkLiveFreezeTimer = () => {
       if (apkLiveFreezeTimer) clearTimeout(apkLiveFreezeTimer);
@@ -1253,6 +1256,29 @@ export function VideoPlayer({
       }
       return ok;
     };
+    const handleLiveEndedState = (source: "event" | "poll") => {
+      if (!isLive || cancelled || nativeFallbackStarted) return;
+      const now = Date.now();
+      if (source === "poll") {
+        if (!video.ended) return;
+        // Evita chamar recuperação a cada tick enquanto o elemento ainda está
+        // em ended=true; 8s dá tempo para o reload trocar o MediaSource.
+        if (now - apkLiveLastEndedPollAt < 8_000) return;
+        apkLiveLastEndedPollAt = now;
+      }
+      const sinceLast = now - apkLiveLastEndedAt;
+      apkLiveLastEndedAt = now;
+      if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
+      apkLiveEndedRecoveries += 1;
+      pushDbg(`APK LIVE ended detectado(${source}) #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} paused=${video.paused} ready=${video.readyState} net=${video.networkState} sinceLast=${sinceLast}ms`);
+      if (!shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
+        void fallbackToNativeFromApkFreeze(`live-ended-${source}-repeated`).then((usedNative) => {
+          if (!usedNative) reconnectCurrentLiveWeb(`live-ended-${source}-repeated`);
+        });
+        return;
+      }
+      reconnectCurrentLiveWeb(`live-ended-${source}`);
+    };
     const registerApkLiveFreezeSignal = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       if (!apkLiveHasPlayed) return;
@@ -1291,7 +1317,13 @@ export function VideoPlayer({
           clearApkLiveProgressTimer();
           return;
         }
-        if (video.paused || video.ended) {
+        if (video.ended) {
+          handleLiveEndedState("poll");
+          apkLiveLastTime = video.currentTime || 0;
+          apkLiveStillTicks = 0;
+          return;
+        }
+        if (video.paused) {
           apkLiveLastTime = video.currentTime || 0;
           apkLiveStillTicks = 0;
           return;
@@ -1350,30 +1382,9 @@ export function VideoPlayer({
     };
     const onWaitingGeneric = () => registerApkLiveFreezeSignal("waiting");
     const onStalledGeneric = () => registerApkLiveFreezeSignal("stalled");
-    // LIVE: upstream/proxy podem fechar a conexão MPEG-TS depois de alguns
-    // segundos (visto no APK: toca ~29s e o <video> dispara 'ended' com
-    // ready=4 net=2). Sem tratamento, o canal congela sem qualquer erro.
-    // Estratégia: soft-recover (reconecta hls/mpegts sem destruir tudo);
-    // se acontecer de novo em <60s, cai pro ExoPlayer nativo.
-    let apkLiveEndedRecoveries = 0;
-    let apkLiveLastEndedAt = 0;
-    const onEndedLive = () => {
-      if (!isLive || cancelled || nativeFallbackStarted) return;
-      const now = Date.now();
-      const sinceLast = now - apkLiveLastEndedAt;
-      apkLiveLastEndedAt = now;
-      if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
-      apkLiveEndedRecoveries += 1;
-      pushDbg(`APK LIVE ended inesperado #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} sinceLast=${sinceLast}ms`);
-      if (!shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
-        void fallbackToNativeFromApkFreeze("live-ended-repeated").then((usedNative) => {
-          if (!usedNative) reconnectCurrentLiveWeb("live-ended-repeated");
-        });
-        return;
-      }
-      // Reconecta o stream mantendo o mesmo candidato/URL.
-      reconnectCurrentLiveWeb("live-ended");
-    };
+    // LIVE: alguns WebViews chegam em ended=true sem entregar o evento `ended`.
+    // O handler cobre o evento e o watchdog cobre o estado final observado no DIAG.
+    const onEndedLive = () => handleLiveEndedState("event");
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
