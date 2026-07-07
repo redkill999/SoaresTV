@@ -244,6 +244,10 @@ if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
 }
+// Overrides obrigatórios: estes hosts foram validados por diagnóstico real como
+// incompatíveis com LIVE via WebView/proxy no APK. Mesmo se o storage antigo do
+// aparelho tiver um perfil incompleto, essas flags precisam vencer.
+memory["multop100.top"] = { ...memory["multop100.top"], ...HOST_PRESETS["multop100.top"] };
 // flipex.pro não responde HTTPS no host do painel. Overrides antigos/salvos de
 // forceHttps/forceHttp=false quebram LIVE e VOD no Web Desktop; este preset é
 // intencionalmente mandatório para restaurar o comportamento HTTP funcional.

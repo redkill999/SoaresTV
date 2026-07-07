@@ -300,6 +300,12 @@ export function detectFormat(url: string): DetectedFormat {
   }
 }
 
+function isMandatoryNativeLiveHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const h = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+  return h === "multop100.top" || h.endsWith(".multop100.top");
+}
+
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
   seekTo: (seconds: number) => void;
@@ -508,7 +514,7 @@ export function VideoPlayer({
     const ua =
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
-        : isLiveSrc && srcHostProfile.forceNativeForLive
+        : isLiveSrc && (srcHostProfile.forceNativeForLive || isMandatoryNativeLiveHost(hostOf(src)))
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
     pushDbg(`ETAPA 3.1 native UA=${ua}`);
@@ -639,7 +645,8 @@ export function VideoPlayer({
   // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
   // LIVE foi o que quebrou os canais no APK.
   const shouldUseNativePlayer =
-    settings.defaultPlayer === "exo" || (isLiveSrc && !!srcHostProfile.forceNativeForLive);
+    settings.defaultPlayer === "exo" ||
+    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || isMandatoryNativeLiveHost(hostOf(src))));
 
 
 
