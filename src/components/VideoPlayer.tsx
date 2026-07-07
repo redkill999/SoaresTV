@@ -1686,6 +1686,7 @@ export function VideoPlayer({
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaitingGeneric);
       video.removeEventListener("stalled", onStalledGeneric);
+      video.removeEventListener("ended", onEndedLive);
       if (hls) hls.destroy();
       destroyTsPlayer();
       video.removeAttribute("src");
