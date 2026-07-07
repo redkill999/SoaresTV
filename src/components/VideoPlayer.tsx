@@ -804,8 +804,10 @@ export function VideoPlayer({
         const t = video.currentTime;
         if (Math.abs(t - mpegtsLastTime) < 0.05) {
           mpegtsStallTicks += 1;
-          // 3 ticks de 2s = ~6s parado
-          if (mpegtsStallTicks >= 3) {
+          // 6 ticks de 2s = ~12s parado antes de religar. Recarga curta piora
+          // o loop "roda-congela-roda-congela" — o stash buffer geralmente
+          // absorve travadas menores sem intervenção.
+          if (mpegtsStallTicks >= 6) {
             pushDbg(`mpegts stall detectado (currentTime=${t.toFixed(2)}) — reload`);
             clearMpegtsStallWatchdog();
             if (mpegtsRecoverAttempts < MAX_MPEGTS_RECOVER) {
@@ -818,7 +820,6 @@ export function VideoPlayer({
         } else {
           mpegtsLastTime = t;
           mpegtsStallTicks = 0;
-          // stream voltou a andar por conta própria — reseta contador de erro
           if (mpegtsRecoverAttempts > 0) mpegtsRecoverAttempts = 0;
         }
       }, 2_000);
