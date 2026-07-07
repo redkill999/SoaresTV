@@ -773,57 +773,21 @@ export function VideoPlayer({
       tsPlayer = null;
     };
 
-    // Recuperação de travadas em LIVE via mpegts.js. Muitos painéis IPTV
-    // mantêm a conexão viva mas param de enviar TS por segundos — sem
-    // watchdog, o <video> só engasga. Detectamos avanço de currentTime e
-    // religamos o player preservando o mesmo canal.
+    // Recuperação de erros do mpegts.js em LIVE. Não usamos watchdog por
+    // currentTime — isso causa loop "roda-congela-roda-congela" (reload
+    // reseta contador, próximo stall reloada de novo). Deixamos o próprio
+    // mpegts.js gerenciar buffering; só reagimos a ERROR events.
     let mpegtsRecoverAttempts = 0;
-    const MAX_MPEGTS_RECOVER = 4;
+    const MAX_MPEGTS_RECOVER = 2;
     let lastMpegtsUrl: string | null = null;
-    let mpegtsStallTimer: ReturnType<typeof setInterval> | null = null;
-    let mpegtsLastTime = 0;
-    let mpegtsStallTicks = 0;
-    const clearMpegtsStallWatchdog = () => {
-      if (mpegtsStallTimer) { clearInterval(mpegtsStallTimer); mpegtsStallTimer = null; }
-      mpegtsLastTime = 0;
-      mpegtsStallTicks = 0;
-    };
+    const clearMpegtsStallWatchdog = () => { /* noop — mantido p/ compat */ };
     const reloadMpegts = () => {
       if (!lastMpegtsUrl || cancelled) return;
       pushDbg(`mpegts reload url=${maskIptvUrl(lastMpegtsUrl)}`);
       void playMpegTs(lastMpegtsUrl);
     };
-    const armMpegtsStallWatchdog = () => {
-      if (!isLive) return;
-      clearMpegtsStallWatchdog();
-      mpegtsLastTime = video.currentTime;
-      mpegtsStallTicks = 0;
-      mpegtsStallTimer = setInterval(() => {
-        if (cancelled || !tsPlayer) { clearMpegtsStallWatchdog(); return; }
-        if (video.paused || video.ended) return;
-        const t = video.currentTime;
-        if (Math.abs(t - mpegtsLastTime) < 0.05) {
-          mpegtsStallTicks += 1;
-          // 6 ticks de 2s = ~12s parado antes de religar. Recarga curta piora
-          // o loop "roda-congela-roda-congela" — o stash buffer geralmente
-          // absorve travadas menores sem intervenção.
-          if (mpegtsStallTicks >= 6) {
-            pushDbg(`mpegts stall detectado (currentTime=${t.toFixed(2)}) — reload`);
-            clearMpegtsStallWatchdog();
-            if (mpegtsRecoverAttempts < MAX_MPEGTS_RECOVER) {
-              mpegtsRecoverAttempts += 1;
-              reloadMpegts();
-            } else {
-              tryNextVod();
-            }
-          }
-        } else {
-          mpegtsLastTime = t;
-          mpegtsStallTicks = 0;
-          if (mpegtsRecoverAttempts > 0) mpegtsRecoverAttempts = 0;
-        }
-      }, 2_000);
-    };
+    const armMpegtsStallWatchdog = () => { /* noop */ };
+
 
 
     const tryNextVod = () => {
