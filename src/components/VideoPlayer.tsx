@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Hls from "hls.js";
-import { Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
+import { Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
-import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type ListCompat } from "@/lib/storage";
+import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 
 
@@ -1865,6 +1865,13 @@ export function VideoPlayer({
           pipActive={pipActive}
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
+          aspectRatio={settings.aspectRatio}
+          onCycleAspect={() => {
+            const order: AspectRatio[] = ["default", "fill", "stretch", "16:9", "4:3"];
+            const i = order.indexOf(settings.aspectRatio);
+            const next = order[(i + 1) % order.length];
+            store.setAppSettings({ aspectRatio: next });
+          }}
         />
       )}
     </div>
@@ -1885,6 +1892,8 @@ function CustomControls({
   pipActive,
   onTogglePip,
   onInteract,
+  aspectRatio,
+  onCycleAspect,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   visible: boolean;
@@ -1892,6 +1901,8 @@ function CustomControls({
   pipActive: boolean;
   onTogglePip: () => void;
   onInteract: () => void;
+  aspectRatio: AspectRatio;
+  onCycleAspect: () => void;
 }) {
   const [paused, setPaused] = useState(true);
   const [current, setCurrent] = useState(0);
@@ -1994,6 +2005,16 @@ function CustomControls({
             </span>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={onCycleAspect}
+          aria-label="Ajustar tela"
+          title={`Ajustar tela (${aspectRatio})`}
+          className="size-10 shrink-0 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center text-white"
+        >
+          <Maximize className="size-5" />
+        </button>
 
         {pipSupported && (
           <button
