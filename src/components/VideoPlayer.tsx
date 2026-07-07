@@ -1311,8 +1311,8 @@ export function VideoPlayer({
           return;
         }
         apkLiveStillTicks += 1;
-        pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
+        pushDbg(`LIVE web progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+        if (nativeRuntimeRef.current && apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
           pushDbg("APK LIVE auto diagnóstico por freeze detectado");
           openManualDebug("apk-live-freeze");
         }
