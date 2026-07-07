@@ -46,9 +46,10 @@ const UA_LIST = [
 const AUTH_FAIL_RE = /UnauthorizedUser|Invalid\s+username|Invalid\s+password|User\s+expired|Account\s+expired|Not\s+allowed|Max\s+connections|Blocked|Banned|forbidden/i;
 const AUTH_REASON = "Servidor recusou autenticação ou autorização.";
 
-function proxyUrl(absolute: string, ua?: string | null) {
+function proxyUrl(absolute: string, ua?: string | null, kind?: string | null) {
   const uaPart = ua ? `&ua=${encodeURIComponent(ua)}` : "";
-  return `/api/stream?u=${encodeURIComponent(absolute)}&v=7${uaPart}`;
+  const kindPart = kind ? `&kind=${encodeURIComponent(kind)}` : "";
+  return `/api/stream?u=${encodeURIComponent(absolute)}&v=7${uaPart}${kindPart}`;
 }
 
 function contentTypeForPath(path: string): string {
@@ -150,7 +151,7 @@ function reasonForStatus(status: number): string | undefined {
   return undefined;
 }
 
-function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): string {
+function rewritePlaylist(text: string, baseUrl: string, ua?: string | null, kind?: string | null): string {
   const base = new URL(baseUrl);
   return text
     .split(/\r?\n/)
@@ -159,14 +160,14 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null): str
       if (!t) return line;
       const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
         try {
-          return `URI="${proxyUrl(new URL(uri, base).toString(), ua)}"`;
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua, kind)}"`;
         } catch {
           return `URI="${uri}"`;
         }
       });
       if (withUri.startsWith("#")) return withUri;
       try {
-        return proxyUrl(new URL(withUri, base).toString(), ua);
+        return proxyUrl(new URL(withUri, base).toString(), ua, kind);
       } catch {
         return withUri;
       }
@@ -394,7 +395,7 @@ async function handle(request: Request) {
 
   if (isPlaylist && upstream.ok) {
     const text = await upstream.text();
-    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA);
+    const rewritten = rewritePlaylist(text, upstream.url || upstreamUrl.toString(), forcedUA, isLive ? "live" : null);
     respHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
     respHeaders.delete("content-length");
     return new Response(rewritten, { status: upstream.status, headers: respHeaders });
