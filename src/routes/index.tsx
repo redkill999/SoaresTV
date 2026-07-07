@@ -89,7 +89,13 @@ function LoginPage() {
     void isNativeApp().then((native) => {
       if (cancelled) return;
       setIsNative(native);
-      setIsTv(isTvDevice());
+      // TV = detecção normal OU APK em tela larga landscape (>= 1000px)
+      // Fallback pra APK-TV onde o UA/plugin nativo não sinaliza TV.
+      const wideLandscape =
+        typeof window !== "undefined" &&
+        window.innerWidth >= 1000 &&
+        window.innerWidth > window.innerHeight;
+      setIsTv(isTvDevice() || (native && wideLandscape));
       if (native) {
         setNativeSplash(true);
         if (autoLogin) {
