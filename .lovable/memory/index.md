@@ -15,3 +15,4 @@ Proxy `/api/stream` NUNCA retorna 5xx: fetch-fail e upstream 5xx são rebaixados
 - [Desktop scroll + Voltar XCIPTV](mem://features/desktop-scroll-back-button) — 5 regras validadas para /live, /movies, /series funcionarem em navegador desktop sem quebrar mobile/TV
 - [Renderização progressiva](mem://features/progressive-rendering) — chunks de 240 via useProgressive para abrir catálogos instantaneamente em todos os dispositivos
 - [Home hotspots alignment](mem://design/home-hotspots-alignment) — % dos hotspots casadas com bordas da arte home-bg.png; `.hotspot-ring` inset:0 e `<img>` object-fill obrigatórios; vale web + APK
+- [LIVE APK working baseline](mem://fixes/live-apk-working-baseline) — multop100 sem forceNativeForLive; LIVE_PLAYER_BUILD=live-hls-first-restore-v4; botão DIAG removido; não reverter
