@@ -98,14 +98,12 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // multop100.top: diagnóstico real do APK mostrou LIVE via mpegts/proxy
-  // encerrando por volta de 20-30s e entrando em ciclo reconnect→freeze.
-  // Para este host específico, abre LIVE direto no ExoPlayer nativo.
+  // multop100.top: ExoPlayer não abre neste APK/host; LIVE começa pelo TS web,
+  // mas se o TS encerrar em ~30s o VideoPlayer avança para a variante HLS.
   "multop100.top": {
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
-    forceNativeForLive: true,
   },
   // flipex.pro: origem OK mas os canais LIVE redirecionam (302) para um CDN
   // (eagflix.lat) que bloqueia IPs de datacenter/edge (404 no proxy) e não
@@ -244,10 +242,9 @@ if (memory["flipex.pro"]?.disableHlsConversion || memory["flipex.pro"]?.preferTs
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
 }
-// Overrides obrigatórios: estes hosts foram validados por diagnóstico real como
-// incompatíveis com LIVE via WebView/proxy no APK. Mesmo se o storage antigo do
-// aparelho tiver um perfil incompleto, essas flags precisam vencer.
-memory["multop100.top"] = { ...memory["multop100.top"], ...HOST_PRESETS["multop100.top"] };
+// Override obrigatório: este host NÃO pode manter forceNativeForLive salvo de
+// versões anteriores, porque o ExoPlayer não abre e deixa o canal sem imagem.
+memory["multop100.top"] = { ...memory["multop100.top"], ...HOST_PRESETS["multop100.top"], forceNativeForLive: false };
 // flipex.pro não responde HTTPS no host do painel. Overrides antigos/salvos de
 // forceHttps/forceHttp=false quebram LIVE e VOD no Web Desktop; este preset é
 // intencionalmente mandatório para restaurar o comportamento HTTP funcional.

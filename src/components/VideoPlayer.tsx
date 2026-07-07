@@ -303,10 +303,16 @@ export function detectFormat(url: string): DetectedFormat {
 function isMandatoryNativeLiveHost(host: string | null | undefined): boolean {
   if (!host) return false;
   const h = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+  return false && (h === "multop100.top" || h.endsWith(".multop100.top"));
+}
+
+function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const h = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-native-multop100-v2";
+const LIVE_PLAYER_BUILD = "live-web-hls-fallback-v3";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -1248,6 +1254,10 @@ export function VideoPlayer({
     const markCurrentLiveHostNativePreferred = (reason: string) => {
       if (!isLive || !nativeRuntimeRef.current) return;
       const h = hostOf(workingSrc);
+      if (isNoNativeFallbackLiveHost(h)) {
+        pushDbg(`APK LIVE host ${h} não usa forceNativeForLive reason=${reason}`);
+        return;
+      }
       if (!h || getHostProfile(h).forceNativeForLive) return;
       updateHostProfile(h, {
         bypassProxyForLive: true,
@@ -1258,6 +1268,7 @@ export function VideoPlayer({
       pushDbg(`APK LIVE host ${h} marcado forceNativeForLive=true reason=${reason}`);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
+      if (isNoNativeFallbackLiveHost(hostOf(workingSrc))) return false;
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       nativeFallbackStarted = true;
       clearApkLiveFreezeTimer();
@@ -1308,6 +1319,13 @@ export function VideoPlayer({
       // roda→cai→volta→congela. Se já estamos no runtime nativo, muda direto
       // para ExoPlayer na PRIMEIRA ocorrência.
       const liveEndedOnApkWeb = nativeRuntimeRef.current && apkLiveHasPlayed;
+      if (liveEndedOnApkWeb && isNoNativeFallbackLiveHost(hostOf(workingSrc))) {
+        pushDbg(`APK LIVE ended em host sem ExoPlayer -> próximo candidato reason=${source}`);
+        clearApkLiveFreezeTimer();
+        apkLiveStillTicks = 0;
+        tryNextVod();
+        return;
+      }
       const shouldFallbackNow =
         !shouldUseNativePlayer && (liveEndedOnApkWeb || apkLiveEndedRecoveries >= 2);
       if (shouldFallbackNow) {
