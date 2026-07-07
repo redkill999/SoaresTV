@@ -1242,9 +1242,7 @@ export function VideoPlayer({
         apkLiveStillTicks += 1;
         pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
         if (apkLiveStillTicks >= 2) {
-          const actuallyStuck = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 1;
-          if (actuallyStuck) void fallbackToNativeFromApkFreeze("silent-currentTime");
-          else apkLiveStillTicks = 0;
+          void fallbackToNativeFromApkFreeze("silent-currentTime");
         }
       }, 3_000);
     };
