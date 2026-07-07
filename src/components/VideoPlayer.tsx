@@ -306,6 +306,8 @@ function isMandatoryNativeLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
+const LIVE_PLAYER_BUILD = "live-native-multop100-v2";
+
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
   seekTo: (seconds: number) => void;
@@ -422,6 +424,7 @@ export function VideoPlayer({
 
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
+  const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
 
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
   // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
@@ -514,7 +517,7 @@ export function VideoPlayer({
     const ua =
       compat.userAgent && compat.userAgent !== "auto"
         ? USER_AGENT_STRINGS[compat.userAgent]
-        : isLiveSrc && (srcHostProfile.forceNativeForLive || isMandatoryNativeLiveHost(hostOf(src)))
+        : isLiveSrc && (srcHostProfile.forceNativeForLive || mandatoryNativeLive)
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
     pushDbg(`ETAPA 3.1 native UA=${ua}`);
@@ -646,7 +649,7 @@ export function VideoPlayer({
   // LIVE foi o que quebrou os canais no APK.
   const shouldUseNativePlayer =
     settings.defaultPlayer === "exo" ||
-    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || isMandatoryNativeLiveHost(hostOf(src))));
+    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive));
 
 
 
@@ -702,6 +705,7 @@ export function VideoPlayer({
     keepDebugOverlayRef.current = false;
     manualNativeStartRef.current = false;
     setError(null);
+    pushDbg(`BUILD ${LIVE_PLAYER_BUILD}`);
     pushDbg(`ETAPA 1 src=${maskIptvUrl(src)}`);
     pushDbg(`ETAPA 2 kind=${kind ?? "auto"} host=${hostOf(src)} profile=${JSON.stringify(srcHostProfile)}`);
     (async () => {
@@ -711,7 +715,7 @@ export function VideoPlayer({
       // webIncompatibleLive só vale para navegador real — no APK o pipeline
       // web (proxy) deve rodar normalmente.
       nativeRuntimeRef.current = native;
-      pushDbg(`ETAPA 3 isNativeApp=${native} shouldUseNative=${shouldUseNativePlayer}`);
+      pushDbg(`ETAPA 3 isNativeApp=${native} shouldUseNative=${shouldUseNativePlayer} mandatoryNative=${mandatoryNativeLive}`);
       if (!native) {
         setPlayerMode("web");
         return;
