@@ -856,8 +856,11 @@ export function VideoPlayer({
             enableWorker: false,
             enableStashBuffer: false,
             liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 6,
-            liveBufferLatencyMinRemain: 1,
+            // Colchão maior contra jitter de rede — antes era 6/1s, muito
+            // enxuto: qualquer oscilação da CDN virava rebuffering. 8/2s
+            // dá margem sem afastar do edge o suficiente pra atrasar canal.
+            liveBufferLatencyMaxLatency: 8,
+            liveBufferLatencyMinRemain: 2,
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
@@ -983,13 +986,14 @@ export function VideoPlayer({
           enableWorker: true,
           lowLatencyMode: false,
           // Config estável (revertida da versão agressiva que travava abertura).
-          // Live: buffer enxuto, como o player nativo do APK trabalha.
+          // Live: buffer com margem contra jitter (era 30s — muito enxuto,
+          // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
+          // mantém latência aceitável (~12s do edge) sem travar abertura.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          // hls.js mantém ainda assim ~30-90s de buffer à frente — suficiente.
-          backBufferLength: isLive ? 10 : 30,
-          maxBufferLength: isLive ? 30 : 60,
-          maxMaxBufferLength: isLive ? 60 : 180,
-          maxBufferSize: isLive ? 60 * 1000 * 1000 : 90 * 1000 * 1000,
+          backBufferLength: isLive ? 15 : 30,
+          maxBufferLength: isLive ? 45 : 60,
+          maxMaxBufferLength: isLive ? 90 : 180,
+          maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
           maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
@@ -1001,10 +1005,10 @@ export function VideoPlayer({
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
-          // Fica mais perto do edge (como nativo) e re-sincroniza rápido
-          // quando a latência sobe — evita travar acumulando atraso.
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10,
+          // Fica um pouco mais atrás do edge que antes (3→4) pra ter colchão
+          // contra jitter, e re-sincroniza (12) antes de acumular atraso.
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 12,
           // Live: começa pelo nível mais baixo e sem teste de banda — muitos
           // servidores IPTV não respondem ao probe de bandwidth do hls.js
           // (era o que travava a abertura dos canais no APK).
