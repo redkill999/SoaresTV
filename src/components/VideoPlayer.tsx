@@ -764,6 +764,7 @@ export function VideoPlayer({
     };
 
     const destroyTsPlayer = () => {
+      clearMpegtsStallWatchdog();
       if (!tsPlayer) return;
       try { tsPlayer.pause(); } catch { /* noop */ }
       try { tsPlayer.unload(); } catch { /* noop */ }
@@ -771,6 +772,58 @@ export function VideoPlayer({
       try { tsPlayer.destroy(); } catch { /* noop */ }
       tsPlayer = null;
     };
+
+    // Recuperação de travadas em LIVE via mpegts.js. Muitos painéis IPTV
+    // mantêm a conexão viva mas param de enviar TS por segundos — sem
+    // watchdog, o <video> só engasga. Detectamos avanço de currentTime e
+    // religamos o player preservando o mesmo canal.
+    let mpegtsRecoverAttempts = 0;
+    const MAX_MPEGTS_RECOVER = 4;
+    let lastMpegtsUrl: string | null = null;
+    let mpegtsStallTimer: ReturnType<typeof setInterval> | null = null;
+    let mpegtsLastTime = 0;
+    let mpegtsStallTicks = 0;
+    const clearMpegtsStallWatchdog = () => {
+      if (mpegtsStallTimer) { clearInterval(mpegtsStallTimer); mpegtsStallTimer = null; }
+      mpegtsLastTime = 0;
+      mpegtsStallTicks = 0;
+    };
+    const reloadMpegts = () => {
+      if (!lastMpegtsUrl || cancelled) return;
+      pushDbg(`mpegts reload url=${maskIptvUrl(lastMpegtsUrl)}`);
+      void playMpegTs(lastMpegtsUrl);
+    };
+    const armMpegtsStallWatchdog = () => {
+      if (!isLive) return;
+      clearMpegtsStallWatchdog();
+      mpegtsLastTime = video.currentTime;
+      mpegtsStallTicks = 0;
+      mpegtsStallTimer = setInterval(() => {
+        if (cancelled || !tsPlayer) { clearMpegtsStallWatchdog(); return; }
+        if (video.paused || video.ended) return;
+        const t = video.currentTime;
+        if (Math.abs(t - mpegtsLastTime) < 0.05) {
+          mpegtsStallTicks += 1;
+          // 3 ticks de 2s = ~6s parado
+          if (mpegtsStallTicks >= 3) {
+            pushDbg(`mpegts stall detectado (currentTime=${t.toFixed(2)}) — reload`);
+            clearMpegtsStallWatchdog();
+            if (mpegtsRecoverAttempts < MAX_MPEGTS_RECOVER) {
+              mpegtsRecoverAttempts += 1;
+              reloadMpegts();
+            } else {
+              tryNextVod();
+            }
+          }
+        } else {
+          mpegtsLastTime = t;
+          mpegtsStallTicks = 0;
+          // stream voltou a andar por conta própria — reseta contador de erro
+          if (mpegtsRecoverAttempts > 0) mpegtsRecoverAttempts = 0;
+        }
+      }, 2_000);
+    };
+
 
     const tryNextVod = () => {
       clearWatchdog();
