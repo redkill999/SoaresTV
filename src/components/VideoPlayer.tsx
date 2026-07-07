@@ -1142,7 +1142,7 @@ export function VideoPlayer({
           manifestLoadingMaxRetry: 6,
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
-          fragLoadingTimeOut: 20_000,
+          fragLoadingTimeOut: isLive ? 30_000 : 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
           // Fica um pouco mais atrás do edge que antes (3→4) pra ter colchão
@@ -1189,6 +1189,7 @@ export function VideoPlayer({
         const stallTimestamps: number[] = [];
         let lockedLow = false;
         let unlockTimer: ReturnType<typeof setTimeout> | null = null;
+        let stallRecoverCount = 0;
         const lockLowQuality = () => {
           if (!hls || lockedLow) return;
           lockedLow = true;
@@ -1224,7 +1225,8 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
 
         const recoverLiveStall = () => {
-          if (!isLive || cancelled || !manifestReady) return;
+          if (!isLive || cancelled || !manifestReady || stallRecoverCount >= 8) return;
+          stallRecoverCount += 1;
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
@@ -1237,7 +1239,7 @@ export function VideoPlayer({
           }, 3_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
-        const onResumed = () => clearStall();
+        const onResumed = () => { stallRecoverCount = 0; clearStall(); };
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
 
