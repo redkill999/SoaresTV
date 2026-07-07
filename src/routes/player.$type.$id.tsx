@@ -138,7 +138,7 @@ function PlayerPage() {
     typeof customSrc === "string" && customSrc.length > 10 && /^https?:\/\//i.test(customSrc)
       ? customSrc
       : "";
-  const isCatchup = !!validCustomSrc;
+  // Reprise badge removido a pedido do usuário; validCustomSrc segue em uso na URL.
   const url = useMemo(() => {
     if (type === "live") {
       const finalSrc = tryResolveStreamUrl({ src: validCustomSrc, stream_id: id }, creds);
