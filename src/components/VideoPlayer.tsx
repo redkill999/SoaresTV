@@ -1410,12 +1410,13 @@ export function VideoPlayer({
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
-            if (ahead < 0.75) {
-              try { hls.startLoad(); } catch { /* noop */ }
+            try { hls.startLoad(); } catch { /* noop */ }
+            if (ahead < 0.75 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+              try { hls.recoverMediaError(); } catch { /* noop */ }
             }
             void video.play().catch(() => undefined);
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
-          }, 3_000);
+          }, 1_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
         const onResumed = () => clearStall();
