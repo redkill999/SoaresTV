@@ -987,21 +987,121 @@ export function VideoPlayer({
       video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
     };
 
+    let nativeFallbackStarted = false;
+    let apkLiveFreezeTimer: ReturnType<typeof setTimeout> | null = null;
+    let apkLiveProgressTimer: ReturnType<typeof setInterval> | null = null;
+    let apkLiveLastTime = 0;
+    let apkLiveStillTicks = 0;
+    const apkLiveFreezeEvents: number[] = [];
+    const clearApkLiveFreezeTimer = () => {
+      if (apkLiveFreezeTimer) clearTimeout(apkLiveFreezeTimer);
+      apkLiveFreezeTimer = null;
+    };
+    const clearApkLiveProgressTimer = () => {
+      if (apkLiveProgressTimer) clearInterval(apkLiveProgressTimer);
+      apkLiveProgressTimer = null;
+      apkLiveStillTicks = 0;
+    };
+    const fallbackToNativeFromApkFreeze = async (reason: string) => {
+      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      nativeFallbackStarted = true;
+      clearApkLiveFreezeTimer();
+      clearApkLiveProgressTimer();
+      pushDbg(`APK LIVE freeze fallback -> ExoPlayer reason=${reason}`);
+      detachStallListeners?.();
+      if (hls) {
+        try { hls.destroy(); } catch { /* noop */ }
+        hls = null;
+      }
+      destroyTsPlayer();
+      try { video.pause(); } catch { /* noop */ }
+      try { video.removeAttribute("src"); video.load(); } catch { /* noop */ }
+      const ok = await openNative();
+      pushDbg(`APK LIVE freeze fallback openNative=${ok}`);
+      if (cancelled) {
+        if (ok) void stopNative().catch(() => undefined);
+        return;
+      }
+      if (ok) {
+        nativeOpenedRef.current = true;
+        setPlayerMode("native");
+      } else {
+        nativeFallbackStarted = false;
+        setPlayerMode("web");
+        showStreamDiagnostic("Canal LIVE travou no player interno do APK e o ExoPlayer não abriu. Veja o diagnóstico abaixo.");
+      }
+    };
+    const registerApkLiveFreezeSignal = (reason: string) => {
+      if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      const now = Date.now();
+      apkLiveFreezeEvents.push(now);
+      while (apkLiveFreezeEvents.length && now - apkLiveFreezeEvents[0] > 90_000) {
+        apkLiveFreezeEvents.shift();
+      }
+      pushDbg(`APK LIVE freeze signal=${reason} count=${apkLiveFreezeEvents.length} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+      if (apkLiveFreezeEvents.length >= 3) {
+        void fallbackToNativeFromApkFreeze(`${reason}:repeated`);
+        return;
+      }
+      if (!apkLiveFreezeTimer) {
+        apkLiveFreezeTimer = setTimeout(() => {
+          apkLiveFreezeTimer = null;
+          if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+          const stuck = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 0.5;
+          if (stuck) void fallbackToNativeFromApkFreeze(`${reason}:stuck`);
+        }, 14_000);
+      }
+    };
+    const startApkLiveProgressWatch = () => {
+      if (apkLiveProgressTimer || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer || nativeFallbackStarted) return;
+      apkLiveLastTime = video.currentTime || 0;
+      apkLiveStillTicks = 0;
+      apkLiveProgressTimer = setInterval(() => {
+        if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) {
+          clearApkLiveProgressTimer();
+          return;
+        }
+        if (video.paused || video.ended) {
+          apkLiveLastTime = video.currentTime || 0;
+          apkLiveStillTicks = 0;
+          return;
+        }
+        const nowTime = video.currentTime || 0;
+        if (Math.abs(nowTime - apkLiveLastTime) > 0.25) {
+          apkLiveLastTime = nowTime;
+          apkLiveStillTicks = 0;
+          return;
+        }
+        apkLiveStillTicks += 1;
+        pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+        if (apkLiveStillTicks >= 3) void fallbackToNativeFromApkFreeze("silent-currentTime");
+      }, 5_000);
+    };
+
     const onVideoError = () => {
       const mediaErr = video.error;
       pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
       if (cancelled || hls) return;
       tryNextVod();
     };
-    const onVideoReady = () => clearWatchdog();
+    const onVideoReady = () => {
+      clearWatchdog();
+      clearApkLiveFreezeTimer();
+    };
     const onPlaying = () => {
       clearWatchdog();
+      clearApkLiveFreezeTimer();
+      startApkLiveProgressWatch();
       setCanManualPlay(false);
     };
+    const onWaitingGeneric = () => registerApkLiveFreezeSignal("waiting");
+    const onStalledGeneric = () => registerApkLiveFreezeSignal("stalled");
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
     video.addEventListener("canplay", onVideoReady);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaitingGeneric);
+    video.addEventListener("stalled", onStalledGeneric);
 
     const attachHls = (url: string) => {
       currentHlsUrl = url;
@@ -1318,17 +1418,21 @@ export function VideoPlayer({
     return () => {
       cancelled = true;
       clearWatchdog();
+      clearApkLiveFreezeTimer();
+      clearApkLiveProgressTimer();
       detachStallListeners?.();
       video.removeEventListener("error", onVideoError);
       video.removeEventListener("loadeddata", onVideoReady);
       video.removeEventListener("canplay", onVideoReady);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaitingGeneric);
+      video.removeEventListener("stalled", onStalledGeneric);
       if (hls) hls.destroy();
       destroyTsPlayer();
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode, holdNativeDebug, pushDbg]);
+  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
