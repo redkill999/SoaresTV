@@ -459,7 +459,7 @@ export function VideoPlayer({
           }
           nativeLiveStillTicksRef.current += 1;
           pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-          if (nativeLiveStillTicksRef.current >= 2) {
+          if (nativeLiveStillTicksRef.current >= 4) {
             nativeLiveStillTicksRef.current = 0;
             reloadNativeLiveRef.current();
           }
@@ -1196,17 +1196,18 @@ export function VideoPlayer({
         apkLiveFreezeEvents.shift();
       }
       pushDbg(`APK LIVE freeze signal=${reason} count=${apkLiveFreezeEvents.length} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-      if (apkLiveFreezeEvents.length >= 2) {
-        void fallbackToNativeFromApkFreeze(`${reason}:repeated`);
-        return;
-      }
+      // Eventos waiting/stalled podem disparar no início enquanto o HLS ainda
+      // monta buffer. Não derruba o canal só por repetição de evento; aguarda
+      // confirmação temporal abaixo para evitar o sintoma "toca 5s e sai".
       if (!apkLiveFreezeTimer) {
+        const baselineTime = video.currentTime || 0;
         apkLiveFreezeTimer = setTimeout(() => {
           apkLiveFreezeTimer = null;
           if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
-          const stuck = !video.paused && !video.ended && (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 1);
+          const moved = Math.abs((video.currentTime || 0) - baselineTime) > 0.5;
+          const stuck = !moved && !video.paused && !video.ended && (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 0.5);
           if (stuck) void fallbackToNativeFromApkFreeze(`${reason}:stuck`);
-        }, 4_000);
+        }, 12_000);
       }
     };
     const startApkLiveProgressWatch = () => {
@@ -1241,7 +1242,7 @@ export function VideoPlayer({
         }
         apkLiveStillTicks += 1;
         pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (apkLiveStillTicks >= 2) {
+        if (apkLiveStillTicks >= 5) {
           void fallbackToNativeFromApkFreeze("silent-currentTime");
         }
       }, 3_000);
