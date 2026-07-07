@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /player/
+Disallow: /loading
+
+Sitemap: https://tv-magica-brasa-soarestv.lovable.app/sitemap.xml
