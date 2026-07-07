@@ -16,7 +16,16 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Tv } from "lucide-react";
 
 export const Route = createFileRoute("/live")({
-  head: () => ({ meta: [{ title: "Ao Vivo — SoaresTV" }] }),
+  head: () => ({
+    meta: [
+      { title: "Ao Vivo — SoaresTV" },
+      { name: "description", content: "Assista a canais de TV ao vivo na SoaresTV: esportes, notícias, filmes e entretenimento em alta qualidade." },
+      { property: "og:title", content: "Ao Vivo — SoaresTV" },
+      { property: "og:description", content: "Assista a canais de TV ao vivo na SoaresTV: esportes, notícias, filmes e entretenimento em alta qualidade." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/live" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/live" }],
+  }),
   loader: ({ context }) => {
     let creds = store.getCreds();
     if (!creds) {

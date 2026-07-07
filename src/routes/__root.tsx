@@ -111,7 +111,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e11cd8f8-17a4-4720-ba05-d2aa25e94e5f/id-preview-e5fd133c--7e27fbd1-c4eb-4da3-b3cd-6957171df823.lovable.app-1781796900386.png" },
     ],
     links: [
-      { rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/" },
+      // canonical fica só nas rotas-folha (docs head-meta): root+leaf duplicaria
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

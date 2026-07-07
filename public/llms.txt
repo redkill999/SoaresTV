@@ -1,0 +1,20 @@
+# SoaresTV
+
+> Player IPTV web e APK Android compatível com Xtream Codes e listas M3U, com guia de programação EPG, filmes, séries e canais ao vivo.
+
+SoaresTV é um player IPTV que roda no navegador (desktop, celular, Smart TV) e como APK Android. Permite entrar com credenciais Xtream Codes ou importar uma lista M3U e organiza o conteúdo em canais ao vivo, filmes, séries, favoritos e histórico, com guia de programação (EPG) integrado.
+
+## Pages
+
+- [Login](/): Entrada por Xtream Codes ou lista M3U.
+- [Painel](/home): Atalhos para todas as seções do app.
+- [TV Ao Vivo](/live): Canais ao vivo organizados por categoria.
+- [Filmes](/movies): Catálogo de filmes por gênero.
+- [Séries](/series): Séries com temporadas e episódios.
+- [Guia EPG](/guide): Programação dos canais ao vivo.
+- [Favoritos](/favorites): Canais, filmes e séries salvos.
+- [Histórico](/history): Continue de onde parou.
+
+## Optional
+
+- [Configurações](/settings): Preferências de aparência, idioma e listas.

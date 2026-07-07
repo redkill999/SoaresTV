@@ -16,7 +16,16 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Clapperboard } from "lucide-react";
 
 export const Route = createFileRoute("/series")({
-  head: () => ({ meta: [{ title: "Séries — SoaresTV" }] }),
+  head: () => ({
+    meta: [
+      { title: "Séries — SoaresTV" },
+      { name: "description", content: "Assista séries completas na SoaresTV: temporadas e episódios organizados por gênero com histórico e continue de onde parou." },
+      { property: "og:title", content: "Séries — SoaresTV" },
+      { property: "og:description", content: "Assista séries completas na SoaresTV: temporadas e episódios organizados por gênero com histórico e continue de onde parou." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/series" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/series" }],
+  }),
   loader: ({ context }) => {
     let creds = store.getCreds();
     if (!creds) {

@@ -16,7 +16,16 @@ import { loadPersisted, withPersist } from "@/lib/query-persist";
 import { Film } from "lucide-react";
 
 export const Route = createFileRoute("/movies")({
-  head: () => ({ meta: [{ title: "Filmes — SoaresTV" }] }),
+  head: () => ({
+    meta: [
+      { title: "Filmes — SoaresTV" },
+      { name: "description", content: "Catálogo de filmes da SoaresTV: lançamentos, clássicos e coleções organizadas por gênero com reprodução instantânea." },
+      { property: "og:title", content: "Filmes — SoaresTV" },
+      { property: "og:description", content: "Catálogo de filmes da SoaresTV: lançamentos, clássicos e coleções organizadas por gênero com reprodução instantânea." },
+      { property: "og:url", content: "https://tv-magica-brasa-soarestv.lovable.app/movies" },
+    ],
+    links: [{ rel: "canonical", href: "https://tv-magica-brasa-soarestv.lovable.app/movies" }],
+  }),
   loader: ({ context }) => {
     let creds = store.getCreds();
     if (!creds) {
