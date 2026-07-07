@@ -186,6 +186,7 @@ function MoviesPage() {
   return (
     <PremiumChrome showBack={false}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
+      <h1 className="sr-only">Catálogo de filmes — SoaresTV</h1>
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="MOVIES" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>

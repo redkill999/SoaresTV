@@ -170,6 +170,7 @@ function LivePage() {
   return (
     <PremiumChrome showBack={false}>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden text-white">
+      <h1 className="sr-only">Canais de TV ao vivo — SoaresTV</h1>
       <XciptvHeader sort={sort} onSort={setSort} search={search} onSearch={setSearch} title="LIVE TV" />
       {needGate && !unlocked ? (
         <div className="px-6"><ParentalGate categoryId={cat} onUnlock={() => setUnlocked(true)} /></div>
