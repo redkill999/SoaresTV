@@ -1865,6 +1865,13 @@ export function VideoPlayer({
           pipActive={pipActive}
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
+          aspectRatio={settings.aspectRatio}
+          onCycleAspect={() => {
+            const order: AspectRatio[] = ["default", "fill", "stretch", "16:9", "4:3"];
+            const i = order.indexOf(settings.aspectRatio);
+            const next = order[(i + 1) % order.length];
+            store.setAppSettings({ aspectRatio: next });
+          }}
         />
       )}
     </div>
