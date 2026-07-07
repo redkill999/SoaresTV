@@ -1956,6 +1956,26 @@ export function VideoPlayer({
           }}
         />
       )}
+      {isLiveSrc && !error && !debugPanelOpen && (
+        <button
+          type="button"
+          onClick={() => {
+            keepDebugOverlayRef.current = true;
+            const v = videoRef.current;
+            if (v) {
+              pushDbg(`DIAG aberto manual t=${(v.currentTime || 0).toFixed(2)} paused=${v.paused} ended=${v.ended} ready=${v.readyState} net=${v.networkState}`);
+            } else {
+              pushDbg("DIAG aberto manual sem videoRef");
+            }
+            setDebugPanelOpen(true);
+          }}
+          aria-label="Abrir diagnóstico"
+          title="Abrir diagnóstico"
+          className="absolute top-2 right-2 z-30 size-10 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur grid place-items-center text-white ring-1 ring-white/20"
+        >
+          <Bug className="size-5" />
+        </button>
+      )}
     </div>
   );
 }
