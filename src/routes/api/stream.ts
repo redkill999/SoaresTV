@@ -160,7 +160,8 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null, kind
       if (!t) return line;
       const withUri = line.replace(/URI="([^"]+)"/g, (_, uri) => {
         try {
-          return `URI="${proxyUrl(new URL(uri, base).toString(), ua, kind)}"`;
+          const uriKind = /^#EXT-X-KEY\b/i.test(t) ? null : kind;
+          return `URI="${proxyUrl(new URL(uri, base).toString(), ua, uriKind)}"`;
         } catch {
           return `URI="${uri}"`;
         }
