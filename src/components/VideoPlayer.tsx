@@ -1226,11 +1226,24 @@ export function VideoPlayer({
       }
       void video.play().catch(() => undefined);
     };
+    const markCurrentLiveHostNativePreferred = (reason: string) => {
+      if (!isLive || !nativeRuntimeRef.current) return;
+      const h = hostOf(workingSrc);
+      if (!h || getHostProfile(h).forceNativeForLive) return;
+      updateHostProfile(h, {
+        bypassProxyForLive: true,
+        disableHlsConversion: true,
+        preferTs: true,
+        forceNativeForLive: true,
+      });
+      pushDbg(`APK LIVE host ${h} marcado forceNativeForLive=true reason=${reason}`);
+    };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       nativeFallbackStarted = true;
       clearApkLiveFreezeTimer();
       clearApkLiveProgressTimer();
+      markCurrentLiveHostNativePreferred(reason);
       pushDbg(`APK LIVE freeze fallback -> ExoPlayer reason=${reason}`);
       detachStallListeners?.();
       if (hls) {
@@ -1271,15 +1284,16 @@ export function VideoPlayer({
       if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
       apkLiveEndedRecoveries += 1;
       pushDbg(`APK LIVE ended detectado(${source}) #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} paused=${video.paused} ready=${video.readyState} net=${video.networkState} sinceLast=${sinceLast}ms`);
-      // Fonte instável: se o canal travou (ended) em menos de 60s de reprodução
-      // no APK, já vai direto pro ExoPlayer nativo em vez de tentar mais um
-      // reload web que muito provavelmente vai congelar de novo.
-      const playedShort = (video.currentTime || 0) < 60 && nativeRuntimeRef.current;
+      // LIVE não deveria chegar em ended=true. No APK isso significa que o
+      // pipeline Web/MSE encerrou o canal; reconectar mpegts só cria o ciclo
+      // roda→cai→volta→congela. Se já estamos no runtime nativo, muda direto
+      // para ExoPlayer na PRIMEIRA ocorrência.
+      const liveEndedOnApkWeb = nativeRuntimeRef.current && apkLiveHasPlayed;
       const shouldFallbackNow =
-        !shouldUseNativePlayer && (apkLiveEndedRecoveries >= 2 || playedShort);
+        !shouldUseNativePlayer && (liveEndedOnApkWeb || apkLiveEndedRecoveries >= 2);
       if (shouldFallbackNow) {
         void fallbackToNativeFromApkFreeze(
-          `live-ended-${source}${playedShort ? "-shortplay" : "-repeated"}`,
+          `live-ended-${source}${liveEndedOnApkWeb ? "-apkweb" : "-repeated"}`,
         ).then((usedNative) => {
           if (!usedNative) reconnectCurrentLiveWeb(`live-ended-${source}-fallbackfail`);
         });
@@ -1359,7 +1373,7 @@ export function VideoPlayer({
         if (apkLiveStillTicks >= 1) {
           softRecoverApkLiveFreeze("silent-currentTime");
         }
-        if (apkLiveStillTicks >= 4) {
+        if (apkLiveStillTicks >= (nativeRuntimeRef.current ? 2 : 4)) {
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
             if (!usedNative && !cancelled && !nativeFallbackStarted) {
               reconnectCurrentLiveWeb("silent-currentTime:hard");
