@@ -871,14 +871,13 @@ export function VideoPlayer({
           {
             isLive: true,
             enableWorker: false,
-            // APK/WebView precisa de colchão para jitter do IPTV. Sem stash, o
-            // mpegts.js fica sensível a qualquer microcorte e o canal entra no
-            // ciclo "roda alguns segundos → congela".
-            enableStashBuffer: true,
-            stashInitialSize: 768 * 1024,
-            liveBufferLatencyChasing: false,
-            liveBufferLatencyMaxLatency: 12,
-            liveBufferLatencyMinRemain: 3,
+            // Config original que abria mais canais. Ajustes de stash/latência
+            // aumentaram compatibilidade contra travas em alguns hosts, mas
+            // impediram a abertura de outros no APK/WebView.
+            enableStashBuffer: false,
+            liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 6,
+            liveBufferLatencyMinRemain: 1,
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
@@ -989,7 +988,6 @@ export function VideoPlayer({
     };
 
     let nativeFallbackStarted = false;
-    let apkLiveWebRecoverAttempts = 0;
     let apkLiveFreezeTimer: ReturnType<typeof setTimeout> | null = null;
     let apkLiveProgressTimer: ReturnType<typeof setInterval> | null = null;
     let apkLiveLastTime = 0;
@@ -1005,37 +1003,34 @@ export function VideoPlayer({
       apkLiveProgressTimer = null;
       apkLiveStillTicks = 0;
     };
-    const recoverApkLiveWebFreeze = (reason: string) => {
-      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
-      apkLiveWebRecoverAttempts += 1;
-      clearApkLiveFreezeTimer();
-      pushDbg(`APK LIVE web recover reason=${reason} attempt=${apkLiveWebRecoverAttempts}`);
-      if (hls) {
-        try { hls.startLoad(); } catch { /* noop */ }
-        if (apkLiveWebRecoverAttempts % 3 === 0) {
-          try { hls.recoverMediaError(); } catch { /* noop */ }
-        }
-        void video.play().catch(() => undefined);
-        return;
-      }
-      const actuallyStarved = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 1;
-      if (tsPlayer && lastMpegtsUrl && actuallyStarved && apkLiveWebRecoverAttempts <= 3) {
-        reloadMpegts();
-        return;
-      }
-      void video.play().catch(() => undefined);
-      if (apkLiveWebRecoverAttempts >= 5) {
-        showStreamDiagnostic("O canal LIVE está travando no player interno do APK. Tente trocar o player para Exo nas configurações deste app.");
-      }
-    };
-
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
-      // Não alternar automaticamente para ExoPlayer: isso gravava
-      // forceNativeForLive e criava o ciclo observado pelo usuário
-      // (roda → congela → troca player → roda → congela). Mantemos LIVE no
-      // pipeline web e apenas tentamos recuperar o loader atual.
-      recoverApkLiveWebFreeze(reason);
-      return;
+      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      nativeFallbackStarted = true;
+      clearApkLiveFreezeTimer();
+      clearApkLiveProgressTimer();
+      pushDbg(`APK LIVE freeze fallback -> ExoPlayer reason=${reason}`);
+      detachStallListeners?.();
+      if (hls) {
+        try { hls.destroy(); } catch { /* noop */ }
+        hls = null;
+      }
+      destroyTsPlayer();
+      try { video.pause(); } catch { /* noop */ }
+      try { video.removeAttribute("src"); video.load(); } catch { /* noop */ }
+      const ok = await openNative();
+      pushDbg(`APK LIVE freeze fallback openNative=${ok}`);
+      if (cancelled) {
+        if (ok) void stopNative().catch(() => undefined);
+        return;
+      }
+      if (ok) {
+        nativeOpenedRef.current = true;
+        setPlayerMode("native");
+      } else {
+        nativeFallbackStarted = false;
+        setPlayerMode("web");
+        showStreamDiagnostic("Canal LIVE travou no player interno do APK e o ExoPlayer não abriu. Veja o diagnóstico abaixo.");
+      }
     };
     const registerApkLiveFreezeSignal = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
@@ -1101,7 +1096,6 @@ export function VideoPlayer({
     };
     const onPlaying = () => {
       apkLiveHasPlayed = true;
-      apkLiveWebRecoverAttempts = 0;
       clearWatchdog();
       clearApkLiveFreezeTimer();
       startApkLiveProgressWatch();
@@ -1142,7 +1136,7 @@ export function VideoPlayer({
           manifestLoadingMaxRetry: 6,
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
-          fragLoadingTimeOut: isLive ? 30_000 : 20_000,
+          fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
           // Fica um pouco mais atrás do edge que antes (3→4) pra ter colchão
@@ -1189,7 +1183,6 @@ export function VideoPlayer({
         const stallTimestamps: number[] = [];
         let lockedLow = false;
         let unlockTimer: ReturnType<typeof setTimeout> | null = null;
-        let stallRecoverCount = 0;
         const lockLowQuality = () => {
           if (!hls || lockedLow) return;
           lockedLow = true;
@@ -1225,8 +1218,7 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
 
         const recoverLiveStall = () => {
-          if (!isLive || cancelled || !manifestReady || stallRecoverCount >= 8) return;
-          stallRecoverCount += 1;
+          if (!isLive || cancelled || !manifestReady) return;
           clearStall();
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
@@ -1239,7 +1231,7 @@ export function VideoPlayer({
           }, 3_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
-        const onResumed = () => { stallRecoverCount = 0; clearStall(); };
+        const onResumed = () => clearStall();
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
 
