@@ -1184,24 +1184,47 @@ export function VideoPlayer({
       apkLiveSoftRecoveries = 0;
       apkLiveLastSoftRecoverAt = 0;
     };
+    const reconnectCurrentLiveWeb = (reason: string) => {
+      if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
+      pushDbg(`LIVE web reconnect reason=${reason} hls=${!!hls} ts=${!!tsPlayer} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+      try {
+        if (tsPlayer) {
+          reloadMpegts();
+          return;
+        }
+        if (hls) {
+          try { hls.stopLoad(); } catch { /* noop */ }
+          try { hls.startLoad(-1); } catch { try { hls.startLoad(); } catch { /* noop */ } }
+          try { hls.recoverMediaError(); } catch { /* noop */ }
+          void video.play().catch(() => undefined);
+          return;
+        }
+        const cur = video.currentSrc || video.src;
+        if (cur) {
+          try { video.pause(); } catch { /* noop */ }
+          try { video.load(); } catch { /* noop */ }
+          void video.play().catch(() => undefined);
+        }
+      } catch { /* noop */ }
+    };
     const softRecoverApkLiveFreeze = (reason: string) => {
-      if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       const now = Date.now();
       if (now - apkLiveLastSoftRecoverAt < 4_000) return;
       apkLiveLastSoftRecoverAt = now;
       apkLiveSoftRecoveries += 1;
-      pushDbg(`APK LIVE soft recover #${apkLiveSoftRecoveries} reason=${reason} ready=${video.readyState} ahead=${bufferedAhead().toFixed(2)}`);
+      pushDbg(`LIVE web soft recover #${apkLiveSoftRecoveries} reason=${reason} ready=${video.readyState} ahead=${bufferedAhead().toFixed(2)}`);
       try { hls?.startLoad(); } catch { /* noop */ }
       try {
         if (hls && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) hls.recoverMediaError();
       } catch { /* noop */ }
-      if (tsPlayer && apkLiveSoftRecoveries <= 2) {
-        try { reloadMpegts(); } catch { /* noop */ }
+      if (tsPlayer && (apkLiveSoftRecoveries <= 2 || apkLiveSoftRecoveries % 4 === 0)) {
+        reconnectCurrentLiveWeb(`${reason}:mpegts-soft`);
       }
       void video.play().catch(() => undefined);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
-      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       nativeFallbackStarted = true;
       clearApkLiveFreezeTimer();
       clearApkLiveProgressTimer();
@@ -1218,7 +1241,7 @@ export function VideoPlayer({
       pushDbg(`APK LIVE freeze fallback openNative=${ok}`);
       if (cancelled) {
         if (ok) void stopNative().catch(() => undefined);
-        return;
+        return ok;
       }
       if (ok) {
         nativeOpenedRef.current = true;
@@ -1228,9 +1251,10 @@ export function VideoPlayer({
         setPlayerMode("web");
         showStreamDiagnostic("Canal LIVE travou no player interno do APK e o ExoPlayer não abriu. Veja o diagnóstico abaixo.");
       }
+      return ok;
     };
     const registerApkLiveFreezeSignal = (reason: string) => {
-      if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       if (!apkLiveHasPlayed) return;
       const now = Date.now();
       apkLiveFreezeEvents.push(now);
@@ -1245,21 +1269,25 @@ export function VideoPlayer({
         const baselineTime = video.currentTime || 0;
         apkLiveFreezeTimer = setTimeout(() => {
           apkLiveFreezeTimer = null;
-          if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+          if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
           const moved = Math.abs((video.currentTime || 0) - baselineTime) > 0.5;
           const stuck = !moved && !video.paused && !video.ended && (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 0.5);
-          if (stuck) void fallbackToNativeFromApkFreeze(`${reason}:stuck`);
+          if (stuck) {
+            void fallbackToNativeFromApkFreeze(`${reason}:stuck`).then((usedNative) => {
+              if (!usedNative) reconnectCurrentLiveWeb(`${reason}:stuck`);
+            });
+          }
         }, 12_000);
       }
     };
     const startApkLiveProgressWatch = () => {
-      if (apkLiveProgressTimer || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer || nativeFallbackStarted) return;
+      if (apkLiveProgressTimer || !isLive || shouldUseNativePlayer || nativeFallbackStarted) return;
       apkLiveLastTime = video.currentTime || 0;
       apkLiveFirstSampleAt = Date.now();
       apkLiveHasTimeProgress = false;
       apkLiveStillTicks = 0;
       apkLiveProgressTimer = setInterval(() => {
-        if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) {
+        if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) {
           clearApkLiveProgressTimer();
           return;
         }
@@ -1283,8 +1311,8 @@ export function VideoPlayer({
           return;
         }
         apkLiveStillTicks += 1;
-        pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
+        pushDbg(`LIVE web progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+        if (nativeRuntimeRef.current && apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
           pushDbg("APK LIVE auto diagnóstico por freeze detectado");
           openManualDebug("apk-live-freeze");
         }
@@ -1292,7 +1320,13 @@ export function VideoPlayer({
           softRecoverApkLiveFreeze("silent-currentTime");
         }
         if (apkLiveStillTicks >= 4) {
-          void fallbackToNativeFromApkFreeze("silent-currentTime");
+          void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
+            if (!usedNative && !cancelled && !nativeFallbackStarted) {
+              reconnectCurrentLiveWeb("silent-currentTime:hard");
+              apkLiveStillTicks = 0;
+              apkLiveLastTime = video.currentTime || 0;
+            }
+          });
         }
       }, 3_000);
     };
@@ -1331,27 +1365,14 @@ export function VideoPlayer({
       if (sinceLast > 60_000) apkLiveEndedRecoveries = 0;
       apkLiveEndedRecoveries += 1;
       pushDbg(`APK LIVE ended inesperado #${apkLiveEndedRecoveries} t=${(video.currentTime || 0).toFixed(2)} sinceLast=${sinceLast}ms`);
-      if (nativeRuntimeRef.current && !shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
-        void fallbackToNativeFromApkFreeze("live-ended-repeated");
+      if (!shouldUseNativePlayer && apkLiveEndedRecoveries >= 2) {
+        void fallbackToNativeFromApkFreeze("live-ended-repeated").then((usedNative) => {
+          if (!usedNative) reconnectCurrentLiveWeb("live-ended-repeated");
+        });
         return;
       }
       // Reconecta o stream mantendo o mesmo candidato/URL.
-      try {
-        if (tsPlayer) {
-          reloadMpegts();
-        } else if (hls) {
-          try { hls.startLoad(); } catch { /* noop */ }
-          void video.play().catch(() => undefined);
-        } else {
-          // <video> direto: recarrega src e retoma.
-          const cur = video.currentSrc || video.src;
-          if (cur) {
-            try { video.pause(); } catch { /* noop */ }
-            try { video.load(); } catch { /* noop */ }
-            void video.play().catch(() => undefined);
-          }
-        }
-      } catch { /* noop */ }
+      reconnectCurrentLiveWeb("live-ended");
     };
     video.addEventListener("error", onVideoError);
     video.addEventListener("loadeddata", onVideoReady);
