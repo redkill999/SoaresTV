@@ -354,6 +354,28 @@ export function VideoPlayer({
     setDebugPanelOpen(true);
     setError(message);
   }, []);
+  const openManualDebug = useCallback((source = "manual") => {
+    keepDebugOverlayRef.current = true;
+    const v = videoRef.current;
+    if (v) {
+      pushDbg(`DIAG aberto ${source} t=${(v.currentTime || 0).toFixed(2)} paused=${v.paused} ended=${v.ended} ready=${v.readyState} net=${v.networkState}`);
+    } else {
+      pushDbg(`DIAG aberto ${source} sem videoRef`);
+    }
+    setDebugPanelOpen(true);
+  }, [pushDbg]);
+  const debugPanelOpenRef = useRef(false);
+  useEffect(() => {
+    debugPanelOpenRef.current = debugPanelOpen;
+  }, [debugPanelOpen]);
+  useEffect(() => {
+    const onOpenDebug = (event: Event) => {
+      const detail = (event as CustomEvent<{ source?: string }>).detail;
+      openManualDebug(detail?.source ?? "externo");
+    };
+    window.addEventListener("soarestv:open-stream-debug", onOpenDebug);
+    return () => window.removeEventListener("soarestv:open-stream-debug", onOpenDebug);
+  }, [openManualDebug]);
   // "deciding" = aguardando saber se rodaremos no ExoPlayer nativo (APK) ou no
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
@@ -1262,6 +1284,10 @@ export function VideoPlayer({
         }
         apkLiveStillTicks += 1;
         pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
+        if (apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
+          pushDbg("APK LIVE auto diagnóstico por freeze detectado");
+          openManualDebug("apk-live-freeze");
+        }
         if (apkLiveStillTicks >= 1) {
           softRecoverApkLiveFreeze("silent-currentTime");
         }
@@ -1627,7 +1653,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic]);
+  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic, openManualDebug]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
@@ -1937,16 +1963,7 @@ export function VideoPlayer({
           onTogglePip={() => { void togglePip(); }}
           onInteract={revealNativeControls}
           showDebugButton={isLiveSrc}
-          onOpenDebug={() => {
-            keepDebugOverlayRef.current = true;
-            const v = videoRef.current;
-            if (v) {
-              pushDbg(`DIAG aberto manual t=${(v.currentTime || 0).toFixed(2)} paused=${v.paused} ended=${v.ended} ready=${v.readyState} net=${v.networkState}`);
-            } else {
-              pushDbg("DIAG aberto manual sem videoRef");
-            }
-            setDebugPanelOpen(true);
-          }}
+          onOpenDebug={() => openManualDebug("controles")}
           aspectRatio={settings.aspectRatio}
           onCycleAspect={() => {
             const order: AspectRatio[] = ["default", "fill", "stretch", "16:9", "4:3"];
@@ -1956,24 +1973,15 @@ export function VideoPlayer({
           }}
         />
       )}
-      {isLiveSrc && !error && !debugPanelOpen && (
+      {isLiveSrc && !debugPanelOpen && (
         <button
           type="button"
-          onClick={() => {
-            keepDebugOverlayRef.current = true;
-            const v = videoRef.current;
-            if (v) {
-              pushDbg(`DIAG aberto manual t=${(v.currentTime || 0).toFixed(2)} paused=${v.paused} ended=${v.ended} ready=${v.readyState} net=${v.networkState}`);
-            } else {
-              pushDbg("DIAG aberto manual sem videoRef");
-            }
-            setDebugPanelOpen(true);
-          }}
+          onClick={() => openManualDebug("fixo")}
           aria-label="Abrir diagnóstico"
           title="Abrir diagnóstico"
-          className="absolute top-2 right-2 z-30 size-10 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur grid place-items-center text-white ring-1 ring-white/20"
+          className="fixed right-3 top-3 z-[2147483647] h-12 min-w-12 rounded-full bg-destructive px-3 font-bold text-destructive-foreground shadow-lg ring-2 ring-white/70"
         >
-          <Bug className="size-5" />
+          DIAG
         </button>
       )}
     </div>
