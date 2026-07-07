@@ -988,6 +988,7 @@ export function VideoPlayer({
     };
 
     let nativeFallbackStarted = false;
+    let apkLiveWebRecoverAttempts = 0;
     let apkLiveFreezeTimer: ReturnType<typeof setTimeout> | null = null;
     let apkLiveProgressTimer: ReturnType<typeof setInterval> | null = null;
     let apkLiveLastTime = 0;
@@ -1003,7 +1004,38 @@ export function VideoPlayer({
       apkLiveProgressTimer = null;
       apkLiveStillTicks = 0;
     };
+    const recoverApkLiveWebFreeze = (reason: string) => {
+      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
+      apkLiveWebRecoverAttempts += 1;
+      clearApkLiveFreezeTimer();
+      pushDbg(`APK LIVE web recover reason=${reason} attempt=${apkLiveWebRecoverAttempts}`);
+      if (hls) {
+        try { hls.startLoad(); } catch { /* noop */ }
+        if (apkLiveWebRecoverAttempts % 3 === 0) {
+          try { hls.recoverMediaError(); } catch { /* noop */ }
+        }
+        void video.play().catch(() => undefined);
+        return;
+      }
+      const actuallyStarved = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 1;
+      if (tsPlayer && lastMpegtsUrl && actuallyStarved && apkLiveWebRecoverAttempts <= 3) {
+        reloadMpegts();
+        return;
+      }
+      void video.play().catch(() => undefined);
+      if (apkLiveWebRecoverAttempts >= 5) {
+        showStreamDiagnostic("O canal LIVE está travando no player interno do APK. Tente trocar o player para Exo nas configurações deste app.");
+      }
+    };
+
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
+      // Não alternar automaticamente para ExoPlayer: isso gravava
+      // forceNativeForLive e criava o ciclo observado pelo usuário
+      // (roda → congela → troca player → roda → congela). Mantemos LIVE no
+      // pipeline web e apenas tentamos recuperar o loader atual.
+      recoverApkLiveWebFreeze(reason);
+      return;
+      /* legacy native fallback intentionally disabled
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
       nativeFallbackStarted = true;
       clearApkLiveFreezeTimer();
@@ -1033,6 +1065,7 @@ export function VideoPlayer({
         setPlayerMode("web");
         showStreamDiagnostic("Canal LIVE travou no player interno do APK e o ExoPlayer não abriu. Veja o diagnóstico abaixo.");
       }
+      */
     };
     const registerApkLiveFreezeSignal = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
@@ -1078,7 +1111,11 @@ export function VideoPlayer({
         }
         apkLiveStillTicks += 1;
         pushDbg(`APK LIVE progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (apkLiveStillTicks >= 2) void fallbackToNativeFromApkFreeze("silent-currentTime");
+        if (apkLiveStillTicks >= 2) {
+          const actuallyStuck = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 1;
+          if (actuallyStuck) void fallbackToNativeFromApkFreeze("silent-currentTime");
+          else apkLiveStillTicks = 0;
+        }
       }, 3_000);
     };
 
@@ -1094,6 +1131,7 @@ export function VideoPlayer({
     };
     const onPlaying = () => {
       apkLiveHasPlayed = true;
+      apkLiveWebRecoverAttempts = 0;
       clearWatchdog();
       clearApkLiveFreezeTimer();
       startApkLiveProgressWatch();
