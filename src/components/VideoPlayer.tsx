@@ -365,6 +365,9 @@ export function VideoPlayer({
   // getNativeCurrentTime() do plugin capacitor-video-player.
   const nativeLiveStallIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nativeLiveLastTimeRef = useRef<number>(0);
+  const nativeLiveFirstSampleAtRef = useRef<number>(0);
+  const nativeLiveHasTimeProgressRef = useRef<boolean>(false);
+  const nativeLivePollBusyRef = useRef<boolean>(false);
   const nativeLiveStillTicksRef = useRef<number>(0);
   const nativeLivePausedRef = useRef<boolean>(false);
   const nativeLiveReloadEventsRef = useRef<number[]>([]);
@@ -375,6 +378,9 @@ export function VideoPlayer({
       nativeLiveStallIntervalRef.current = null;
     }
     nativeLiveStillTicksRef.current = 0;
+    nativeLiveFirstSampleAtRef.current = 0;
+    nativeLiveHasTimeProgressRef.current = false;
+    nativeLivePollBusyRef.current = false;
   }, []);
   const initialPositionRef = useRef(initialPosition ?? 0);
   const onProgressRef = useRef(onProgress);
@@ -408,29 +414,57 @@ export function VideoPlayer({
     if (!isLiveSrc) return;
     stopNativeLiveStallWatchdog();
     nativeLiveLastTimeRef.current = 0;
+    nativeLiveFirstSampleAtRef.current = 0;
+    nativeLiveHasTimeProgressRef.current = false;
     nativeLiveStillTicksRef.current = 0;
     nativeLivePausedRef.current = false;
     nativeLiveStallIntervalRef.current = setInterval(() => {
       if (!nativeOpenedRef.current) { stopNativeLiveStallWatchdog(); return; }
       if (nativeLivePausedRef.current || nativeLiveReloadingRef.current) return;
+      if (nativeLivePollBusyRef.current) return;
+      nativeLivePollBusyRef.current = true;
       void (async () => {
-        const t = await getNativeCurrentTime();
-        if (t == null) return;
-        // Primeiro tick: apenas semear baseline.
-        if (nativeLiveLastTimeRef.current === 0 && nativeLiveStillTicksRef.current === 0) {
-          nativeLiveLastTimeRef.current = t;
-          return;
-        }
-        if (t > nativeLiveLastTimeRef.current + 0.25) {
-          nativeLiveLastTimeRef.current = t;
-          nativeLiveStillTicksRef.current = 0;
-          return;
-        }
-        nativeLiveStillTicksRef.current += 1;
-        pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-        if (nativeLiveStillTicksRef.current >= 2) {
-          nativeLiveStillTicksRef.current = 0;
-          reloadNativeLiveRef.current();
+        try {
+          const t = await getNativeCurrentTime();
+          if (!nativeOpenedRef.current || nativeLivePausedRef.current || nativeLiveReloadingRef.current) return;
+          if (t == null) return;
+          const now = Date.now();
+          // Primeiro tick: apenas semear baseline. Em alguns LIVE o plugin
+          // reporta currentTime sempre 0 mesmo com vídeo tocando; não podemos
+          // tratar isso como travamento antes de ver o relógio avançar ao menos 1x.
+          if (nativeLiveFirstSampleAtRef.current === 0) {
+            nativeLiveFirstSampleAtRef.current = now;
+            nativeLiveLastTimeRef.current = t;
+            return;
+          }
+          if (t > nativeLiveLastTimeRef.current + 0.25) {
+            nativeLiveHasTimeProgressRef.current = true;
+            nativeLiveLastTimeRef.current = t;
+            nativeLiveStillTicksRef.current = 0;
+            return;
+          }
+          if (t + 1 < nativeLiveLastTimeRef.current) {
+            // Timeline ao vivo pode reiniciar/discontinuar. Re-semeia em vez de
+            // recarregar falsamente.
+            nativeLiveLastTimeRef.current = t;
+            nativeLiveStillTicksRef.current = 0;
+            return;
+          }
+          if (!nativeLiveHasTimeProgressRef.current) {
+            if (now - nativeLiveFirstSampleAtRef.current > 30_000) {
+              pushDbg("NATIVE LIVE watchdog desarmado: currentTime não avança neste LIVE; evitando reload falso");
+              stopNativeLiveStallWatchdog();
+            }
+            return;
+          }
+          nativeLiveStillTicksRef.current += 1;
+          pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
+          if (nativeLiveStillTicksRef.current >= 2) {
+            nativeLiveStillTicksRef.current = 0;
+            reloadNativeLiveRef.current();
+          }
+        } finally {
+          nativeLivePollBusyRef.current = false;
         }
       })();
     }, 4_000);
@@ -1108,6 +1142,8 @@ export function VideoPlayer({
     let apkLiveFreezeTimer: ReturnType<typeof setTimeout> | null = null;
     let apkLiveProgressTimer: ReturnType<typeof setInterval> | null = null;
     let apkLiveLastTime = 0;
+    let apkLiveFirstSampleAt = 0;
+    let apkLiveHasTimeProgress = false;
     let apkLiveStillTicks = 0;
     let apkLiveHasPlayed = false;
     const apkLiveFreezeEvents: number[] = [];
@@ -1119,6 +1155,8 @@ export function VideoPlayer({
       if (apkLiveProgressTimer) clearInterval(apkLiveProgressTimer);
       apkLiveProgressTimer = null;
       apkLiveStillTicks = 0;
+      apkLiveFirstSampleAt = 0;
+      apkLiveHasTimeProgress = false;
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return;
@@ -1174,6 +1212,8 @@ export function VideoPlayer({
     const startApkLiveProgressWatch = () => {
       if (apkLiveProgressTimer || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer || nativeFallbackStarted) return;
       apkLiveLastTime = video.currentTime || 0;
+      apkLiveFirstSampleAt = Date.now();
+      apkLiveHasTimeProgress = false;
       apkLiveStillTicks = 0;
       apkLiveProgressTimer = setInterval(() => {
         if (cancelled || nativeFallbackStarted || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) {
@@ -1188,7 +1228,15 @@ export function VideoPlayer({
         const nowTime = video.currentTime || 0;
         if (Math.abs(nowTime - apkLiveLastTime) > 0.25) {
           apkLiveLastTime = nowTime;
+          apkLiveHasTimeProgress = true;
           apkLiveStillTicks = 0;
+          return;
+        }
+        if (!apkLiveHasTimeProgress) {
+          if (Date.now() - apkLiveFirstSampleAt > 30_000) {
+            pushDbg("APK LIVE currentTime não avança neste canal; watchdog silencioso desarmado");
+            clearApkLiveProgressTimer();
+          }
           return;
         }
         apkLiveStillTicks += 1;
