@@ -905,16 +905,21 @@ export function VideoPlayer({
           { type: "mpegts", isLive: true, url: absUrl },
           {
             isLive: true,
-            // Worker desativado: causa NetworkError em alguns navegadores quando
-            // a URL é proxiada e Range é negociado de forma imprevisível.
             enableWorker: false,
-            enableStashBuffer: false,
-            liveBufferLatencyChasing: true,
-            // Colchão maior contra jitter de rede — antes era 6/1s, muito
-            // enxuto: qualquer oscilação da CDN virava rebuffering. 8/2s
-            // dá margem sem afastar do edge o suficiente pra atrasar canal.
-            liveBufferLatencyMaxLatency: 8,
-            liveBufferLatencyMinRemain: 2,
+            // Stash buffer LIGADO: acumula 384KB antes de entregar ao demuxer,
+            // o que absorve jitter da CDN. Sem isso, qualquer engasgo da rede
+            // vira freeze imediato (sintoma "roda-congela-roda-congela").
+            enableStashBuffer: true,
+            stashInitialSize: 384,
+            // Latency chasing DESLIGADO: com chasing, o player pula pra frente
+            // sempre que o buffer enche, drenando o colchão que acabamos de
+            // acumular — piora justamente o cenário que ele tenta resolver.
+            // Preferimos ficar ~15-20s atrás do edge com playback estável.
+            liveBufferLatencyChasing: false,
+            liveBufferLatencyMaxLatency: 20,
+            liveBufferLatencyMinRemain: 4,
+            lazyLoad: false,
+            autoCleanupSourceBuffer: true,
           },
         );
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
