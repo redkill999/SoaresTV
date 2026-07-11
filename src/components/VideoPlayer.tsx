@@ -333,7 +333,12 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v4-real-time-probe";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v5-web-safe-no-auto-exo";
+// Modo de segurança: depois das regressões recentes, nenhum conteúdo abre
+// ExoPlayer automaticamente. Canais/filmes/séries voltam para o pipeline web
+// estável; ExoPlayer fica só no botão manual do diagnóstico.
+const AUTO_NATIVE_PLAYBACK_ENABLED = false;
+const AUTO_NATIVE_LIVE_FALLBACK_ENABLED = false;
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -684,10 +689,11 @@ export function VideoPlayer({
   // só é usado quando o usuário escolhe "exo" nas configurações ou quando o
   // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
   // LIVE foi o que quebrou os canais no APK.
-  const shouldUseNativePlayer =
+  const shouldUseNativePlayer = AUTO_NATIVE_PLAYBACK_ENABLED && (
     settings.defaultPlayer === "exo" ||
     isSeriesVodSrc ||
-    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive));
+    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive))
+  );
 
 
 
@@ -1325,6 +1331,10 @@ export function VideoPlayer({
       pushDbg(`APK LIVE host ${h} marcado forceNativeForLive=true reason=${reason}`);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
+      if (!AUTO_NATIVE_LIVE_FALLBACK_ENABLED) {
+        pushDbg(`APK LIVE fallback ExoPlayer desativado por segurança reason=${reason}`);
+        return false;
+      }
       if (isNoNativeFallbackLiveHost(hostOf(workingSrc))) return false;
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       nativeFallbackStarted = true;
