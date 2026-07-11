@@ -1645,24 +1645,27 @@ export function VideoPlayer({
                   detachStallListeners?.();
                   hls?.destroy();
                   hls = null;
-                  if (isAuthFail) {
-                    setError("Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.");
-                    return;
-                  }
                   // FIX: se o candidate atual é exatamente a URL HLS que falhou,
                   // avança vodIdx para não reentrar em attachHls com a mesma URL.
+                  // IMPORTANTE: mesmo em 401/403 avançamos — muitos painéis Xtream
+                  // devolvem 403 no .m3u8 mas servem o .ts (mpegts.js) normalmente.
+                  // Só declaramos "auth fail" se TODOS os candidatos esgotarem.
                   const advanceIfHlsMatches = () => {
                     const cur = playbackCandidates[vodIdx];
                     if (!cur || !currentHlsUrl) return;
                     const norm = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
                     if (norm(cur) === norm(currentHlsUrl) || /\.m3u8(\?|&|$)/i.test(norm(cur))) {
                       vodIdx += 1;
-                      pushDbg(`ETAPA 8.5 hls→next idx=${vodIdx} (advance from failed .m3u8)`);
+                      pushDbg(`ETAPA 8.5 hls→next idx=${vodIdx} (advance from failed .m3u8 http=${httpCode})`);
                     }
                   };
                   advanceIfHlsMatches();
                   if (vodIdx >= playbackCandidates.length) {
                     pushDbg(`ETAPA 10 FIM sem candidatos restantes (hls fatal http=${httpCode})`);
+                    if (isAuthFail) {
+                      setError("Servidor recusou a reprodução: usuário sem autorização, conta expirada, limite de conexões ou URL inválida.");
+                      return;
+                    }
                     // Padrão típico de host incompatível com Web: proxy 404/424
                     // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
                     // Marca o host para futuras sessões pularem o loop de tentativas.
