@@ -52,6 +52,11 @@ if errorlevel 1 (
 REM npm precisa de Git porque uma dependencia do player vem do GitHub.
 call :ensure_git || goto :fail_no_log
 
+echo [0/8] Atualizando projeto pelo Git ^(git pull^)...
+call :git_pull_latest || goto :fail
+echo       OK
+echo.
+
 echo [1/7] Limpando instalacao anterior...
 if exist "node_modules" rmdir /s /q node_modules >> "%LOG_FILE%" 2>&1
 if exist "package-lock.json" del /f /q package-lock.json >> "%LOG_FILE%" 2>&1
@@ -290,6 +295,23 @@ if errorlevel 1 (
   exit /b 1
 )
 echo       PortableGit instalado com sucesso (sem admin).
+exit /b 0
+
+:git_pull_latest
+if not exist ".git" (
+  echo       Pasta nao e um repositorio Git - pulando git pull.
+  echo [aviso] Pasta nao e um repositorio Git - git pull pulado. >> "%LOG_FILE%"
+  exit /b 0
+)
+
+echo       Baixando atualizacoes do projeto...
+call git pull --ff-only >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+  echo [ERRO] Falha no git pull.
+  echo        Feche editores/Android Studio e tente de novo.
+  echo        Se voce alterou arquivos no PC, salve uma copia deles ou baixe o projeto atualizado de novo.
+  exit /b 1
+)
 exit /b 0
 
 :fix_styles_xml
