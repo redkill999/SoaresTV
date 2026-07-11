@@ -333,7 +333,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v5-web-safe-no-auto-exo";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-series-native-only";
 // Modo de segurança: depois das regressões recentes, nenhum conteúdo abre
 // ExoPlayer automaticamente. Canais/filmes/séries voltam para o pipeline web
 // estável; ExoPlayer fica só no botão manual do diagnóstico.
@@ -684,16 +684,16 @@ export function VideoPlayer({
 
 
 
-  // REVERT (estado que funcionava no APK): LIVE toca pelo pipeline web
-  // (proxy /api/stream + hls.js/mpegts) dentro da WebView. ExoPlayer nativo
-  // só é usado quando o usuário escolhe "exo" nas configurações ou quando o
-  // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
-  // LIVE foi o que quebrou os canais no APK.
-  const shouldUseNativePlayer = AUTO_NATIVE_PLAYBACK_ENABLED && (
-    settings.defaultPlayer === "exo" ||
+  // Estado seguro: LIVE e filmes continuam no pipeline web que voltou a rodar.
+  // SÉRIES no APK podem vir em container/codec que o WebView rejeita com
+  // MEDIA_ELEMENT_ERROR: Format error; para elas liberamos só o ExoPlayer
+  // nativo, com fallback web se o plugin não abrir. Isso não muda canais/filmes.
+  const shouldUseNativePlayer =
     isSeriesVodSrc ||
-    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive))
-  );
+    (AUTO_NATIVE_PLAYBACK_ENABLED && (
+      settings.defaultPlayer === "exo" ||
+      (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive))
+    ));
 
 
 
