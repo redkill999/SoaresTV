@@ -20,6 +20,10 @@ export type NativePlayOptions = {
   requireReady?: boolean;
   /** Timeout do Ready/Play quando requireReady=true. */
   readyTimeoutMs?: number;
+  /** Aguarda reprodução real (Play/isPlaying/currentTime) antes de considerar aberto. */
+  requirePlayback?: boolean;
+  /** Timeout da reprodução real quando requirePlayback=true. */
+  playbackTimeoutMs?: number;
   /** Callback ao fechar o overlay (Back ou botão sair). */
   onExit?: (positionSec: number) => void;
   /** [DEBUG TEMP] Recebe todos os eventos do plugin (ready/play/ended/erro). */
@@ -184,14 +188,28 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     // o usuário pressionasse Voltar enquanto o ExoPlayer ainda carregava, o
     // evento era perdido e o componente ficava em playerMode="native" para sempre.
     const evCb = opts.onEvent;
+    let readyObserved = false;
     let playbackStarted = false;
     let failedBeforeReady = false;
     let resolveReady: ((ok: boolean) => void) | null = null;
+    let playbackProbeTimer: ReturnType<typeof setInterval> | null = null;
     const settleReady = (ok: boolean) => {
       if (!resolveReady) return;
       const fn = resolveReady;
       resolveReady = null;
+      if (playbackProbeTimer) {
+        clearInterval(playbackProbeTimer);
+        playbackProbeTimer = null;
+      }
       fn(ok);
+    };
+    const forcePlay = () => {
+      try {
+        const m = mod as unknown as {
+          play?: (a: { playerId: string }) => Promise<unknown> | unknown;
+        };
+        void m.play?.({ playerId: PLAYER_ID });
+      } catch { /* ignore */ }
     };
     const events = [
       "jeepCapVideoPlayerReady",
@@ -205,7 +223,15 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     await Promise.all(events.map(async (ev) => {
       try {
         const h = await listenable.addListener(ev, (data: unknown) => {
-          if (ev === "jeepCapVideoPlayerReady" || ev === "jeepCapVideoPlayerPlay") {
+          if (ev === "jeepCapVideoPlayerReady") {
+            readyObserved = true;
+            if (!opts.requirePlayback) {
+              playbackStarted = true;
+              settleReady(true);
+            }
+          }
+          if (ev === "jeepCapVideoPlayerPlay") {
+            readyObserved = true;
             playbackStarted = true;
             settleReady(true);
           }
@@ -213,17 +239,10 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
           // ExoPlayer pausado no overlay "play". Ao receber Ready, dispara
           // play() explicitamente para iniciar a reprodução sem toque.
           if (ev === "jeepCapVideoPlayerReady") {
-            setTimeout(() => {
-              try {
-                const m = mod as unknown as {
-                  play?: (a: { playerId: string }) => unknown;
-                };
-                m.play?.({ playerId: PLAYER_ID });
-              } catch { /* ignore */ }
-            }, 120);
+            [80, 350, 900, 1_600].forEach((delay) => setTimeout(forcePlay, delay));
           }
           if (ev === "jeepCapVideoPlayerError") {
-            failedBeforeReady = !playbackStarted;
+            failedBeforeReady = opts.requirePlayback ? !playbackStarted : !readyObserved;
             settleReady(false);
           }
           if (ev === "jeepCapVideoPlayerExit" && opts.onExit) {
@@ -292,16 +311,53 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
         hasActivePlayer = false;
         return false;
       }
-      if (!playbackStarted) {
+
+      const needsPlayback = !!opts.requirePlayback;
+      const alreadyOk = needsPlayback ? playbackStarted : (readyObserved || playbackStarted);
+      if (!alreadyOk) {
+        const startedAt = Date.now();
+        let firstTime: number | null = null;
+        const timeoutMs = needsPlayback ? (opts.playbackTimeoutMs ?? 18_000) : (opts.readyTimeoutMs ?? 12_000);
         const readyOk = await new Promise<boolean>((resolve) => {
           resolveReady = resolve;
+          if (needsPlayback) {
+            playbackProbeTimer = setInterval(() => {
+              void (async () => {
+                forcePlay();
+                try {
+                  const m = mod as unknown as {
+                    isPlaying?: (a: { playerId: string }) => Promise<{ value?: boolean } | undefined>;
+                    getCurrentTime?: (a: { playerId: string }) => Promise<{ value?: number } | undefined>;
+                  };
+                  const playing = await raceTimeout(m.isPlaying?.({ playerId: PLAYER_ID }), 900);
+                  if ((playing as { value?: boolean } | undefined)?.value === true) {
+                    playbackStarted = true;
+                    settleReady(true);
+                    return;
+                  }
+                  const time = await raceTimeout(m.getCurrentTime?.({ playerId: PLAYER_ID }), 900);
+                  const current = Number((time as { value?: number } | undefined)?.value);
+                  if (Number.isFinite(current)) {
+                    if (firstTime == null) firstTime = current;
+                    if (current > firstTime + 0.25) {
+                      playbackStarted = true;
+                      settleReady(true);
+                    }
+                  }
+                } catch { /* ignore */ }
+              })();
+            }, 700);
+          }
           setTimeout(() => {
-            if (playbackStarted) settleReady(true);
+            const okNow = needsPlayback ? playbackStarted : (readyObserved || playbackStarted);
+            if (okNow) settleReady(true);
             else {
-              opts.onEvent?.("ready:timeout", `sem Ready/Play em ${opts.readyTimeoutMs ?? 12_000}ms`);
+              const eventName = needsPlayback ? "playback:timeout" : "ready:timeout";
+              const label = needsPlayback ? "sem reprodução real" : "sem Ready/Play";
+              opts.onEvent?.(eventName, `${label} em ${Date.now() - startedAt}ms`);
               settleReady(false);
             }
-          }, opts.readyTimeoutMs ?? 12_000);
+          }, timeoutMs);
         });
         if (!readyOk) {
           await closeFullscreen(mod);

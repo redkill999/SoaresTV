@@ -247,6 +247,27 @@ function liveDirectCandidates(src: string): string[] {
   return out;
 }
 
+function seriesNativeCandidates(src: string): string[] {
+  const out: string[] = [];
+  const add = (url: string | null) => {
+    if (url && !out.includes(url)) out.push(url);
+  };
+  add(src);
+  try {
+    const parsed = new URL(src);
+    if (!/\/series\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+$/i.test(parsed.pathname)) return out;
+    const currentExt = (parsed.pathname.match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase();
+    const tail = `${parsed.search}${parsed.hash}`;
+    const base = src.replace(/\.[a-z0-9]+([?#].*)?$/i, "");
+    for (const ext of ["mkv", "mp4", "m4v", "avi", "ts"]) {
+      if (ext !== currentExt) add(`${base}.${ext}${tail}`);
+    }
+  } catch {
+    // mantém apenas a URL original
+  }
+  return out;
+}
+
 function httpsVariant(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -312,7 +333,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v2";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v3-playback-probe";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -508,7 +529,7 @@ export function VideoPlayer({
     }, 4_000);
   }, [isLiveSrc, pushDbg, stopNativeLiveStallWatchdog]);
 
-  const openNative = useCallback(async () => {
+  const openNative = useCallback(async (nativeSrc = src) => {
     const native = await isNativeApp();
     nativeRuntimeRef.current = native;
     if (!native) return false;
@@ -527,14 +548,16 @@ export function VideoPlayer({
         : isLiveSrc && (srcHostProfile.forceNativeForLive || mandatoryNativeLive)
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
-    pushDbg(`ETAPA 3.1 native UA=${ua}`);
+    pushDbg(`ETAPA 3.1 native UA=${ua} url=${maskIptvUrl(nativeSrc)}`);
     return playNative({
-      url: src,
+      url: nativeSrc,
       userAgent: ua,
       isLive: isLiveSrc,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
       requireReady: isSeriesVodSrc,
       readyTimeoutMs: isSeriesVodSrc ? 12_000 : undefined,
+      requirePlayback: isSeriesVodSrc,
+      playbackTimeoutMs: isSeriesVodSrc ? 18_000 : undefined,
       onEvent: (name, data) => {
         try {
           const payload = typeof data === "string" ? data : JSON.stringify(data);
@@ -749,7 +772,15 @@ export function VideoPlayer({
 
 
 
-      const ok = await openNative();
+      let ok = false;
+      const nativeCandidates = isSeriesVodSrc ? seriesNativeCandidates(src) : [src];
+      for (let nativeIdx = 0; nativeIdx < nativeCandidates.length; nativeIdx += 1) {
+        if (cancelled) return;
+        pushDbg(`ETAPA 4 native candidate ${nativeIdx + 1}/${nativeCandidates.length}`);
+        ok = await openNative(nativeCandidates[nativeIdx]);
+        pushDbg(`ETAPA 4 native candidate ${nativeIdx + 1} ok=${ok}`);
+        if (ok) break;
+      }
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
