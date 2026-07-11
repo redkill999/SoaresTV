@@ -1500,21 +1500,21 @@ export function VideoPlayer({
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
-        // Watchdog LIVE: se o manifest não parsear em 7s (host lento, mixed-content
+        // Watchdog LIVE: se o manifest não parsear em 4s (host lento, mixed-content
         // silencioso, IP bloqueado sem devolver 4xx), destroi o hls e avança pro
         // próximo candidato — evita a tela ficar pendurada em ready=0 net=2.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
-          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em 7s idx=${vodIdx} — avançando`);
+          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em 4s idx=${vodIdx} — avançando`);
           try { detachStallListeners?.(); } catch { /* noop */ }
           try { hls?.destroy(); } catch { /* noop */ }
           hls = null;
           vodIdx += 1;
           if (vodIdx < playbackCandidates.length) playDirect();
           else setError("Não foi possível reproduzir este canal.");
-        }, 7_000) : null;
+        }, 4_000) : null;
         const clearManifestWatchdog = () => { if (manifestWatchdog) clearTimeout(manifestWatchdog); };
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
