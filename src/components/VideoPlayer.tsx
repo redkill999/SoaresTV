@@ -312,7 +312,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v1";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v2";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -533,6 +533,8 @@ export function VideoPlayer({
       userAgent: ua,
       isLive: isLiveSrc,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
+      requireReady: isSeriesVodSrc,
+      readyTimeoutMs: isSeriesVodSrc ? 12_000 : undefined,
       onEvent: (name, data) => {
         try {
           const payload = typeof data === "string" ? data : JSON.stringify(data);
@@ -590,7 +592,12 @@ export function VideoPlayer({
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          if (isSeriesVodSrc) {
+            keepDebugOverlayRef.current = false;
+            setError(null);
+          } else {
+            showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          }
         }
       },
       onExit: (pos) => {
@@ -605,7 +612,7 @@ export function VideoPlayer({
         }
       },
     });
-  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic, startNativeLiveStallWatchdog, stopNativeLiveStallWatchdog]);
+  }, [src, kind, isLiveSrc, isSeriesVodSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic, startNativeLiveStallWatchdog, stopNativeLiveStallWatchdog]);
 
   // Reload do canal LIVE no ExoPlayer nativo ao detectar stall. Limitado a
   // 2 tentativas por janela de 90s (mesma lógica do apkLiveFreezeEvents do
@@ -746,10 +753,15 @@ export function VideoPlayer({
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
-        pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
+        pushDbg("ETAPA 9 native init falhou/timeout; fallback web sem travar");
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        if (isSeriesVodSrc) {
+          keepDebugOverlayRef.current = false;
+          setError(null);
+        } else {
+          showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        }
         return;
       }
       if (ok && isLiveSrc) {
@@ -787,7 +799,7 @@ export function VideoPlayer({
       }
       stopNativeLiveStallWatchdog();
     };
-  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, isSeriesVodSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -1018,11 +1030,18 @@ export function VideoPlayer({
     const armVodWatchdog = () => {
       if (!isVod) return;
       clearWatchdog();
-      // VOD progressivo (filmes/séries) pode demorar para ler o índice `moov`
-      // no fim de arquivos grandes. Trocar de candidato por timeout antes do
-      // erro real do <video> causava regressão: o player abandonava um MP4 bom
-      // e pulava para extensões alternativas inexistentes. Para VOD, fallback
-      // agora ocorre apenas em erro explícito do elemento de vídeo/HLS.
+      // Filmes continuam sem timeout agressivo: alguns MP4 grandes demoram para
+      // ler o índice `moov`. Séries, porém, estavam ficando paradas no APK sem
+      // erro quando ExoPlayer/WebView não emitiam Ready/Error; para /series/ o
+      // watchdog avança o candidato e evita tela congelada silenciosa.
+      if (!isSeriesVod) return;
+      const idx = vodIdx;
+      watchdog = setTimeout(() => {
+        if (cancelled || idx !== vodIdx) return;
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || !video.paused) return;
+        pushDbg(`SERIES watchdog: sem loadeddata/play em 18s idx=${vodIdx} ready=${video.readyState} net=${video.networkState} — próximo candidato`);
+        tryNextVod();
+      }, 18_000);
     };
 
     const bufferedAhead = () => {
