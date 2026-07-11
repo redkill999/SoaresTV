@@ -333,7 +333,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-series-native-only";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-live-web-safe";
 // Modo de segurança: depois das regressões recentes, nenhum conteúdo abre
 // ExoPlayer automaticamente. Canais/filmes/séries voltam para o pipeline web
 // estável; ExoPlayer fica só no botão manual do diagnóstico.
@@ -684,16 +684,14 @@ export function VideoPlayer({
 
 
 
-  // Estado seguro: LIVE e filmes continuam no pipeline web que voltou a rodar.
-  // SÉRIES no APK podem vir em container/codec que o WebView rejeita com
-  // MEDIA_ELEMENT_ERROR: Format error; para elas liberamos só o ExoPlayer
-  // nativo, com fallback web se o plugin não abrir. Isso não muda canais/filmes.
+  // Estado seguro: depois da regressão, nenhum conteúdo abre ExoPlayer
+  // automaticamente. Canais LIVE voltam 100% ao pipeline web/proxy que estava
+  // funcionando; filmes continuam iguais; ExoPlayer fica só no diagnóstico/manual.
   const shouldUseNativePlayer =
-    isSeriesVodSrc ||
-    (AUTO_NATIVE_PLAYBACK_ENABLED && (
+    AUTO_NATIVE_PLAYBACK_ENABLED && (
       settings.defaultPlayer === "exo" ||
       (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive))
-    ));
+    );
 
 
 
@@ -911,7 +909,9 @@ export function VideoPlayer({
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
+      // LIVE deve ser HLS-first de novo. Flags salvas de TS-only de versões
+      // anteriores fizeram todos os canais pularem a variante .m3u8 funcional.
+      false ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -938,7 +938,9 @@ export function VideoPlayer({
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
-    const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
+    // Restauração segura dos canais: em LIVE o proxy same-origin fica primeiro.
+    // Flags persistidas de bypass foram a causa mais comum de regressão no APK.
+    const liveBypassProxy = false;
     // LIVE/Web: quando o host tem httpsPort no perfil (ex.: flipex.pro:25463)
     // E a página está em HTTPS, prepende candidatos `https://host:port/...` que
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
@@ -959,7 +961,7 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive || liveHostProfile.preferTs) return candidates;
+      if (!isLive) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
