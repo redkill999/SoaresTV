@@ -312,7 +312,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v1";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -430,6 +430,7 @@ export function VideoPlayer({
 
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
+  const isSeriesVodSrc = kind !== "live" && (mediaKind === "series" || /\/series\/[^/]+\/[^/]+\//i.test(src));
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
 
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
@@ -655,6 +656,7 @@ export function VideoPlayer({
   // LIVE foi o que quebrou os canais no APK.
   const shouldUseNativePlayer =
     settings.defaultPlayer === "exo" ||
+    isSeriesVodSrc ||
     (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive));
 
 
