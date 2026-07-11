@@ -121,10 +121,10 @@ patchFile(fragmentPath, [
   {
     name: "5) getVideoType por extensão real",
     required: true,
-    mustContainAfter: 'path.endsWith(".ts")) return "ts"',
+    mustContainAfter: 'path.endsWith(".mkv")) return "mkv"',
     apply: (s) => s.replace(
       `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
-      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
     ),
   },
   {
