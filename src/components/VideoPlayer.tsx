@@ -869,6 +869,19 @@ export function VideoPlayer({
     // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
     // parecia que filmes/séries também tinham quebrado.
     const vodCandidates: string[] = [workingSrc];
+    // SÉRIES: o Xtream/API frequentemente devolve `.mp4` como default mesmo
+    // quando o arquivo real no painel é `.mkv` (ou vice-versa). Filmes têm
+    // container_extension confiável; séries não. Se a URL for de /series/
+    // acrescentamos variantes alternativas de extensão APÓS a URL principal,
+    // para servirem só de fallback quando o browser rejeita com SRC_NOT_SUPPORTED.
+    const isSeriesVod = /\/series\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(workingSrc);
+    if (isSeriesVod) {
+      const currentExt = (workingSrc.match(/\.([a-z0-9]+)(\?|$)/i)?.[1] || "").toLowerCase();
+      const altExts = ["mkv", "mp4", "m4v", "avi", "ts"].filter((e) => e !== currentExt);
+      for (const ext of altExts) {
+        vodCandidates.push(workingSrc.replace(/\.[a-z0-9]+(\?|$)/i, `.${ext}$1`));
+      }
+    }
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
