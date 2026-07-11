@@ -16,6 +16,10 @@ export type NativePlayOptions = {
   isLive?: boolean;
   /** Em segundos. Apenas VOD/série. */
   startAtSec?: number;
+  /** Aguarda Ready/Play antes de considerar aberto. Útil para séries no APK. */
+  requireReady?: boolean;
+  /** Timeout do Ready/Play quando requireReady=true. */
+  readyTimeoutMs?: number;
   /** Callback ao fechar o overlay (Back ou botão sair). */
   onExit?: (positionSec: number) => void;
   /** [DEBUG TEMP] Recebe todos os eventos do plugin (ready/play/ended/erro). */
@@ -180,6 +184,15 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     // o usuário pressionasse Voltar enquanto o ExoPlayer ainda carregava, o
     // evento era perdido e o componente ficava em playerMode="native" para sempre.
     const evCb = opts.onEvent;
+    let playbackStarted = false;
+    let failedBeforeReady = false;
+    let resolveReady: ((ok: boolean) => void) | null = null;
+    const settleReady = (ok: boolean) => {
+      if (!resolveReady) return;
+      const fn = resolveReady;
+      resolveReady = null;
+      fn(ok);
+    };
     const events = [
       "jeepCapVideoPlayerReady",
       "jeepCapVideoPlayerPlay",
@@ -192,12 +205,24 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
     await Promise.all(events.map(async (ev) => {
       try {
         const h = await listenable.addListener(ev, (data: unknown) => {
+          if (ev === "jeepCapVideoPlayerReady" || ev === "jeepCapVideoPlayerPlay") {
+            playbackStarted = true;
+            settleReady(true);
+          }
+          if (ev === "jeepCapVideoPlayerError") {
+            failedBeforeReady = !playbackStarted;
+            settleReady(false);
+          }
           if (ev === "jeepCapVideoPlayerExit" && opts.onExit) {
             const pos = Number((data as { currentTime?: number })?.currentTime ?? 0);
             opts.onExit(Number.isFinite(pos) ? pos : 0);
           }
           if (ev === "jeepCapVideoPlayerExit" || ev === "jeepCapVideoPlayerEnded") {
             hasActivePlayer = false;
+            if (!playbackStarted) {
+              failedBeforeReady = true;
+              settleReady(false);
+            }
           }
           // FIX D: ao receber Ready, reaplicar displayMode após pequeno delay
           // força o plugin a redesenhar os controles nativos com as dimensões
@@ -245,6 +270,32 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
       opts.onEvent?.("initPlayer:false", res);
       await closeFullscreen(mod);
       return false;
+    }
+
+    if (opts.requireReady) {
+      if (failedBeforeReady) {
+        opts.onEvent?.("ready:failed", "evento de erro/saída antes do primeiro frame");
+        await closeFullscreen(mod);
+        hasActivePlayer = false;
+        return false;
+      }
+      if (!playbackStarted) {
+        const readyOk = await new Promise<boolean>((resolve) => {
+          resolveReady = resolve;
+          setTimeout(() => {
+            if (playbackStarted) settleReady(true);
+            else {
+              opts.onEvent?.("ready:timeout", `sem Ready/Play em ${opts.readyTimeoutMs ?? 12_000}ms`);
+              settleReady(false);
+            }
+          }, opts.readyTimeoutMs ?? 12_000);
+        });
+        if (!readyOk) {
+          await closeFullscreen(mod);
+          hasActivePlayer = false;
+          return false;
+        }
+      }
     }
 
     // FIX B: o listener de Exit já foi registrado acima no loop pre-initPlayer.
