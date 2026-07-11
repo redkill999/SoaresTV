@@ -1135,19 +1135,11 @@ export function VideoPlayer({
       // diagnosticar painéis que bloqueiam o IP do datacenter do proxy.
       if (isLive && !isProxied) {
         pushDbg(`ETAPA 8.6 fallback direto sem proxy host=${hostOf(url) ?? "?"}`);
-        // Aprendizado: chegamos a um candidato direto LIVE, logo todos os
-        // proxiados anteriores falharam (404/5xx). Memoriza pra próxima sessão
-        // já priorizar direto pra esse host e não desperdiçar tentativas.
-        try {
-          const h = hostOf(url);
-          if (h && !getHostProfile(h).bypassProxyForLive) {
-            updateHostProfile(h, { bypassProxyForLive: true });
-            pushDbg(`ETAPA 8.6 host ${h} marcado bypassProxyForLive=true`);
-          }
-        } catch { /* noop */ }
-        // Mixed content: página https + stream http é silenciosamente bloqueada
-        // pelo browser. Registramos pra debug; o erro do <video> ainda dispara
-        // o tryNextVod normalmente.
+        // NÃO persistir bypassProxyForLive aqui — é uma observação de runtime,
+        // não uma característica confirmada do host. Persistir contamina o perfil
+        // (viola mem://fixes/live-apk-working-baseline — multop100.top precisa
+        // ficar SEM esse flag) e pode furar canais que só funcionam via proxy.
+        // A ordem dos candidatos já cobre o caso na sessão atual.
         try {
           if (typeof location !== "undefined" && location.protocol === "https:" && /^http:\/\//i.test(url)) {
             pushDbg(`ETAPA 8.6 WARN mixed-content (https page + http stream) — pode ser bloqueado pelo browser`);
