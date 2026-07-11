@@ -86,10 +86,15 @@ patchFile(fragmentPath, [
     name: "1) supportedFormat inclui ts/mpegts + containers de séries",
     required: true,
     mustContainAfter: '"flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts",',
-    apply: (s) => s.replace(
-      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-    ),
+    apply: (s) => s
+      .replace(
+        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+      )
+      .replace(
+        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+      ),
   },
   {
     name: "2) LoadControl tolerante (20/60s)",
@@ -122,10 +127,15 @@ patchFile(fragmentPath, [
     name: "5) getVideoType por extensão real",
     required: true,
     mustContainAfter: 'path.endsWith(".mkv")) return "mkv"',
-    apply: (s) => s.replace(
-      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
-      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
-    ),
+    apply: (s) => s
+      .replace(
+        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+      )
+      .replace(
+        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
+        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+      ),
   },
   {
     name: "6) Watchdog BUFFERING 45s força playerExit (mostra diagnóstico)",
