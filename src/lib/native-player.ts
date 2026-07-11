@@ -209,6 +209,19 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
             playbackStarted = true;
             settleReady(true);
           }
+          // FIX autoplay: alguns Androids (WebView antigo / TV boxes) abrem o
+          // ExoPlayer pausado no overlay "play". Ao receber Ready, dispara
+          // play() explicitamente para iniciar a reprodução sem toque.
+          if (ev === "jeepCapVideoPlayerReady") {
+            setTimeout(() => {
+              try {
+                const m = mod as unknown as {
+                  play?: (a: { playerId: string }) => unknown;
+                };
+                m.play?.({ playerId: PLAYER_ID });
+              } catch { /* ignore */ }
+            }, 120);
+          }
           if (ev === "jeepCapVideoPlayerError") {
             failedBeforeReady = !playbackStarted;
             settleReady(false);
