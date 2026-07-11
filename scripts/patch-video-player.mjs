@@ -406,11 +406,12 @@ patchFile(pluginPath, [
 ]);
 
 assertContains(fragmentPath, [
-  ["formatos .ts/.mpegts registrados", '"flv", "ts", "mpegts"'],
+  ["formatos VOD série registrados", '"flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts"'],
   ["buffer ExoPlayer 20s/60s", "setBufferDurationsMs(20000, 60000"],
   ["onPlayerError nativo", "public void onPlayerError(com.google.android.exoplayer2.PlaybackException error)"],
   ["MIME MPEG-TS no MediaItem", "MimeTypes.VIDEO_MP2T"],
   ["detecção .ts por path", 'path.endsWith(".ts")'],
+  ["detecção .mkv por path", 'path.endsWith(".mkv")'],
   ["watchdog nativo BUFFERING", "JEEP_BUFFER_WATCHDOG"],
   ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],
