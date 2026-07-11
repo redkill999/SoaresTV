@@ -83,12 +83,12 @@ function patchFile(file, steps) {
 
 patchFile(fragmentPath, [
   {
-    name: "1) supportedFormat inclui ts/mpegts",
+    name: "1) supportedFormat inclui ts/mpegts + containers de séries",
     required: true,
-    mustContainAfter: '"flv", "ts", "mpegts",',
+    mustContainAfter: '"flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts",',
     apply: (s) => s.replace(
       'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
     ),
   },
   {
@@ -110,7 +110,7 @@ patchFile(fragmentPath, [
     ),
   },
   {
-    name: "4) MediaItem MIME VIDEO_MP2T para .ts",
+    name: "4) Progressive MediaSource para VOD de séries (.mkv/.avi/.m4v/.mov/.ts)",
     required: true,
     mustContainAfter: "MimeTypes.VIDEO_MP2T",
     apply: (s) => s.replace(
