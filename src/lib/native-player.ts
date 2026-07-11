@@ -232,8 +232,13 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
           }
           if (ev === "jeepCapVideoPlayerPlay") {
             readyObserved = true;
-            playbackStarted = true;
-            settleReady(true);
+            // Para séries/VOD no APK, o plugin pode emitir Play mesmo ficando
+            // em tela preta/buffering. Quando requirePlayback=true, só aceitamos
+            // reprodução real pelo probe de currentTime avançando.
+            if (!opts.requirePlayback) {
+              playbackStarted = true;
+              settleReady(true);
+            }
           }
           // FIX autoplay: alguns Androids (WebView antigo / TV boxes) abrem o
           // ExoPlayer pausado no overlay "play". Ao receber Ready, dispara
@@ -329,12 +334,7 @@ export async function playNative(opts: NativePlayOptions): Promise<boolean> {
                     isPlaying?: (a: { playerId: string }) => Promise<{ value?: boolean } | undefined>;
                     getCurrentTime?: (a: { playerId: string }) => Promise<{ value?: number } | undefined>;
                   };
-                  const playing = await raceTimeout(m.isPlaying?.({ playerId: PLAYER_ID }), 900);
-                  if ((playing as { value?: boolean } | undefined)?.value === true) {
-                    playbackStarted = true;
-                    settleReady(true);
-                    return;
-                  }
+                  await raceTimeout(m.isPlaying?.({ playerId: PLAYER_ID }), 900);
                   const time = await raceTimeout(m.getCurrentTime?.({ playerId: PLAYER_ID }), 900);
                   const current = Number((time as { value?: number } | undefined)?.value);
                   if (Number.isFinite(current)) {

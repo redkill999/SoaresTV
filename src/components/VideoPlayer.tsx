@@ -333,7 +333,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v3-playback-probe";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4-series-native-v4-real-time-probe";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
