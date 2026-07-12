@@ -986,6 +986,8 @@ export function VideoPlayer({
     let currentHlsUrl: string | null = null;
     let detachStallListeners: (() => void) | null = null;
     let lastLiveError: string | null = null;
+    let lockedHlsRestarts = 0;
+    const MAX_LOCKED_HLS_RESTARTS = 3;
     const triedUrls = new Set<string>();
     const normUrl = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
 
@@ -1573,8 +1575,6 @@ export function VideoPlayer({
         // readyState=0 por minutos e sem erro fatal do hls.js.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
-        let lockedHlsRestarts = 0;
-        const MAX_LOCKED_HLS_RESTARTS = 3;
         const manifestWatchdogMs = lockedHlsFirstLive ? 35_000 : 7_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
@@ -1582,11 +1582,12 @@ export function VideoPlayer({
           try { detachStallListeners?.(); } catch { /* noop */ }
           try { hls?.destroy(); } catch { /* noop */ }
           hls = null;
-          if (lockedHlsFirstLive && currentHlsUrl && /^\/api\/stream\?/i.test(currentHlsUrl) && lockedHlsRestarts < MAX_LOCKED_HLS_RESTARTS) {
+          const retryUrl = currentHlsUrl;
+          if (lockedHlsFirstLive && retryUrl && /^\/api\/stream\?/i.test(retryUrl) && lockedHlsRestarts < MAX_LOCKED_HLS_RESTARTS) {
             lockedHlsRestarts += 1;
-            triedUrls.delete(normUrl(currentHlsUrl));
+            triedUrls.delete(normUrl(retryUrl));
             pushDbg(`ETAPA 8.7 hlsLock restart #${lockedHlsRestarts} mantendo proxy HLS`);
-            setTimeout(() => { if (!cancelled) attachHls(currentHlsUrl!); }, 400);
+            setTimeout(() => { if (!cancelled) attachHls(retryUrl); }, 400);
             return;
           }
           vodIdx += 1;
