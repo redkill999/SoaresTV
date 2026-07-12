@@ -697,39 +697,20 @@ export const fetchM3U = createServerFn({ method: "POST" })
         }
       }
 
-      // Fallback: baixar a M3U bruta (apenas se player_api falhou ou não há creds).
-      if (explicitM3U) {
-        let lastError = "";
-        for (const candidate of candidates) {
-          const fetched = await fetchText(candidate);
-          if (!fetched.text.includes("#EXTINF")) {
-            lastError = fetched.error || "Conteúdo não parece M3U válido";
-            continue;
-          }
-          const entries = parseM3UText(fetched.text);
-          if (entries.length) return { entries, sourceUrl: candidate };
-        }
-        if (lastError) console.warn("[fetchM3U] explicitM3U fallback:", lastError);
+      // Fallback: baixar a M3U bruta em PARALELO (apenas se player_api falhou ou não há creds).
+      // Antes era sequencial: cada porta morta somava 60s. Agora todas correm juntas.
+      void explicitM3U; // ambos os caminhos convergem para o mesmo race
+      const raced = await raceCandidates(candidates);
+      if ("text" in raced) {
+        const entries = parseM3UText(raced.text);
+        if (entries.length) return { entries, sourceUrl: raced.url };
       }
 
-      // (player_api já foi tentado acima quando há credenciais)
-
-
-      let lastError = "";
-      let lastSnippet = "";
-      for (const candidate of candidates) {
-        const first = await fetchText(candidate);
-        if (first.text.includes("#EXTINF")) {
-          const entries = parseM3UText(first.text);
-          if (entries.length) return { entries };
-        }
-        lastError = first.error || "Conteúdo não parece M3U válido";
-        lastSnippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
-      }
-
+      const errMsg = "error" in raced ? raced.error : "Conteúdo não parece M3U válido";
+      const snippet = "snippet" in raced ? raced.snippet : "";
       return {
         entries: [],
-        error: `${lastError || "Conteúdo não parece M3U válido"}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${lastSnippet ? ` Resposta: ${lastSnippet}` : ""}`,
+        error: `${errMsg}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${snippet ? ` Resposta: ${snippet}` : ""}`,
       };
     } catch (e) {
       return {
