@@ -880,13 +880,19 @@ export function VideoPlayer({
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
     // bloquear IPs do Cloudflare Worker.
     const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
+    const webDesktopPreferTsLive =
+      isLive &&
+      !nativeRuntimeRef.current &&
+      /(^|\.)cdnchurras\.space$/i.test(hostOf(workingSrc) ?? "");
     const liveCandidatePair = (url: string) => {
       const proxy = proxiedX(url, kind);
       // Web Desktop em HTTPS não consegue abrir http:// direto (mixed content).
       // Mesmo que o host esteja marcado como bypass para APK/TV, no browser o
       // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
       // tendo prioridade quando existir (httpsPortCandidates acima).
-      if (pageIsHttps && /^http:\/\//i.test(url)) return [proxy, url];
+      if (pageIsHttps && /^http:\/\//i.test(url)) {
+        return nativeRuntimeRef.current ? [proxy, url] : [proxy];
+      }
       return liveBypassProxy ? [url, proxy] : [proxy, url];
     };
     const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
@@ -895,7 +901,7 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive || liveHostProfile.preferTs) return candidates;
+      if (!isLive || liveHostProfile.preferTs || webDesktopPreferTsLive) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
