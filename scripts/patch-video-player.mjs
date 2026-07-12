@@ -83,18 +83,13 @@ function patchFile(file, steps) {
 
 patchFile(fragmentPath, [
   {
-    name: "1) supportedFormat inclui ts/mpegts + containers de séries",
+    name: "1) supportedFormat inclui ts/mpegts",
     required: true,
-    mustContainAfter: '"flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts",',
-    apply: (s) => s
-      .replace(
-        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-      )
-      .replace(
-        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-        'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
-      ),
+    mustContainAfter: '"flv", "ts", "mpegts",',
+    apply: (s) => s.replace(
+      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+      'new String[] { "mp4", "webm", "ogv", "3gp", "flv", "ts", "mpegts", "dash", "mpd", "m3u8", "ism", "ytube", "" }',
+    ),
   },
   {
     name: "2) LoadControl tolerante (20/60s)",
@@ -115,7 +110,7 @@ patchFile(fragmentPath, [
     ),
   },
   {
-    name: "4) Progressive MediaSource para VOD de séries (.mkv/.avi/.m4v/.mov/.ts)",
+    name: "4) MediaItem MIME VIDEO_MP2T para .ts",
     required: true,
     mustContainAfter: "MimeTypes.VIDEO_MP2T",
     apply: (s) => s.replace(
@@ -126,16 +121,11 @@ patchFile(fragmentPath, [
   {
     name: "5) getVideoType por extensão real",
     required: true,
-    mustContainAfter: 'path.endsWith(".mkv")) return "mkv"',
-    apply: (s) => s
-      .replace(
-        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
-        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
-      )
-      .replace(
-        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
-        `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".mkv")) return "mkv";\n    if (path.endsWith(".avi")) return "avi";\n    if (path.endsWith(".m4v")) return "m4v";\n    if (path.endsWith(".mov")) return "mov";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
-      ),
+    mustContainAfter: 'path.endsWith(".ts")) return "ts"',
+    apply: (s) => s.replace(
+      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();`,
+      `  private String getVideoType(Uri uri) {\n    String ret = null;\n    Object obj = uri.getLastPathSegment();\n    String lastSegment = (obj == null) ? "" : uri.getLastPathSegment();\n    String path = uri.getPath() != null ? uri.getPath().toLowerCase(Locale.ROOT) : "";\n    if (path.endsWith(".ts")) return "ts";\n    if (path.endsWith(".m3u8")) return "m3u8";\n    if (path.endsWith(".mpd")) return "mpd";`,
+    ),
   },
   {
     name: "6) Watchdog BUFFERING 45s força playerExit (mostra diagnóstico)",
@@ -416,12 +406,11 @@ patchFile(pluginPath, [
 ]);
 
 assertContains(fragmentPath, [
-  ["formatos VOD série registrados", '"flv", "mkv", "avi", "m4v", "mov", "ts", "mpegts"'],
+  ["formatos .ts/.mpegts registrados", '"flv", "ts", "mpegts"'],
   ["buffer ExoPlayer 20s/60s", "setBufferDurationsMs(20000, 60000"],
   ["onPlayerError nativo", "public void onPlayerError(com.google.android.exoplayer2.PlaybackException error)"],
   ["MIME MPEG-TS no MediaItem", "MimeTypes.VIDEO_MP2T"],
   ["detecção .ts por path", 'path.endsWith(".ts")'],
-  ["detecção .mkv por path", 'path.endsWith(".mkv")'],
   ["watchdog nativo BUFFERING", "JEEP_BUFFER_WATCHDOG"],
   ["evento BUFFER_TIMEOUT", "BUFFER_TIMEOUT"],
   ["watchdog agenda/cancela", "_scheduleBufferWatchdog()"],

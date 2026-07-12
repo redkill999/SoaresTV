@@ -247,27 +247,6 @@ function liveDirectCandidates(src: string): string[] {
   return out;
 }
 
-function seriesNativeCandidates(src: string): string[] {
-  const out: string[] = [];
-  const add = (url: string | null) => {
-    if (url && !out.includes(url)) out.push(url);
-  };
-  add(src);
-  try {
-    const parsed = new URL(src);
-    if (!/\/series\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+$/i.test(parsed.pathname)) return out;
-    const currentExt = (parsed.pathname.match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase();
-    const tail = `${parsed.search}${parsed.hash}`;
-    const base = src.replace(/\.[a-z0-9]+([?#].*)?$/i, "");
-    for (const ext of ["mkv", "mp4", "m4v", "avi", "ts"]) {
-      if (ext !== currentExt) add(`${base}.${ext}${tail}`);
-    }
-  } catch {
-    // mantém apenas a URL original
-  }
-  return out;
-}
-
 function httpsVariant(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -333,12 +312,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-live-web-safe";
-// Modo de segurança: depois das regressões recentes, nenhum conteúdo abre
-// ExoPlayer automaticamente. Canais/filmes/séries voltam para o pipeline web
-// estável; ExoPlayer fica só no botão manual do diagnóstico.
-const AUTO_NATIVE_PLAYBACK_ENABLED = false;
-const AUTO_NATIVE_LIVE_FALLBACK_ENABLED = false;
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -456,7 +430,6 @@ export function VideoPlayer({
 
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
-  const isSeriesVodSrc = kind !== "live" && (mediaKind === "series" || /\/series\/[^/]+\/[^/]+\//i.test(src));
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
 
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
@@ -534,7 +507,7 @@ export function VideoPlayer({
     }, 4_000);
   }, [isLiveSrc, pushDbg, stopNativeLiveStallWatchdog]);
 
-  const openNative = useCallback(async (nativeSrc = src) => {
+  const openNative = useCallback(async () => {
     const native = await isNativeApp();
     nativeRuntimeRef.current = native;
     if (!native) return false;
@@ -553,16 +526,12 @@ export function VideoPlayer({
         : isLiveSrc && (srcHostProfile.forceNativeForLive || mandatoryNativeLive)
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
-    pushDbg(`ETAPA 3.1 native UA=${ua} url=${maskIptvUrl(nativeSrc)}`);
+    pushDbg(`ETAPA 3.1 native UA=${ua}`);
     return playNative({
-      url: nativeSrc,
+      url: src,
       userAgent: ua,
       isLive: isLiveSrc,
       startAtSec: kind !== "live" ? initialPositionRef.current : undefined,
-      requireReady: isSeriesVodSrc,
-      readyTimeoutMs: isSeriesVodSrc ? 12_000 : undefined,
-      requirePlayback: isSeriesVodSrc,
-      playbackTimeoutMs: isSeriesVodSrc ? 18_000 : undefined,
       onEvent: (name, data) => {
         try {
           const payload = typeof data === "string" ? data : JSON.stringify(data);
@@ -620,12 +589,7 @@ export function VideoPlayer({
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          if (isSeriesVodSrc) {
-            keepDebugOverlayRef.current = false;
-            setError(null);
-          } else {
-            showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
-          }
+          showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
         }
       },
       onExit: (pos) => {
@@ -640,7 +604,7 @@ export function VideoPlayer({
         }
       },
     });
-  }, [src, kind, isLiveSrc, isSeriesVodSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic, startNativeLiveStallWatchdog, stopNativeLiveStallWatchdog]);
+  }, [src, kind, isLiveSrc, srcHostProfile.forceNativeForLive, pushDbg, showStreamDiagnostic, startNativeLiveStallWatchdog, stopNativeLiveStallWatchdog]);
 
   // Reload do canal LIVE no ExoPlayer nativo ao detectar stall. Limitado a
   // 2 tentativas por janela de 90s (mesma lógica do apkLiveFreezeEvents do
@@ -684,14 +648,14 @@ export function VideoPlayer({
 
 
 
-  // Estado seguro: depois da regressão, nenhum conteúdo abre ExoPlayer
-  // automaticamente. Canais LIVE voltam 100% ao pipeline web/proxy que estava
-  // funcionando; filmes continuam iguais; ExoPlayer fica só no diagnóstico/manual.
+  // REVERT (estado que funcionava no APK): LIVE toca pelo pipeline web
+  // (proxy /api/stream + hls.js/mpegts) dentro da WebView. ExoPlayer nativo
+  // só é usado quando o usuário escolhe "exo" nas configurações ou quando o
+  // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
+  // LIVE foi o que quebrou os canais no APK.
   const shouldUseNativePlayer =
-    AUTO_NATIVE_PLAYBACK_ENABLED && (
-      settings.defaultPlayer === "exo" ||
-      (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive))
-    );
+    settings.defaultPlayer === "exo" ||
+    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive));
 
 
 
@@ -776,27 +740,14 @@ export function VideoPlayer({
 
 
 
-      let ok = false;
-      const nativeCandidates = isSeriesVodSrc ? seriesNativeCandidates(src) : [src];
-      for (let nativeIdx = 0; nativeIdx < nativeCandidates.length; nativeIdx += 1) {
-        if (cancelled) return;
-        pushDbg(`ETAPA 4 native candidate ${nativeIdx + 1}/${nativeCandidates.length}`);
-        ok = await openNative(nativeCandidates[nativeIdx]);
-        pushDbg(`ETAPA 4 native candidate ${nativeIdx + 1} ok=${ok}`);
-        if (ok) break;
-      }
+      const ok = await openNative();
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
-        pushDbg("ETAPA 9 native init falhou/timeout; fallback web sem travar");
+        pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        if (isSeriesVodSrc) {
-          keepDebugOverlayRef.current = false;
-          setError(null);
-        } else {
-          showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
-        }
+        showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
         return;
       }
       if (ok && isLiveSrc) {
@@ -834,7 +785,7 @@ export function VideoPlayer({
       }
       stopNativeLiveStallWatchdog();
     };
-  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, isSeriesVodSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
+  }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
 
   const videoClass = useMemo(() => {
     const base = "h-full w-full bg-player";
@@ -909,9 +860,7 @@ export function VideoPlayer({
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
-      // LIVE deve ser HLS-first de novo. Flags salvas de TS-only de versões
-      // anteriores fizeram todos os canais pularem a variante .m3u8 funcional.
-      false ||
+      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
@@ -920,27 +869,12 @@ export function VideoPlayer({
     // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
     // parecia que filmes/séries também tinham quebrado.
     const vodCandidates: string[] = [workingSrc];
-    // SÉRIES: o Xtream/API frequentemente devolve `.mp4` como default mesmo
-    // quando o arquivo real no painel é `.mkv` (ou vice-versa). Filmes têm
-    // container_extension confiável; séries não. Se a URL for de /series/
-    // acrescentamos variantes alternativas de extensão APÓS a URL principal,
-    // para servirem só de fallback quando o browser rejeita com SRC_NOT_SUPPORTED.
-    const isSeriesVod = /\/series\/[^/]+\/[^/]+\/\d+\.[a-z0-9]+(\?|$)/i.test(workingSrc);
-    if (isSeriesVod) {
-      const currentExt = (workingSrc.match(/\.([a-z0-9]+)(\?|$)/i)?.[1] || "").toLowerCase();
-      const altExts = ["mkv", "mp4", "m4v", "avi", "ts"].filter((e) => e !== currentExt);
-      for (const ext of altExts) {
-        vodCandidates.push(workingSrc.replace(/\.[a-z0-9]+(\?|$)/i, `.${ext}$1`));
-      }
-    }
     const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
-    // Restauração segura dos canais: em LIVE o proxy same-origin fica primeiro.
-    // Flags persistidas de bypass foram a causa mais comum de regressão no APK.
-    const liveBypassProxy = false;
+    const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
     // LIVE/Web: quando o host tem httpsPort no perfil (ex.: flipex.pro:25463)
     // E a página está em HTTPS, prepende candidatos `https://host:port/...` que
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
@@ -961,7 +895,7 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive) return candidates;
+      if (!isLive || liveHostProfile.preferTs) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
@@ -1069,18 +1003,11 @@ export function VideoPlayer({
     const armVodWatchdog = () => {
       if (!isVod) return;
       clearWatchdog();
-      // Filmes continuam sem timeout agressivo: alguns MP4 grandes demoram para
-      // ler o índice `moov`. Séries, porém, estavam ficando paradas no APK sem
-      // erro quando ExoPlayer/WebView não emitiam Ready/Error; para /series/ o
-      // watchdog avança o candidato e evita tela congelada silenciosa.
-      if (!isSeriesVod) return;
-      const idx = vodIdx;
-      watchdog = setTimeout(() => {
-        if (cancelled || idx !== vodIdx) return;
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || !video.paused) return;
-        pushDbg(`SERIES watchdog: sem loadeddata/play em 18s idx=${vodIdx} ready=${video.readyState} net=${video.networkState} — próximo candidato`);
-        tryNextVod();
-      }, 18_000);
+      // VOD progressivo (filmes/séries) pode demorar para ler o índice `moov`
+      // no fim de arquivos grandes. Trocar de candidato por timeout antes do
+      // erro real do <video> causava regressão: o player abandonava um MP4 bom
+      // e pulava para extensões alternativas inexistentes. Para VOD, fallback
+      // agora ocorre apenas em erro explícito do elemento de vídeo/HLS.
     };
 
     const bufferedAhead = () => {
@@ -1333,10 +1260,6 @@ export function VideoPlayer({
       pushDbg(`APK LIVE host ${h} marcado forceNativeForLive=true reason=${reason}`);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
-      if (!AUTO_NATIVE_LIVE_FALLBACK_ENABLED) {
-        pushDbg(`APK LIVE fallback ExoPlayer desativado por segurança reason=${reason}`);
-        return false;
-      }
       if (isNoNativeFallbackLiveHost(hostOf(workingSrc))) return false;
       if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       nativeFallbackStarted = true;

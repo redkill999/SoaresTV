@@ -26,7 +26,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    public void onResume() {
+    protected void onResume() {
         super.onResume();
         applyImmersiveMode();
     }

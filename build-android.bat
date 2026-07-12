@@ -52,11 +52,6 @@ if errorlevel 1 (
 REM npm precisa de Git porque uma dependencia do player vem do GitHub.
 call :ensure_git || goto :fail_no_log
 
-echo [0/8] Atualizando projeto pelo Git ^(git pull^)...
-call :git_pull_latest || goto :fail
-echo       OK
-echo.
-
 echo [1/7] Limpando instalacao anterior...
 if exist "node_modules" rmdir /s /q node_modules >> "%LOG_FILE%" 2>&1
 if exist "package-lock.json" del /f /q package-lock.json >> "%LOG_FILE%" 2>&1
@@ -150,7 +145,6 @@ if errorlevel 1 (
   echo [ERRO] Falha ao aplicar patch fullscreen/landscape.
   goto :fail
 )
-call :fix_main_activity_access || goto :fail
 
 call node scripts/patch-video-player.mjs > "%TEMP%\soarestv-patch-video-player.log" 2>&1
 set "PATCH_RC=!errorlevel!"
@@ -297,23 +291,6 @@ if errorlevel 1 (
 echo       PortableGit instalado com sucesso (sem admin).
 exit /b 0
 
-:git_pull_latest
-if not exist ".git" (
-  echo       Pasta nao e um repositorio Git - pulando git pull.
-  echo [aviso] Pasta nao e um repositorio Git - git pull pulado. >> "%LOG_FILE%"
-  exit /b 0
-)
-
-echo       Baixando atualizacoes do projeto...
-call git pull --ff-only >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-  echo [ERRO] Falha no git pull.
-  echo        Feche editores/Android Studio e tente de novo.
-  echo        Se voce alterou arquivos no PC, salve uma copia deles ou baixe o projeto atualizado de novo.
-  exit /b 1
-)
-exit /b 0
-
 :fix_styles_xml
 if not exist "android\app\src\main\res\values" exit /b 0
 if not exist "android-template\styles.xml" (
@@ -332,17 +309,6 @@ exit /b 0
 
 :fix_build_gradle
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$targets=@(); if(Test-Path 'android\app\build.gradle'){$targets+='android\app\build.gradle'}; if(Test-Path 'node_modules'){$targets+=(Get-ChildItem -Path 'node_modules' -Recurse -Filter 'build.gradle' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\android\\' } | ForEach-Object { $_.FullName })}; foreach($p in $targets){ try { $s=Get-Content -LiteralPath $p -Raw; if($s -match 'proguard-android\.txt'){ $s=$s -replace 'proguard-android\.txt','proguard-android-optimize.txt'; [IO.File]::WriteAllText($p, $s, [Text.UTF8Encoding]::new($false)); Write-Host ('Patched: '+$p) } } catch {} }" >> "%LOG_FILE%" 2>&1
-exit /b 0
-
-
-
-:fix_main_activity_access
-if not exist "android\app\src\main\java" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$files=Get-ChildItem -Path 'android\app\src\main\java' -Recurse -Filter 'MainActivity.java' -ErrorAction SilentlyContinue; foreach($f in $files){ $s=Get-Content -LiteralPath $f.FullName -Raw; $next=$s -replace 'protected\s+void\s+onResume\s*\(','public void onResume('; if($next -ne $s){ [IO.File]::WriteAllText($f.FullName, $next, [Text.UTF8Encoding]::new($false)); Write-Host ('Corrigido onResume public em: '+$f.FullName) } if($next -match 'protected\s+void\s+onResume\s*\('){ exit 1 } }" >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-  echo [ERRO] Falha ao corrigir MainActivity.java: onResume precisa ser public.
-  exit /b 1
-)
 exit /b 0
 
 
