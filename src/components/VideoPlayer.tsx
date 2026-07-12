@@ -1066,15 +1066,15 @@ export function VideoPlayer({
         })();
         lastMpegtsUrl = url;
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive: true, url: absUrl },
+          { type: "mpegts", isLive: asLive, url: absUrl },
           {
-            isLive: true,
+            isLive: asLive,
             enableWorker: false,
             // Config original que abria mais canais. Ajustes de stash/latência
             // aumentaram compatibilidade contra travas em alguns hosts, mas
             // impediram a abertura de outros no APK/WebView.
-            enableStashBuffer: false,
-            liveBufferLatencyChasing: true,
+            enableStashBuffer: !asLive,
+            liveBufferLatencyChasing: asLive,
             liveBufferLatencyMaxLatency: 6,
             liveBufferLatencyMinRemain: 1,
           },
