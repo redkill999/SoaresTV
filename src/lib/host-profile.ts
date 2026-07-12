@@ -245,6 +245,25 @@ if (memory["multop100.top"]?.forceNativeForLive || memory["multop100.top"]?.disa
   writeStorage(memory);
   console.log("[HOST PROFILE] limpou flags quebradas de multop100.top");
 }
+// Baseline validada: cdnchurras.space/Space FHD funciona no Web Desktop pelo
+// HLS-first via proxy. Tentativas anteriores de TS-first/webIncompatible/HTTPS
+// quebraram esse canal; removemos qualquer memória persistida que desvie disso.
+if (memory["cdnchurras.space"]?.forceNativeForLive || memory["cdnchurras.space"]?.disableHlsConversion || memory["cdnchurras.space"]?.preferTs || memory["cdnchurras.space"]?.bypassProxyForLive || memory["cdnchurras.space"]?.disableProxy || memory["cdnchurras.space"]?.webIncompatibleLive || memory["cdnchurras.space"]?.httpsPort) {
+  const cur = memory["cdnchurras.space"];
+  const {
+    forceNativeForLive: _fn,
+    disableHlsConversion: _dh,
+    preferTs: _pt,
+    bypassProxyForLive: _bp,
+    disableProxy: _dp,
+    webIncompatibleLive: _wi,
+    httpsPort: _hp,
+    ...rest
+  } = cur;
+  memory["cdnchurras.space"] = rest;
+  writeStorage(memory);
+  console.log("[HOST PROFILE] limpou flags quebradas de cdnchurras.space");
+}
 // Aplica presets built-in (HOST_PRESETS). Patches em runtime continuam
 
 // sobrescrevendo: preset → storage → updateHostProfile.

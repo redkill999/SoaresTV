@@ -201,6 +201,15 @@ function isTsUrl(url: string): boolean {
   return /\.ts([?#&]|$)/i.test(url);
 }
 
+// Baseline validada pelo usuário: cdnchurras/Space FHD abre no Web Desktop
+// somente pelo caminho HLS-first via /api/stream, com liveSync 4/12. Não deixar
+// aprendizado automático, TS-first ou watchdog agressivo mudar esse caminho.
+function isLockedHlsFirstLiveHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const normalized = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+  return normalized === "cdnchurras.space";
+}
+
 // Mantém a URL original como primeira tentativa e gera a variante alternativa
 // (.m3u8 ↔ .ts) apenas como fallback. Crítico: se o src veio .m3u8 da M3U,
 // NUNCA jogar o .m3u8 fora — disableHlsConversion só bloqueia inventar .m3u8
@@ -834,7 +843,21 @@ export function VideoPlayer({
     // kind="live"; portanto a decisão do player deve respeitar o kind explícito
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
-    const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const liveHost = hostOf(workingSrc);
+    const lockedHlsFirstLive = isLive && isLockedHlsFirstLiveHost(liveHost);
+    const rawLiveHostProfile = isLive ? getHostProfile(liveHost) : {};
+    const liveHostProfile = lockedHlsFirstLive
+      ? {
+          ...rawLiveHostProfile,
+          disableProxy: false,
+          bypassProxyForLive: false,
+          disableHlsConversion: false,
+          preferTs: false,
+          forceNativeForLive: false,
+          webIncompatibleLive: false,
+          httpsPort: undefined,
+        }
+      : rawLiveHostProfile;
     // NOTE: removido forçar TS-first para cdnchurras.space no web desktop —
     // estava consumindo o único slot de conexão do painel sem tocar. Mantemos
     // HLS-first via proxy (comportamento que funcionava antes).
@@ -842,7 +865,7 @@ export function VideoPlayer({
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
-    if (isLive && !nativeRuntimeRef.current && liveHostProfile.webIncompatibleLive) {
+    if (isLive && !lockedHlsFirstLive && !nativeRuntimeRef.current && liveHostProfile.webIncompatibleLive) {
       pushDbg(`ETAPA 0 host ${hostOf(workingSrc)} marcado webIncompatibleLive — abortando somente navegador real`);
       setError(
         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
@@ -861,12 +884,13 @@ export function VideoPlayer({
     // containers progressivos (mp4/mkv) ou quando o usuário forçou na Settings.
     // CRÍTICO: se o src original já é .m3u8, NUNCA pular HLS — disableHlsConversion
     // só bloqueia inventar .m3u8 a partir de .ts, jamais o contrário.
-    const skipHls =
+    const skipHls = !lockedHlsFirstLive && (
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
       webDesktopPreferTsLive ||
       (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
-      (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
+      (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"))
+    );
 
     const hlsCandidate = skipHls ? null : toHlsCandidate(workingSrc, kind);
     // VOD (filmes/séries) deve ser conservador: usa exatamente a URL resolvida
@@ -882,7 +906,7 @@ export function VideoPlayer({
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
     // proxy só como último recurso pra não regredir contexto web.
-    const liveBypassProxy = !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
+    const liveBypassProxy = !lockedHlsFirstLive && !!(liveHostProfile.bypassProxyForLive || liveHostProfile.disableProxy);
     // LIVE/Web: quando o host tem httpsPort no perfil (ex.: flipex.pro:25463)
     // E a página está em HTTPS, prepende candidatos `https://host:port/...` que
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
@@ -895,17 +919,17 @@ export function VideoPlayer({
       // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
       // tendo prioridade quando existir (httpsPortCandidates acima).
       if (pageIsHttps && /^http:\/\//i.test(url)) {
-        return nativeRuntimeRef.current ? [proxy, url] : [proxy];
+        return (nativeRuntimeRef.current || lockedHlsFirstLive) ? [proxy, url] : [proxy];
       }
       return liveBypassProxy ? [url, proxy] : [proxy, url];
     };
-    const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
+    const httpsPortCandidates: string[] = (isLive && !lockedHlsFirstLive && pageIsHttps && liveHostProfile.httpsPort)
       ? directCandidates
           .map((u) => httpsVariantWithPort(u, liveHostProfile.httpsPort!))
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive || liveHostProfile.preferTs || webDesktopPreferTsLive) return candidates;
+      if (!isLive || (!lockedHlsFirstLive && (liveHostProfile.preferTs || webDesktopPreferTsLive))) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
@@ -947,7 +971,7 @@ export function VideoPlayer({
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
     pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
-    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
+    pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} hlsLock=${lockedHlsFirstLive} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
 
@@ -1511,8 +1535,8 @@ export function VideoPlayer({
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
           fragLoadingTimeOut: 20_000,
-          manifestLoadingTimeOut: 15_000,
-          levelLoadingTimeOut: 15_000,
+          manifestLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
+          levelLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
           // Baseline validada: 4/12. Reduzir causou canais pararem de abrir.
           liveSyncDurationCount: 4,
           liveMaxLatencyDurationCount: 12,
@@ -1540,21 +1564,22 @@ export function VideoPlayer({
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
-        // Watchdog LIVE: se o manifest não parsear em 4s (host lento, mixed-content
+        // Watchdog LIVE: se o manifest não parsear em alguns segundos (host lento, mixed-content
         // silencioso, IP bloqueado sem devolver 4xx), destroi o hls e avança pro
         // próximo candidato — evita a tela ficar pendurada em ready=0 net=2.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
+        const manifestWatchdogMs = lockedHlsFirstLive ? 25_000 : 7_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
-          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em 4s idx=${vodIdx} — avançando`);
+          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em ${Math.round(manifestWatchdogMs / 1000)}s idx=${vodIdx} — avançando`);
           try { detachStallListeners?.(); } catch { /* noop */ }
           try { hls?.destroy(); } catch { /* noop */ }
           hls = null;
           vodIdx += 1;
           if (vodIdx < playbackCandidates.length) playDirect();
           else setError("Não foi possível reproduzir este canal.");
-        }, 4_000) : null;
+        }, manifestWatchdogMs) : null;
         const clearManifestWatchdog = () => { if (manifestWatchdog) clearTimeout(manifestWatchdog); };
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
@@ -1566,7 +1591,7 @@ export function VideoPlayer({
         // uma janela segura para não regredir o canal que já tocava.
         let firstFrameWatchdog: ReturnType<typeof setTimeout> | null = null;
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (!isLive || firstFrameWatchdog) return;
+          if (!isLive || lockedHlsFirstLive || firstFrameWatchdog) return;
           firstFrameWatchdog = setTimeout(() => {
             firstFrameWatchdog = null;
             if (cancelled) return;
@@ -1707,7 +1732,7 @@ export function VideoPlayer({
                 const isAuthFail = httpCode === 401 || httpCode === 403;
                 // 404/410 no .m3u8 = host não fornece HLS. Memoriza para
                 // próximos canais desse provedor pularem a conversão.
-                if ((httpCode === 404 || httpCode === 410) && hlsCandidate) {
+                if (!lockedHlsFirstLive && (httpCode === 404 || httpCode === 410) && hlsCandidate) {
                   const h = hostOf(workingSrc);
                   if (h) rememberHlsUnsupported(h);
                 }
@@ -1746,7 +1771,7 @@ export function VideoPlayer({
                     // Padrão típico de host incompatível com Web: proxy 404/424
                     // (CDN bloqueia IP edge) + direto http=0 (CORS ausente no CDN).
                     // Marca o host para futuras sessões pularem o loop de tentativas.
-                    if (isLive && triedDirect) {
+                    if (isLive && triedDirect && !lockedHlsFirstLive) {
                       const h = hostOf(workingSrc);
                       if (h) {
                         rememberWebIncompatibleLive(h);
