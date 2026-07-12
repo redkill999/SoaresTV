@@ -1513,12 +1513,10 @@ export function VideoPlayer({
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: 15_000,
           levelLoadingTimeOut: 15_000,
-          // Reduzido 4→3 para acelerar o time-to-first-frame no LIVE
-          // (cada segmento ~4-6s; 3 segmentos = ~12-18s a menos de espera
-          // antes de dar play). liveMaxLatencyDurationCount 10 mantém a
-          // margem de re-sync sem virar rebuffering em jitter leve.
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10,
+          // Baseline validada: 4/12. Reduzir causou canais pararem de abrir.
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 12,
+
           // Live: começa pelo nível mais baixo e sem teste de banda — muitos
           // servidores IPTV não respondem ao probe de bandwidth do hls.js
           // (era o que travava a abertura dos canais no APK).
