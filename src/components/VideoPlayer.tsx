@@ -1598,26 +1598,34 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
 
-        // First-frame watchdog LIVE: alguns painéis demoram bastante para entregar
-        // o primeiro frame via HLS (cdnchurras.space/Space FHD já foi observado
-        // abrindo perto de 20s). O limite agressivo de 10s derrubava a variante
-        // HLS funcional antes dela começar; mantemos fallback, mas só depois de
-        // uma janela segura para não regredir o canal que já tocava.
+        // First-frame watchdog LIVE: alguns painéis parseiam a playlist, criam um
+        // blob MediaSource e ficam indefinidamente em readyState=0 sem erro fatal.
+        // Foi exatamente o estado visto no preview. Para hosts HLS-first travados,
+        // não avançamos para TS; reiniciamos a mesma playlist HLS via proxy com
+        // limite, preservando o caminho que já foi validado como funcional.
         let firstFrameWatchdog: ReturnType<typeof setTimeout> | null = null;
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (!isLive || lockedHlsFirstLive || firstFrameWatchdog) return;
+          if (!isLive || firstFrameWatchdog) return;
           firstFrameWatchdog = setTimeout(() => {
             firstFrameWatchdog = null;
             if (cancelled) return;
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA || video.currentTime > 0) return;
-            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em 35s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — avançando`);
+            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em ${lockedHlsFirstLive ? 45 : 35}s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — ${lockedHlsFirstLive ? "reiniciando HLS" : "avançando"}`);
             try { detachStallListeners?.(); } catch { /* noop */ }
             try { hls?.destroy(); } catch { /* noop */ }
             hls = null;
+            const retryUrl = currentHlsUrl;
+            if (lockedHlsFirstLive && retryUrl && /^\/api\/stream\?/i.test(retryUrl) && lockedHlsRestarts < MAX_LOCKED_HLS_RESTARTS) {
+              lockedHlsRestarts += 1;
+              triedUrls.delete(normUrl(retryUrl));
+              pushDbg(`ETAPA 8.8 hlsLock restart #${lockedHlsRestarts} mantendo proxy HLS`);
+              setTimeout(() => { if (!cancelled) attachHls(retryUrl); }, 400);
+              return;
+            }
             vodIdx += 1;
             if (vodIdx < playbackCandidates.length) playDirect();
             else setError("Não foi possível reproduzir este canal.");
-          }, 35_000);
+          }, lockedHlsFirstLive ? 45_000 : 35_000);
         });
         const clearFirstFrameWatchdog = () => { if (firstFrameWatchdog) { clearTimeout(firstFrameWatchdog); firstFrameWatchdog = null; } };
         video.addEventListener("loadedmetadata", clearFirstFrameWatchdog, { once: true });
