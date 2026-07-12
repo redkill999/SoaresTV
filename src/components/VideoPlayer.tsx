@@ -1535,8 +1535,8 @@ export function VideoPlayer({
           levelLoadingMaxRetry: 6,
           fragLoadingRetryDelay: 500,
           fragLoadingTimeOut: 20_000,
-          manifestLoadingTimeOut: 15_000,
-          levelLoadingTimeOut: 15_000,
+          manifestLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
+          levelLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
           // Baseline validada: 4/12. Reduzir causou canais pararem de abrir.
           liveSyncDurationCount: 4,
           liveMaxLatencyDurationCount: 12,
@@ -1564,7 +1564,7 @@ export function VideoPlayer({
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
-        // Watchdog LIVE: se o manifest não parsear em 4s (host lento, mixed-content
+        // Watchdog LIVE: se o manifest não parsear em alguns segundos (host lento, mixed-content
         // silencioso, IP bloqueado sem devolver 4xx), destroi o hls e avança pro
         // próximo candidato — evita a tela ficar pendurada em ready=0 net=2.
         let manifestParsedForWatchdog = false;
