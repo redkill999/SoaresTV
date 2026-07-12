@@ -1610,7 +1610,7 @@ export function VideoPlayer({
             firstFrameWatchdog = null;
             if (cancelled) return;
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA || video.currentTime > 0) return;
-            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em ${lockedHlsFirstLive ? 45 : 35}s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — ${lockedHlsFirstLive ? "reiniciando HLS" : "avançando"}`);
+            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em ${lockedHlsFirstLive ? 40 : 35}s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — ${lockedHlsFirstLive ? "reiniciando HLS" : "avançando"}`);
             try { detachStallListeners?.(); } catch { /* noop */ }
             try { hls?.destroy(); } catch { /* noop */ }
             hls = null;
