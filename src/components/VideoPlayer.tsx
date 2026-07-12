@@ -312,7 +312,7 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v4";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v5";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -835,6 +835,10 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const webDesktopPreferTsLive =
+      isLive &&
+      !nativeRuntimeRef.current &&
+      /(^|\.)cdnchurras\.space$/i.test(hostOf(workingSrc) ?? "");
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
@@ -860,6 +864,7 @@ export function VideoPlayer({
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
+      webDesktopPreferTsLive ||
       (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
@@ -869,7 +874,10 @@ export function VideoPlayer({
     // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
     // parecia que filmes/séries também tinham quebrado.
     const vodCandidates: string[] = [workingSrc];
-    const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    const directCandidatesBase = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    const directCandidates = webDesktopPreferTsLive
+      ? directCandidatesBase.filter((u) => !isHlsUrl(u))
+      : directCandidatesBase;
     // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
@@ -886,7 +894,9 @@ export function VideoPlayer({
       // Mesmo que o host esteja marcado como bypass para APK/TV, no browser o
       // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
       // tendo prioridade quando existir (httpsPortCandidates acima).
-      if (pageIsHttps && /^http:\/\//i.test(url)) return [proxy, url];
+      if (pageIsHttps && /^http:\/\//i.test(url)) {
+        return nativeRuntimeRef.current ? [proxy, url] : [proxy];
+      }
       return liveBypassProxy ? [url, proxy] : [proxy, url];
     };
     const httpsPortCandidates: string[] = (isLive && pageIsHttps && liveHostProfile.httpsPort)
@@ -895,7 +905,7 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive || liveHostProfile.preferTs) return candidates;
+      if (!isLive || liveHostProfile.preferTs || webDesktopPreferTsLive) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
@@ -1050,7 +1060,10 @@ export function VideoPlayer({
       const asLive = isLive && !opts?.forceVod;
       if (!isLive && !opts?.forceVod) return false;
       try {
-        const probeUrl = probeUrlForCandidate(url);
+        // LIVE TS costuma ter limite de 1 conexão por conta. O probe fazia um
+        // GET antes do player real e podia consumir esse único slot por alguns
+        // segundos, deixando o mpegts.js abrir vazio/travado no Web Desktop.
+        const probeUrl = asLive ? null : probeUrlForCandidate(url);
         if (probeUrl) {
           try {
             pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
@@ -1070,7 +1083,10 @@ export function VideoPlayer({
           }
         }
         const mpegts = await loadMpegts();
-        if (cancelled || !mpegts.isSupported()) return false;
+        if (cancelled || !mpegts.isSupported()) {
+          if (asLive) pushDbg("mpegts indisponível neste navegador");
+          return false;
+        }
         destroyTsPlayer();
         video.pause();
         video.removeAttribute("src");
@@ -1087,6 +1103,7 @@ export function VideoPlayer({
           }
         })();
         lastMpegtsUrl = url;
+        if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
