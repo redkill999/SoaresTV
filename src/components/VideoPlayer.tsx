@@ -988,6 +988,7 @@ export function VideoPlayer({
 
 
 
+    let triedVodMpegts = false;
     const tryNextVod = () => {
       clearWatchdog();
       if (hls) {
@@ -997,7 +998,28 @@ export function VideoPlayer({
       destroyTsPlayer();
       vodIdx += 1;
       if (vodIdx < playbackCandidates.length) { pushDbg(`ETAPA 9 tryNext idx=${vodIdx}`); setError(null); playDirect(); }
-      else { pushDbg(`ETAPA 10 FIM sem candidatos restantes`); setError(isLive ? (lastLiveError ?? "Não foi possível reproduzir este canal.") : "Não foi possível reproduzir esta mídia."); }
+      else {
+        // Fallback web-desktop: painéis como cdnchurras.space (output=mpegts)
+        // entregam MPEG-TS mesmo com extensão .mp4, e o <video> nativo devolve
+        // MEDIA_ELEMENT_ERROR: Format error. Tentamos mpegts.js UMA vez no
+        // primeiro candidato (proxy same-origin) antes de desistir. APK/TV
+        // não passa por aqui (usa ExoPlayer nativo).
+        if (isVod && !isLive && !nativeRuntimeRef.current && !triedVodMpegts && playbackCandidates.length > 0) {
+          triedVodMpegts = true;
+          const first = playbackCandidates[0]!;
+          pushDbg(`ETAPA 10.5 VOD fallback mpegts.js url=${maskIptvUrl(first)}`);
+          setError(null);
+          void playMpegTs(first, { forceVod: true }).then((handled) => {
+            if (!handled && !cancelled) {
+              pushDbg(`ETAPA 10 FIM sem candidatos restantes (mpegts VOD nao suportado)`);
+              setError("Não foi possível reproduzir esta mídia.");
+            }
+          });
+          return;
+        }
+        pushDbg(`ETAPA 10 FIM sem candidatos restantes`);
+        setError(isLive ? (lastLiveError ?? "Não foi possível reproduzir este canal.") : "Não foi possível reproduzir esta mídia.");
+      }
     };
 
     const armVodWatchdog = () => {
@@ -1024,8 +1046,9 @@ export function VideoPlayer({
       return 0;
     };
 
-    const playMpegTs = async (url: string) => {
-      if (!isLive) return false;
+    const playMpegTs = async (url: string, opts?: { forceVod?: boolean }) => {
+      const asLive = isLive && !opts?.forceVod;
+      if (!isLive && !opts?.forceVod) return false;
       try {
         const probeUrl = probeUrlForCandidate(url);
         if (probeUrl) {
@@ -1065,15 +1088,15 @@ export function VideoPlayer({
         })();
         lastMpegtsUrl = url;
         tsPlayer = mpegts.createPlayer(
-          { type: "mpegts", isLive: true, url: absUrl },
+          { type: "mpegts", isLive: asLive, url: absUrl },
           {
-            isLive: true,
+            isLive: asLive,
             enableWorker: false,
             // Config original que abria mais canais. Ajustes de stash/latência
             // aumentaram compatibilidade contra travas em alguns hosts, mas
             // impediram a abertura de outros no APK/WebView.
-            enableStashBuffer: false,
-            liveBufferLatencyChasing: true,
+            enableStashBuffer: !asLive,
+            liveBufferLatencyChasing: asLive,
             liveBufferLatencyMaxLatency: 6,
             liveBufferLatencyMinRemain: 1,
           },
