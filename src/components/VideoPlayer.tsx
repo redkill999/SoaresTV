@@ -919,7 +919,7 @@ export function VideoPlayer({
       // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
       // tendo prioridade quando existir (httpsPortCandidates acima).
       if (pageIsHttps && /^http:\/\//i.test(url)) {
-        return nativeRuntimeRef.current ? [proxy, url] : [proxy];
+        return (nativeRuntimeRef.current || lockedHlsFirstLive) ? [proxy, url] : [proxy];
       }
       return liveBypassProxy ? [url, proxy] : [proxy, url];
     };
@@ -1569,16 +1569,17 @@ export function VideoPlayer({
         // próximo candidato — evita a tela ficar pendurada em ready=0 net=2.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
+        const manifestWatchdogMs = lockedHlsFirstLive ? 25_000 : 7_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
-          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em 4s idx=${vodIdx} — avançando`);
+          pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em ${Math.round(manifestWatchdogMs / 1000)}s idx=${vodIdx} — avançando`);
           try { detachStallListeners?.(); } catch { /* noop */ }
           try { hls?.destroy(); } catch { /* noop */ }
           hls = null;
           vodIdx += 1;
           if (vodIdx < playbackCandidates.length) playDirect();
           else setError("Não foi possível reproduzir este canal.");
-        }, 4_000) : null;
+        }, manifestWatchdogMs) : null;
         const clearManifestWatchdog = () => { if (manifestWatchdog) clearTimeout(manifestWatchdog); };
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
