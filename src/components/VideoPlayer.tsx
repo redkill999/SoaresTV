@@ -1542,6 +1542,34 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
 
+        // First-frame watchdog LIVE: alguns painéis (ex.: cdnchurras.space) entregam
+        // manifest + segmentos válidos, mas o codec (H.265, áudio AC3) não é
+        // suportado por MSE do hls.js. O player fica em ready=0 net=2 sem FATAL,
+        // e nunca avança. Se em 10s pós-MANIFEST_PARSED não houver ao menos
+        // HAVE_METADATA, destrói o hls e chama o próximo candidato — cai em
+        // playMpegTs no .ts, que às vezes engata onde o hls.js travou.
+        // NÃO dispara quando readyState avança (canais normais ignoram).
+        let firstFrameWatchdog: ReturnType<typeof setTimeout> | null = null;
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (!isLive || firstFrameWatchdog) return;
+          firstFrameWatchdog = setTimeout(() => {
+            firstFrameWatchdog = null;
+            if (cancelled) return;
+            if (video.readyState >= HTMLMediaElement.HAVE_METADATA || video.currentTime > 0) return;
+            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em 10s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — avançando`);
+            try { detachStallListeners?.(); } catch { /* noop */ }
+            try { hls?.destroy(); } catch { /* noop */ }
+            hls = null;
+            vodIdx += 1;
+            if (vodIdx < playbackCandidates.length) playDirect();
+            else setError("Não foi possível reproduzir este canal.");
+          }, 10_000);
+        });
+        const clearFirstFrameWatchdog = () => { if (firstFrameWatchdog) { clearTimeout(firstFrameWatchdog); firstFrameWatchdog = null; } };
+        video.addEventListener("loadedmetadata", clearFirstFrameWatchdog, { once: true });
+        video.addEventListener("playing", clearFirstFrameWatchdog, { once: true });
+        hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearFirstFrameWatchdog(); });
+
         let netRetries = 0;
         const MAX_NET_RETRIES = 5;
         let mediaRetries = 0;
