@@ -1024,8 +1024,9 @@ export function VideoPlayer({
       return 0;
     };
 
-    const playMpegTs = async (url: string) => {
-      if (!isLive) return false;
+    const playMpegTs = async (url: string, opts?: { forceVod?: boolean }) => {
+      const asLive = isLive && !opts?.forceVod;
+      if (!isLive && !opts?.forceVod) return false;
       try {
         const probeUrl = probeUrlForCandidate(url);
         if (probeUrl) {
