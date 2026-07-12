@@ -1056,7 +1056,10 @@ export function VideoPlayer({
       const asLive = isLive && !opts?.forceVod;
       if (!isLive && !opts?.forceVod) return false;
       try {
-        const probeUrl = probeUrlForCandidate(url);
+        // LIVE TS costuma ter limite de 1 conexão por conta. O probe fazia um
+        // GET antes do player real e podia consumir esse único slot por alguns
+        // segundos, deixando o mpegts.js abrir vazio/travado no Web Desktop.
+        const probeUrl = asLive ? null : probeUrlForCandidate(url);
         if (probeUrl) {
           try {
             pushDbg(`PROBE url=${maskIptvUrl(probeUrl)}`);
@@ -1076,7 +1079,10 @@ export function VideoPlayer({
           }
         }
         const mpegts = await loadMpegts();
-        if (cancelled || !mpegts.isSupported()) return false;
+        if (cancelled || !mpegts.isSupported()) {
+          if (asLive) pushDbg("mpegts indisponível neste navegador");
+          return false;
+        }
         destroyTsPlayer();
         video.pause();
         video.removeAttribute("src");
@@ -1093,6 +1099,7 @@ export function VideoPlayer({
           }
         })();
         lastMpegtsUrl = url;
+        if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
