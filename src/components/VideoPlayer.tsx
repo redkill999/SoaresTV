@@ -835,10 +835,10 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
-    const webDesktopPreferTsLive =
-      isLive &&
-      !nativeRuntimeRef.current &&
-      /(^|\.)cdnchurras\.space$/i.test(hostOf(workingSrc) ?? "");
+    // NOTE: removido forçar TS-first para cdnchurras.space no web desktop —
+    // estava consumindo o único slot de conexão do painel sem tocar. Mantemos
+    // HLS-first via proxy (comportamento que funcionava antes).
+    const webDesktopPreferTsLive = false;
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
