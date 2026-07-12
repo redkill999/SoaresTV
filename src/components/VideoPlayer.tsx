@@ -987,7 +987,7 @@ export function VideoPlayer({
     let detachStallListeners: (() => void) | null = null;
     let lastLiveError: string | null = null;
     let lockedHlsRestarts = 0;
-    const MAX_LOCKED_HLS_RESTARTS = 3;
+    const MAX_LOCKED_HLS_RESTARTS = 1;
     const triedUrls = new Set<string>();
     const normUrl = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
 
@@ -1575,7 +1575,7 @@ export function VideoPlayer({
         // readyState=0 por minutos e sem erro fatal do hls.js.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
-        const manifestWatchdogMs = lockedHlsFirstLive ? 35_000 : 7_000;
+        const manifestWatchdogMs = lockedHlsFirstLive ? 30_000 : 7_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
           pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em ${Math.round(manifestWatchdogMs / 1000)}s idx=${vodIdx} — avançando`);
@@ -1625,7 +1625,7 @@ export function VideoPlayer({
             vodIdx += 1;
             if (vodIdx < playbackCandidates.length) playDirect();
             else setError("Não foi possível reproduzir este canal.");
-          }, lockedHlsFirstLive ? 45_000 : 35_000);
+          }, lockedHlsFirstLive ? 40_000 : 35_000);
         });
         const clearFirstFrameWatchdog = () => { if (firstFrameWatchdog) { clearTimeout(firstFrameWatchdog); firstFrameWatchdog = null; } };
         video.addEventListener("loadedmetadata", clearFirstFrameWatchdog, { once: true });
