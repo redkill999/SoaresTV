@@ -835,6 +835,10 @@ export function VideoPlayer({
     // e não depender só do padrão Xtream /live/... .ts.
     const isLive = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(workingSrc);
     const liveHostProfile = isLive ? getHostProfile(hostOf(workingSrc)) : {};
+    const webDesktopPreferTsLive =
+      isLive &&
+      !nativeRuntimeRef.current &&
+      /(^|\.)cdnchurras\.space$/i.test(hostOf(workingSrc) ?? "");
     // Early guard: se este host já foi marcado como incompatível com Web Desktop
     // para LIVE, não perde tempo tentando reproduzir — mostra aviso imediato.
     // O APK/TV usa ExoPlayer nativo (shouldUseNativePlayer) e ignora este guard.
@@ -860,6 +864,7 @@ export function VideoPlayer({
     const skipHls =
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
+      webDesktopPreferTsLive ||
       (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"));
 
@@ -869,7 +874,10 @@ export function VideoPlayer({
     // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
     // parecia que filmes/séries também tinham quebrado.
     const vodCandidates: string[] = [workingSrc];
-    const directCandidates = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    const directCandidatesBase = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
+    const directCandidates = webDesktopPreferTsLive
+      ? directCandidatesBase.filter((u) => !isHlsUrl(u))
+      : directCandidatesBase;
     // Perfil do host: alguns painéis (ex.: athra.sbs) bloqueiam IP de datacenter,
     // então o proxy /api/stream toma 403 em LIVE. Quando o perfil pede bypass,
     // priorizamos a URL direta (que sai do IP residencial do APK) e mantemos o
@@ -880,10 +888,6 @@ export function VideoPlayer({
     // pulam totalmente o proxy. Resolve o caso comum do CDN do provedor
     // bloquear IPs do Cloudflare Worker.
     const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
-    const webDesktopPreferTsLive =
-      isLive &&
-      !nativeRuntimeRef.current &&
-      /(^|\.)cdnchurras\.space$/i.test(hostOf(workingSrc) ?? "");
     const liveCandidatePair = (url: string) => {
       const proxy = proxiedX(url, kind);
       // Web Desktop em HTTPS não consegue abrir http:// direto (mixed content).
