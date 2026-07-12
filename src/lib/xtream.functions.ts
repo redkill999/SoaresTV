@@ -505,47 +505,35 @@ async function mapXtreamSeries(
   cats: CategoryMap,
 ): Promise<M3UEntryDTO[]> {
   if (!Array.isArray(data)) return [];
+  // PERF FIX (login lento): antes fazíamos até 800 chamadas get_series_info
+  // em série (8 concorrentes × 8s timeout) só para descobrir o primeiro
+  // episódio de cada série e montar uma URL "tocável" no cache M3U.
+  // Isso adicionava 20–60s ao login em todos os dispositivos (desktop + APK).
+  //
+  // As rotas /series, /movies e /live consomem xtreamApi diretamente
+  // (pipeline separado), então as entradas de série no cache M3U eram
+  // redundantes para o app principal. Mantemos entradas "leves" apontando
+  // para a rota interna /player/series/<id> — o /playlist ainda lista as
+  // séries visualmente e o resto do app abre normalmente via /series.
+  const items = data as Record<string, unknown>[];
   const entries: M3UEntryDTO[] = [];
-  // To keep this fast and within Worker limits, we only fetch the first
-  // episode per series in parallel batches. The /playlist UI plays one
-  // entry at a time so this gives users access to series content without
-  // exploding into thousands of HTTP calls.
-  const items = data.slice(0, 800) as Record<string, unknown>[];
-  const CONCURRENCY = 8;
-  let idx = 0;
-  async function worker() {
-    while (idx < items.length && entries.length < MAX_SERVER_ENTRIES) {
-      const i = idx++;
-      const s = items[i];
-      const sid = s.series_id;
-      if (sid == null) continue;
-      const name = typeof s.name === "string" ? s.name : `Série ${i + 1}`;
-      const catId = s.category_id != null ? String(s.category_id) : "";
-      const group = cats.get(catId);
-      const u = new URL(`${access.origin}/player_api.php`);
-      u.searchParams.set("username", access.username);
-      u.searchParams.set("password", access.password);
-      u.searchParams.set("action", "get_series_info");
-      u.searchParams.set("series_id", String(sid));
-      const info = (await fetchJson(u.toString(), 8_000)) as
-        | { episodes?: Record<string, Array<{ id?: string | number; container_extension?: string }>> }
-        | null;
-      const seasons = info?.episodes ? Object.keys(info.episodes).sort() : [];
-      const firstSeason = seasons[0];
-      const firstEp = firstSeason ? info?.episodes?.[firstSeason]?.[0] : undefined;
-      if (firstEp?.id != null) {
-        const ext = firstEp.container_extension || "mp4";
-        entries.push({
-          id: `xtream-series-${String(sid)}`,
-          name: decodeEntities(name),
-          url: `${access.origin}/series/${access.username}/${access.password}/${String(firstEp.id)}.${ext}`,
-          logo: typeof s.cover === "string" ? s.cover : undefined,
-          group: group ? `Séries | ${group}` : "Séries",
-        });
-      }
-    }
+  for (let i = 0; i < items.length && entries.length < MAX_SERVER_ENTRIES; i++) {
+    const s = items[i];
+    const sid = s.series_id;
+    if (sid == null) continue;
+    const name = typeof s.name === "string" ? s.name : `Série ${i + 1}`;
+    const catId = s.category_id != null ? String(s.category_id) : "";
+    const group = cats.get(catId);
+    entries.push({
+      id: `xtream-series-${String(sid)}`,
+      name: decodeEntities(name),
+      // URL relativa da rota interna — o /playlist mostra o item; playback
+      // real acontece via /series (que resolve episódios sob demanda).
+      url: `/player/series/${String(sid)}`,
+      logo: typeof s.cover === "string" ? s.cover : undefined,
+      group: group ? `Séries | ${group}` : "Séries",
+    });
   }
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   return entries;
 }
 
