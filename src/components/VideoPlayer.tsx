@@ -1559,13 +1559,11 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, clearManifestWatchdog);
         hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) clearManifestWatchdog(); });
 
-        // First-frame watchdog LIVE: alguns painéis (ex.: cdnchurras.space) entregam
-        // manifest + segmentos válidos, mas o codec (H.265, áudio AC3) não é
-        // suportado por MSE do hls.js. O player fica em ready=0 net=2 sem FATAL,
-        // e nunca avança. Se em 10s pós-MANIFEST_PARSED não houver ao menos
-        // HAVE_METADATA, destrói o hls e chama o próximo candidato — cai em
-        // playMpegTs no .ts, que às vezes engata onde o hls.js travou.
-        // NÃO dispara quando readyState avança (canais normais ignoram).
+        // First-frame watchdog LIVE: alguns painéis demoram bastante para entregar
+        // o primeiro frame via HLS (cdnchurras.space/Space FHD já foi observado
+        // abrindo perto de 20s). O limite agressivo de 10s derrubava a variante
+        // HLS funcional antes dela começar; mantemos fallback, mas só depois de
+        // uma janela segura para não regredir o canal que já tocava.
         let firstFrameWatchdog: ReturnType<typeof setTimeout> | null = null;
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (!isLive || firstFrameWatchdog) return;
@@ -1573,14 +1571,14 @@ export function VideoPlayer({
             firstFrameWatchdog = null;
             if (cancelled) return;
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA || video.currentTime > 0) return;
-            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em 10s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — avançando`);
+            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em 35s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — avançando`);
             try { detachStallListeners?.(); } catch { /* noop */ }
             try { hls?.destroy(); } catch { /* noop */ }
             hls = null;
             vodIdx += 1;
             if (vodIdx < playbackCandidates.length) playDirect();
             else setError("Não foi possível reproduzir este canal.");
-          }, 10_000);
+          }, 35_000);
         });
         const clearFirstFrameWatchdog = () => { if (firstFrameWatchdog) { clearTimeout(firstFrameWatchdog); firstFrameWatchdog = null; } };
         video.addEventListener("loadedmetadata", clearFirstFrameWatchdog, { once: true });
