@@ -557,9 +557,9 @@ export const fetchM3U = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<M3UResultDTO> => {
     const access = getXtreamAccess(data.url, data.username, data.password);
 
-    async function fetchText(target: string) {
+    async function fetchText(target: string, timeoutMs = 20_000) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60_000);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await safeFetch(target, {
           headers: {
@@ -577,6 +577,39 @@ export const fetchM3U = createServerFn({ method: "POST" })
         clearTimeout(timer);
       }
     }
+
+    // PERF FIX (login lento em painéis com portas mortas):
+    // buildM3UCandidateUrls gera ~24 URLs (12 portas × 2 outputs). Tentar em
+    // série com timeout de 60s significa que painéis onde metade das portas
+    // não responde travam por minutos até achar a boa. Corre todas em
+    // paralelo e retorna a PRIMEIRA que devolver M3U válida (#EXTINF).
+    async function raceCandidates(list: string[]): Promise<{ text: string; url: string } | { error: string; snippet: string }> {
+      let lastError = "";
+      let lastSnippet = "";
+      return await new Promise((resolve) => {
+        let remaining = list.length;
+        if (!remaining) return resolve({ error: "sem candidatos", snippet: "" });
+        let done = false;
+        list.forEach((candidate) => {
+          fetchText(candidate).then((fetched) => {
+            if (done) return;
+            if (fetched.text.includes("#EXTINF")) {
+              done = true;
+              resolve({ text: fetched.text, url: candidate });
+              return;
+            }
+            if (fetched.error) lastError = fetched.error;
+            if (fetched.text) lastSnippet = fetched.text.slice(0, 160).replace(/\s+/g, " ").trim();
+            remaining -= 1;
+            if (remaining === 0 && !done) {
+              done = true;
+              resolve({ error: lastError || "Conteúdo não parece M3U válido", snippet: lastSnippet });
+            }
+          });
+        });
+      });
+    }
+
 
     // Valida amostra de URLs LIVE de uma M3U: aceita a lista apenas se ao
     // menos uma URL LIVE responder OK (direta, ou variante .ts<->.m3u8).
@@ -664,39 +697,20 @@ export const fetchM3U = createServerFn({ method: "POST" })
         }
       }
 
-      // Fallback: baixar a M3U bruta (apenas se player_api falhou ou não há creds).
-      if (explicitM3U) {
-        let lastError = "";
-        for (const candidate of candidates) {
-          const fetched = await fetchText(candidate);
-          if (!fetched.text.includes("#EXTINF")) {
-            lastError = fetched.error || "Conteúdo não parece M3U válido";
-            continue;
-          }
-          const entries = parseM3UText(fetched.text);
-          if (entries.length) return { entries, sourceUrl: candidate };
-        }
-        if (lastError) console.warn("[fetchM3U] explicitM3U fallback:", lastError);
+      // Fallback: baixar a M3U bruta em PARALELO (apenas se player_api falhou ou não há creds).
+      // Antes era sequencial: cada porta morta somava 60s. Agora todas correm juntas.
+      void explicitM3U; // ambos os caminhos convergem para o mesmo race
+      const raced = await raceCandidates(candidates);
+      if ("text" in raced) {
+        const entries = parseM3UText(raced.text);
+        if (entries.length) return { entries, sourceUrl: raced.url };
       }
 
-      // (player_api já foi tentado acima quando há credenciais)
-
-
-      let lastError = "";
-      let lastSnippet = "";
-      for (const candidate of candidates) {
-        const first = await fetchText(candidate);
-        if (first.text.includes("#EXTINF")) {
-          const entries = parseM3UText(first.text);
-          if (entries.length) return { entries };
-        }
-        lastError = first.error || "Conteúdo não parece M3U válido";
-        lastSnippet = first.text.slice(0, 160).replace(/\s+/g, " ").trim();
-      }
-
+      const errMsg = "error" in raced ? raced.error : "Conteúdo não parece M3U válido";
+      const snippet = "snippet" in raced ? raced.snippet : "";
       return {
         entries: [],
-        error: `${lastError || "Conteúdo não parece M3U válido"}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${lastSnippet ? ` Resposta: ${lastSnippet}` : ""}`,
+        error: `${errMsg}. Testei variações automáticas de porta/saída. Verifique se o campo usado é o Portal/DNS/Host do XCIPTV, não o link do painel.${snippet ? ` Resposta: ${snippet}` : ""}`,
       };
     } catch (e) {
       return {
