@@ -897,7 +897,34 @@ export function VideoPlayer({
     // pelo catálogo/API. Inventar extensões alternativas (.m4v/.mkv/.m3u8)
     // fazia o player abandonar um MP4 válido em navegadores lentos/headless e
     // parecia que filmes/séries também tinham quebrado.
-    const vodCandidates: string[] = [workingSrc];
+    //
+    // EXCEÇÃO cirúrgica (web, não-APK): quando o container é .mkv/.avi/.wmv/.flv
+    // — formatos que praticamente nenhum navegador decoda — adicionamos uma
+    // variante `.mp4` como FALLBACK (após a URL original). Muitos painéis
+    // Xtream servem o mesmo arquivo independentemente da extensão da URL, então
+    // trocar para .mp4 costuma bastar para o navegador aceitar. Só entra no
+    // playbackCandidates como último recurso (tryNextVod só chama em erro
+    // explícito, nunca por watchdog), então não abandona MP4 válido.
+    const swapExtToMp4 = (u: string): string | null => {
+      try {
+        const parsed = new URL(u, window.location.origin);
+        const path = parsed.pathname;
+        if (!/\.(mkv|avi|wmv|flv)$/i.test(path)) return null;
+        parsed.pathname = path.replace(/\.(mkv|avi|wmv|flv)$/i, ".mp4");
+        return parsed.toString();
+      } catch {
+        return null;
+      }
+    };
+    const browserUnfriendlyVod =
+      !nativeRuntimeRef.current && isVod && /\.(mkv|avi|wmv|flv)(?:\?|$)/i.test(workingSrc);
+    const vodMp4Fallback = browserUnfriendlyVod ? swapExtToMp4(workingSrc) : null;
+    const vodCandidates: string[] = vodMp4Fallback
+      ? [workingSrc, vodMp4Fallback]
+      : [workingSrc];
+    if (vodMp4Fallback) {
+      pushDbg(`ETAPA 3.5 VOD fallback .mp4 preparado (container original nao suportado no browser)`);
+    }
     const directCandidatesBase = isLive ? liveDirectCandidates(workingSrc) : vodCandidates;
     const directCandidates = webDesktopPreferTsLive
       ? directCandidatesBase.filter((u) => !isHlsUrl(u))
