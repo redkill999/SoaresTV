@@ -1564,18 +1564,31 @@ export function VideoPlayer({
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
-        // Watchdog LIVE: se o manifest não parsear em alguns segundos (host lento, mixed-content
-        // silencioso, IP bloqueado sem devolver 4xx), destroi o hls e avança pro
-        // próximo candidato — evita a tela ficar pendurada em ready=0 net=2.
+        // Watchdog LIVE: se o manifest não parsear em alguns segundos (host lento,
+        // mixed-content silencioso, IP bloqueado sem devolver 4xx), destrói o HLS
+        // e avança para o próximo candidato. Para o host travado em HLS-first,
+        // NÃO pulamos para TS/mpegts.js: a baseline validada é manter o HLS via
+        // proxy e apenas reiniciar esse mesmo caminho quando a requisição aborta
+        // silenciosamente. Isso evita o estado observado no preview: blob HLS com
+        // readyState=0 por minutos e sem erro fatal do hls.js.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
-        const manifestWatchdogMs = lockedHlsFirstLive ? 25_000 : 7_000;
+        let lockedHlsRestarts = 0;
+        const MAX_LOCKED_HLS_RESTARTS = 3;
+        const manifestWatchdogMs = lockedHlsFirstLive ? 35_000 : 7_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
           pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em ${Math.round(manifestWatchdogMs / 1000)}s idx=${vodIdx} — avançando`);
           try { detachStallListeners?.(); } catch { /* noop */ }
           try { hls?.destroy(); } catch { /* noop */ }
           hls = null;
+          if (lockedHlsFirstLive && currentHlsUrl && /^\/api\/stream\?/i.test(currentHlsUrl) && lockedHlsRestarts < MAX_LOCKED_HLS_RESTARTS) {
+            lockedHlsRestarts += 1;
+            triedUrls.delete(normUrl(currentHlsUrl));
+            pushDbg(`ETAPA 8.7 hlsLock restart #${lockedHlsRestarts} mantendo proxy HLS`);
+            setTimeout(() => { if (!cancelled) attachHls(currentHlsUrl!); }, 400);
+            return;
+          }
           vodIdx += 1;
           if (vodIdx < playbackCandidates.length) playDirect();
           else setError("Não foi possível reproduzir este canal.");
