@@ -615,15 +615,17 @@ export function VideoPlayer({
         if (nativeEnded || nativeExit) {
           stopNativeLiveStallWatchdog();
         }
-        // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que
-        // estava cobrindo o WebView) e mostra o painel de diagnóstico em tela.
+        // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo. No
+        // modo APK auto-native (LIVE default), cai silenciosamente para o
+        // pipeline Web em vez de mostrar diagnóstico.
         if (
           name === "jeepCapVideoPlayerError" ||
           name === "initPlayer:false" ||
           name === "exception" ||
           /error|fail/i.test(name)
         ) {
-          pushDbg(`ETAPA 9 native error -> fechando overlay nativo para exibir diag`);
+          const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+          pushDbg(`ETAPA 9 native error -> autoFallback=${autoFallback}`);
           if (nativeLiveWatchdogRef.current) {
             clearTimeout(nativeLiveWatchdogRef.current);
             nativeLiveWatchdogRef.current = null;
@@ -632,7 +634,11 @@ export function VideoPlayer({
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          if (autoFallback) {
+            setError(null);
+          } else {
+            showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          }
         }
       },
       onExit: (pos) => {
