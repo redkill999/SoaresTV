@@ -1946,8 +1946,6 @@ export function VideoPlayer({
                         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
                         "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
                       );
-                    } else if (tryApkLiveHardReload("hls-net-exhausted")) {
-                      return;
                     } else {
                       setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
                     }
