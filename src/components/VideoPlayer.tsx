@@ -322,7 +322,27 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v5";
+// APK-only: no celular Android, o pipeline Web (hls.js/mpegts dentro da WebView
+// + proxy /api/stream) é frágil para LIVE — muitos canais simplesmente não
+// abrem. ExoPlayer nativo (via capacitor-video-player) toca MPEG-TS/HLS direto
+// sem MSE e é o padrão de apps IPTV Android (XCIPTV, TiviMate).
+//
+// Estratégia: no APK, tentar ExoPlayer PRIMEIRO para LIVE — EXCETO:
+//   1) `cdnchurras.space` (Space FHD) → travado no HLS-first via proxy
+//      (mem://constraints/live-pipeline-lock)
+//   2) `multop100.top` (canais adultos) → ExoPlayer não abre este host
+//      (mem://fixes/live-apk-working-baseline)
+//
+// Se o ExoPlayer não emitir READY/PLAY em ~30s, cai automaticamente pro
+// pipeline Web (mesmo caminho de hoje) — sem diagnóstico intrusivo.
+// Web Desktop não é afetado: só liga quando `isNativeAppSync()===true`.
+function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
+  if (isNoNativeFallbackLiveHost(host)) return false;
+  if (isLockedHlsFirstLiveHost(host)) return false;
+  return true;
+}
+
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-apk-native-first";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
