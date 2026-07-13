@@ -1,3 +1,5 @@
+import { isNativeAppSync } from "@/lib/platform";
+
 // =========================================================================
 // Gerenciador central de perfil por host IPTV.
 //
@@ -98,7 +100,6 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
-    forceNativeForLive: true,
   },
   // suportejetflix.site: validado funcional em web desktop (canais + filmes).
   // Mantém proxy ativo (necessário p/ CORS no browser) e prioriza TS original
@@ -253,6 +254,30 @@ if (memory["multop100.top"]?.forceNativeForLive || memory["multop100.top"]?.disa
   memory["multop100.top"] = rest;
   writeStorage(memory);
   console.log("[HOST PROFILE] limpou flags quebradas de multop100.top");
+}
+// Limpeza APK-only: builds anteriores podiam "aprender" ExoPlayer forçado em
+// qualquer host LIVE após uma travada. Isso persiste no celular e faz os canais
+// abrirem pelo caminho nativo que já sabemos ser instável em muitos painéis,
+// enquanto filmes/séries continuam funcionando. Remove apenas essa contaminação
+// no APK; navegador desktop fica intocado.
+if (isNativeAppSync()) {
+  let cleanedApkNativeForce = false;
+  for (const [host, prof] of Object.entries(memory)) {
+    if (!prof?.forceNativeForLive) continue;
+    const {
+      forceNativeForLive: _fn,
+      bypassProxyForLive: _bp,
+      disableHlsConversion: _dh,
+      preferTs: _pt,
+      ...rest
+    } = prof;
+    memory[host] = rest;
+    cleanedApkNativeForce = true;
+  }
+  if (cleanedApkNativeForce) {
+    writeStorage(memory);
+    console.log("[HOST PROFILE] APK limpou forceNativeForLive aprendido automaticamente");
+  }
 }
 // Baseline validada: cdnchurras.space/Space FHD funciona no Web Desktop pelo
 // HLS-first via proxy. Tentativas anteriores de TS-first/webIncompatible/HTTPS
