@@ -7,7 +7,7 @@ TV mode (canvas 1280×720 escalado em `__root.tsx`) só pode ligar para APK nati
 Catálogos Live/Movies/Series renderizam em chunks de 240 via `useProgressive` (sentinel + IntersectionObserver). Nunca voltar a `filtered.map` inline — trava abertura em desktop, Android TV e celular.
 Proxy `/api/stream` NUNCA retorna 5xx: fetch-fail e upstream 5xx são rebaixados para 424. Devolver 502/503/504 dispara runtime-error/tela em branco falsa no preview enquanto o player já está em fallback.
 LIVE pipeline (VideoPlayer.tsx) tem invariantes travadas — ler mem://constraints/live-pipeline-lock ANTES de editar. Violar quebra Space FHD, sexyhot, APK.
-LIVE APK: no celular Android, ExoPlayer nativo é PRIMEIRO por padrão, com fallback silencioso para pipeline Web. Exceções em `shouldPreferNativeOnApkLive()`: multop100.top e cdnchurras.space. Web Desktop não é afetado. Ver mem://constraints/live-apk-web-pipeline.
+LIVE no APK toca pelo pipeline WEB (/api/stream + HLS/mpegts) por padrão. NUNCA reativar ExoPlayer-primeiro global; Exo só via escolha explícita/host opt-in. Ver mem://constraints/live-apk-web-pipeline.
 
 ## Memories
 - [TV mode trigger](mem://constraints/tv-mode-trigger) — condição `isTV` em TV_MODE_SCRIPT; não reincluir heurística de tela grande
