@@ -458,16 +458,8 @@ export function VideoPlayer({
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
 
-  // APK LIVE silent hard-reload: quando o hls.js/mpegts esgota retries de rede
-  // (canal "sai do ar" no APK após oscilação de Wi-Fi/4G ou segmento .ts com
-  // erro), tenta reabrir o canal do zero 1x por janela de 60s SEM mostrar erro.
-  // Gated por isNativeAppSync() -> web desktop nunca é afetado.
-  const apkLiveHardReloadEventsRef = useRef<number[]>([]);
-  const [apkLiveReloadNonce, setApkLiveReloadNonce] = useState(0);
-  useEffect(() => {
-    // Reset da janela quando o src muda (canal novo = zera contador).
-    apkLiveHardReloadEventsRef.current = [];
-  }, [src]);
+
+
 
 
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
