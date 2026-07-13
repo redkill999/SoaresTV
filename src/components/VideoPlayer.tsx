@@ -1515,16 +1515,12 @@ export function VideoPlayer({
         }
         apkLiveStillTicks += 1;
         pushDbg(`LIVE web progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (nativeRuntimeRef.current && apkLiveStillTicks === 2 && !debugPanelOpenRef.current) {
-          pushDbg("APK LIVE auto diagnóstico por freeze detectado");
-          openManualDebug("apk-live-freeze");
-        }
         if (apkLiveStillTicks >= 1) {
           if (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
             softRecoverApkLiveFreeze("silent-currentTime");
           }
         }
-        if (apkLiveStillTicks >= 4) {
+        if (apkLiveStillTicks >= 6 && (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
             if (!usedNative && !cancelled && !nativeFallbackStarted) {
               reconnectCurrentLiveWeb("silent-currentTime:hard");
@@ -1638,7 +1634,7 @@ export function VideoPlayer({
         // frame chega em <12s com o baseline atual, promove o host para 3/10
         // nas próximas aberturas. Se der erro fatal antes do primeiro frame
         // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
-        if (isLive && !lockedHlsFirstLive && liveHost) {
+        if (isLive && !lockedHlsFirstLive && liveHost && !nativeRuntimeRef.current) {
           const learnFastStart = () => {
             if (sawFirstFrameThisAttach) return;
             sawFirstFrameThisAttach = true;
