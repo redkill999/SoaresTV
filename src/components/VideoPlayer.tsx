@@ -458,6 +458,18 @@ export function VideoPlayer({
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
 
+  // APK LIVE silent hard-reload: quando o hls.js/mpegts esgota retries de rede
+  // (canal "sai do ar" no APK após oscilação de Wi-Fi/4G ou segmento .ts com
+  // erro), tenta reabrir o canal do zero 1x por janela de 60s SEM mostrar erro.
+  // Gated por isNativeAppSync() -> web desktop nunca é afetado.
+  const apkLiveHardReloadEventsRef = useRef<number[]>([]);
+  const [apkLiveReloadNonce, setApkLiveReloadNonce] = useState(0);
+  useEffect(() => {
+    // Reset da janela quando o src muda (canal novo = zera contador).
+    apkLiveHardReloadEventsRef.current = [];
+  }, [src]);
+
+
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
@@ -1364,6 +1376,30 @@ export function VideoPlayer({
         }
       } catch { /* noop */ }
     };
+    // APK LIVE only: última linha de defesa antes de mostrar erro de rede.
+    // Retorna true se disparou hard-reload silencioso (chamador deve NÃO
+    // chamar setError). Web desktop: retorna false imediatamente.
+    const tryApkLiveHardReload = (reason: string): boolean => {
+      if (!isLive) return false;
+      if (!nativeRuntimeRef.current) return false;
+      if (cancelled) return false;
+      const now = Date.now();
+      const arr = apkLiveHardReloadEventsRef.current;
+      while (arr.length && now - arr[0] > 60_000) arr.shift();
+      if (arr.length >= 1) {
+        pushDbg(`APK LIVE hard-reload SKIP (limite 1/60s) reason=${reason}`);
+        return false;
+      }
+      arr.push(now);
+      pushDbg(`APK LIVE hard-reload reason=${reason} -> remount effect`);
+      // Bump do nonce força o useEffect a rodar do zero, reconstruindo
+      // playbackCandidates e reabrindo o stream sem tocar em nada mais.
+      setTimeout(() => {
+        if (cancelled) return;
+        setApkLiveReloadNonce((n) => n + 1);
+      }, 500);
+      return true;
+    };
     const softRecoverApkLiveFreeze = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       const now = Date.now();
@@ -1910,6 +1946,8 @@ export function VideoPlayer({
                         "Este provedor não permite reprodução de canais AO VIVO no navegador. " +
                         "Filmes e séries funcionam normalmente. Para assistir aos canais, use o app Android/TV."
                       );
+                    } else if (tryApkLiveHardReload("hls-net-exhausted")) {
+                      return;
                     } else {
                       setError("Não foi possível reproduzir este canal. A URL do stream foi recusada pelo servidor.");
                     }
@@ -1965,6 +2003,7 @@ export function VideoPlayer({
               hls?.destroy();
               hls = null;
               if (!triedDirect) playDirect();
+              else if (tryApkLiveHardReload("hls-default-fatal")) return;
               else setError("Não foi possível reproduzir este canal.");
           }
         });
@@ -2017,7 +2056,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic, openManualDebug]);
+  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic, openManualDebug, apkLiveReloadNonce]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
