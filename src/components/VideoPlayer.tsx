@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-apk-native-first";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-apk-web-first";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -462,16 +462,13 @@ export function VideoPlayer({
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
 
-  // APK-only: tenta ExoPlayer PRIMEIRO para LIVE no celular. Exclui hosts
-  // conhecidos como incompatíveis (multop100, cdnchurras). Se falhar, o
-  // watchdog cai silenciosamente para o pipeline Web.
-  const apkLiveAutoNative =
-    isLiveSrc &&
-    isNativeAppSync() &&
-    !srcHostProfile.forceNativeForLive &&
-    !mandatoryNativeLive &&
-    settings.defaultPlayer !== "exo" &&
-    shouldPreferNativeOnApkLive(hostOf(src));
+  // APK LIVE: pipeline WEB é o baseline que funciona (proxy /api/stream + HLS).
+  // Ver mem://fixes/live-apk-working-baseline. ExoPlayer só entra para LIVE
+  // quando o usuário escolheu defaultPlayer="exo" ou o host tem
+  // forceNativeForLive/mandatoryNativeLive — nunca como default no APK.
+  // Tentar ExoPlayer-primeiro quebrou os canais na maioria dos painéis
+  // (build v6). Voltando ao comportamento estável do baseline.
+  const apkLiveAutoNative = false;
   const apkLiveAutoNativeRef = useRef(apkLiveAutoNative);
   useEffect(() => { apkLiveAutoNativeRef.current = apkLiveAutoNative; }, [apkLiveAutoNative]);
 

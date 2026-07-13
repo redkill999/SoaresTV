@@ -1,55 +1,41 @@
 ---
-name: LIVE APK strategy (native-first with web fallback)
-description: Como LIVE roda no APK Android — ExoPlayer primeiro com fallback silencioso para pipeline Web
+name: LIVE APK strategy (WEB pipeline first — baseline estável)
+description: LIVE no APK toca pelo pipeline Web (/api/stream + HLS). ExoPlayer só via opt-in.
 type: constraint
 ---
 
-## Estado atual (a partir de 2026-07-13)
+## Estado atual (a partir de 2026-07-13, build v7)
 
-**Correção do bug "canais LIVE não abrem no APK celular":** no APK Android,
-LIVE agora tenta ExoPlayer nativo PRIMEIRO. Se ExoPlayer não emitir READY/PLAY
-em 25s (ou emitir erro explícito), o handler cai **silenciosamente** para o
-pipeline Web (hls.js/mpegts + `/api/stream`) — sem mostrar diagnóstico.
+**REVERTIDO** o experimento "ExoPlayer primeiro no APK LIVE" (build v6).
+Ele quebrou os canais na maioria dos painéis: usuário confirmou que apenas
+filmes e séries rodavam no APK, canais não abriam. Voltamos ao baseline
+documentado em `mem://fixes/live-apk-working-baseline`.
 
-Motivo: hls.js dentro da WebView Android era instável para muitos painéis
-(canais simplesmente não abriam). ExoPlayer/Media3 toca MPEG-TS/HLS
-nativamente e é o padrão dos apps IPTV Android (XCIPTV, TiviMate).
+## Regra atual
 
-## Regras invioláveis
+- `apkLiveAutoNative = false` (constante). LIVE no APK usa o pipeline WEB
+  (proxy `/api/stream` + hls.js/mpegts.js dentro da WebView).
+- ExoPlayer nativo entra em LIVE **somente** quando:
+  1. `settings.defaultPlayer === "exo"` (escolha explícita do usuário), OU
+  2. `srcHostProfile.forceNativeForLive === true` (opt-in por host), OU
+  3. `isMandatoryNativeLiveHost(host)` (hoje: nenhum host — a função retorna
+     `false`, curto-circuito de segurança).
+- Web Desktop segue totalmente isolado (`isNativeAppSync()` continua sendo o
+  gate para qualquer alteração APK-específica em outras partes do player).
+- VOD (filme/série) no APK também usa pipeline web por default e continua
+  intocado.
 
-1. **Web Desktop NÃO é afetado.** `apkLiveAutoNative` só liga quando
-   `isNativeAppSync()===true`. Fora do APK, `shouldUseNativePlayer` continua
-   ligando só via `defaultPlayer='exo'` ou `forceNativeForLive` do host.
+## O que NÃO fazer
 
-2. **Exceções obrigatórias para o auto-native (mantidas no pipeline Web):**
-   - `cdnchurras.space` (Space FHD) → `isLockedHlsFirstLiveHost()`
-     (mem://constraints/live-pipeline-lock)
-   - `multop100.top` (canais adultos) → `isNoNativeFallbackLiveHost()`
-     (mem://fixes/live-apk-working-baseline)
+- Não reativar `apkLiveAutoNative` com condição derivada de `isNativeAppSync()`
+  sem ter uma prova concreta (com o usuário) de que o host funciona no
+  ExoPlayer. O plugin `capacitor-video-player` falha silenciosamente em muitos
+  painéis IPTV; o watchdog leva 25s pra cair e nesse intervalo o pipeline web
+  fica atrasado.
+- Não remover as helpers `shouldPreferNativeOnApkLive` /
+  `isNoNativeFallbackLiveHost` — elas ainda servem para bloquear ExoPlayer em
+  hosts problemáticos quando o usuário liga `forceNativeForLive` manualmente
+  ou seleciona `defaultPlayer="exo"`.
+- Marcador de build: `LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-apk-web-first"`.
+- APK é casca do site publicado: fix só chega ao celular depois de publicar.
 
-   Essas exclusões vivem em `shouldPreferNativeOnApkLive()` em
-   `src/components/VideoPlayer.tsx`. Adicionar hosts que quebram no
-   ExoPlayer aqui, nunca remover os existentes.
-
-3. **Fallback silencioso obrigatório.** Nos handlers do ExoPlayer LIVE
-   (erro explícito, `openNative` falho, watchdog):
-   - Se `apkLiveAutoNativeRef.current === true` → `setPlayerMode("web")`
-     + `setError(null)`. Deixa o `useEffect` do pipeline Web rodar.
-   - Caso contrário (forceNativeForLive, defaultPlayer='exo', mandatory)
-     → `showStreamDiagnostic(...)` como antes.
-
-   NUNCA remover a checagem `autoFallback` — sem ela, hosts com problemas
-   no ExoPlayer (potencialmente novos) mostram diagnóstico em vez de
-   tocarem via proxy.
-
-4. **`settings.defaultPlayer === "exo"` continua forçando ExoPlayer para
-   tudo (LIVE e VOD) sem fallback silencioso** — é escolha explícita do
-   usuário, respeita.
-
-## Antes de editar
-
-- Reler `mem://constraints/live-pipeline-lock` e
-  `mem://fixes/live-apk-working-baseline`.
-- Se ao adicionar um host à lista `isNoNativeFallbackLiveHost`, testar que
-  ele volta a tocar via pipeline Web depois do watchdog.
-- Marcador de build: `LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-apk-native-first"`.
