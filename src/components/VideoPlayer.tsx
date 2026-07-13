@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-apk-native-first";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-apk-web-first";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
