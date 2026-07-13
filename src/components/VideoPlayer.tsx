@@ -2053,7 +2053,7 @@ export function VideoPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic, openManualDebug, apkLiveReloadNonce]);
+  }, [src, kind, playerMode, holdNativeDebug, pushDbg, openNative, shouldUseNativePlayer, showStreamDiagnostic, openManualDebug]);
 
   // No APK Android, força paisagem ao entrar em tela cheia. Ao sair, NÃO
   // desbloqueia — o APK inteiro precisa permanecer em landscape (manifest +
