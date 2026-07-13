@@ -792,27 +792,35 @@ export function VideoPlayer({
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
-        pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
+        const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+        pushDbg(`ETAPA 9 native init falhou/timeout; autoFallback=${autoFallback}`);
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        if (autoFallback) {
+          setError(null);
+        } else {
+          showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        }
         return;
       }
       if (ok && isLiveSrc) {
+        // Watchdog auto-native no APK: 25s (mais curto que 35s do modo forced,
+        // porque temos fallback silencioso para o pipeline Web).
+        const watchdogMs = apkLiveAutoNativeRef.current ? 25_000 : 35_000;
         nativeLiveWatchdogRef.current = setTimeout(() => {
           if (cancelled || !nativeOpenedRef.current || nativeLivePlayedRef.current) return;
-          pushDbg("ETAPA 9 native watchdog: sem evento READY/PLAY; fechando ExoPlayer para mostrar diagnóstico");
-          // FIX E: stopNative() é fire-and-forget — closeFullscreen() pode travar
-          // no Android (ExoPlayer em loading state). Disparamos setPlayerMode/setError
-          // imediatamente para o React atualizar o DOM; o timer de segurança de 4 s
-          // garante que a segunda chamada de stopNative() tente novamente caso o
-          // overlay nativo não tenha fechado na primeira tentativa.
+          const autoFallback = apkLiveAutoNativeRef.current;
+          pushDbg(`ETAPA 9 native watchdog: sem READY/PLAY em ${watchdogMs}ms autoFallback=${autoFallback}`);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          if (autoFallback) {
+            setError(null);
+          } else {
+            showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          }
           void stopNative().catch(() => undefined);
           setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
-        }, 35_000);
+        }, watchdogMs);
       }
       if (cancelled) {
         if (ok) void stopNative();
