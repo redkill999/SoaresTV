@@ -1376,6 +1376,30 @@ export function VideoPlayer({
         }
       } catch { /* noop */ }
     };
+    // APK LIVE only: última linha de defesa antes de mostrar erro de rede.
+    // Retorna true se disparou hard-reload silencioso (chamador deve NÃO
+    // chamar setError). Web desktop: retorna false imediatamente.
+    const tryApkLiveHardReload = (reason: string): boolean => {
+      if (!isLive) return false;
+      if (!nativeRuntimeRef.current) return false;
+      if (cancelled) return false;
+      const now = Date.now();
+      const arr = apkLiveHardReloadEventsRef.current;
+      while (arr.length && now - arr[0] > 60_000) arr.shift();
+      if (arr.length >= 1) {
+        pushDbg(`APK LIVE hard-reload SKIP (limite 1/60s) reason=${reason}`);
+        return false;
+      }
+      arr.push(now);
+      pushDbg(`APK LIVE hard-reload reason=${reason} -> remount effect`);
+      // Bump do nonce força o useEffect a rodar do zero, reconstruindo
+      // playbackCandidates e reabrindo o stream sem tocar em nada mais.
+      setTimeout(() => {
+        if (cancelled) return;
+        setApkLiveReloadNonce((n) => n + 1);
+      }, 500);
+      return true;
+    };
     const softRecoverApkLiveFreeze = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       const now = Date.now();
