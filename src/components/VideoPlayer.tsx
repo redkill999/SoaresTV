@@ -1574,14 +1574,11 @@ export function VideoPlayer({
           // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
           // mantém latência aceitável (~12s do edge) sem travar abertura.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          // APK-only: buffer LIVE mais folgado para absorver jitter de 4G/Wi-Fi
-          // do celular (usuário reportou micro-travadas). Web desktop mantém
-          // os valores originais — não mexer no que já funciona.
-          backBufferLength: isLive ? (isNativeAppSync() ? 30 : 15) : 30,
-          maxBufferLength: isLive ? (isNativeAppSync() ? 60 : 45) : 60,
-          maxMaxBufferLength: isLive ? (isNativeAppSync() ? 120 : 90) : 180,
+          backBufferLength: isLive ? 15 : 30,
+          maxBufferLength: isLive ? 45 : 60,
+          maxMaxBufferLength: isLive ? 90 : 180,
           maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
-          maxBufferHole: isLive ? (isNativeAppSync() ? 2 : 1.5) : 0.5,
+          maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
