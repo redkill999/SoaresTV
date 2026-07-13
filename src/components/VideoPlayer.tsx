@@ -3,6 +3,7 @@ import Hls from "hls.js";
 import { Bug, Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
+import { isNativeAppSync } from "@/lib/platform";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
