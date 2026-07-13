@@ -3,6 +3,7 @@ import Hls from "hls.js";
 import { Bug, Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from "lucide-react";
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
+import { isNativeAppSync } from "@/lib/platform";
 import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
@@ -321,7 +322,27 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v5";
+// APK-only: no celular Android, o pipeline Web (hls.js/mpegts dentro da WebView
+// + proxy /api/stream) é frágil para LIVE — muitos canais simplesmente não
+// abrem. ExoPlayer nativo (via capacitor-video-player) toca MPEG-TS/HLS direto
+// sem MSE e é o padrão de apps IPTV Android (XCIPTV, TiviMate).
+//
+// Estratégia: no APK, tentar ExoPlayer PRIMEIRO para LIVE — EXCETO:
+//   1) `cdnchurras.space` (Space FHD) → travado no HLS-first via proxy
+//      (mem://constraints/live-pipeline-lock)
+//   2) `multop100.top` (canais adultos) → ExoPlayer não abre este host
+//      (mem://fixes/live-apk-working-baseline)
+//
+// Se o ExoPlayer não emitir READY/PLAY em ~30s, cai automaticamente pro
+// pipeline Web (mesmo caminho de hoje) — sem diagnóstico intrusivo.
+// Web Desktop não é afetado: só liga quando `isNativeAppSync()===true`.
+function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
+  if (isNoNativeFallbackLiveHost(host)) return false;
+  if (isLockedHlsFirstLiveHost(host)) return false;
+  return true;
+}
+
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v6-apk-native-first";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -440,6 +461,19 @@ export function VideoPlayer({
   const srcHostProfile = useMemo(() => getHostProfile(hostOf(src)), [src]);
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
+
+  // APK-only: tenta ExoPlayer PRIMEIRO para LIVE no celular. Exclui hosts
+  // conhecidos como incompatíveis (multop100, cdnchurras). Se falhar, o
+  // watchdog cai silenciosamente para o pipeline Web.
+  const apkLiveAutoNative =
+    isLiveSrc &&
+    isNativeAppSync() &&
+    !srcHostProfile.forceNativeForLive &&
+    !mandatoryNativeLive &&
+    settings.defaultPlayer !== "exo" &&
+    shouldPreferNativeOnApkLive(hostOf(src));
+  const apkLiveAutoNativeRef = useRef(apkLiveAutoNative);
+  useEffect(() => { apkLiveAutoNativeRef.current = apkLiveAutoNative; }, [apkLiveAutoNative]);
 
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
   // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
@@ -581,15 +615,17 @@ export function VideoPlayer({
         if (nativeEnded || nativeExit) {
           stopNativeLiveStallWatchdog();
         }
-        // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo (que
-        // estava cobrindo o WebView) e mostra o painel de diagnóstico em tela.
+        // Se o ExoPlayer emitir erro explícito, fecha o overlay nativo. No
+        // modo APK auto-native (LIVE default), cai silenciosamente para o
+        // pipeline Web em vez de mostrar diagnóstico.
         if (
           name === "jeepCapVideoPlayerError" ||
           name === "initPlayer:false" ||
           name === "exception" ||
           /error|fail/i.test(name)
         ) {
-          pushDbg(`ETAPA 9 native error -> fechando overlay nativo para exibir diag`);
+          const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+          pushDbg(`ETAPA 9 native error -> autoFallback=${autoFallback}`);
           if (nativeLiveWatchdogRef.current) {
             clearTimeout(nativeLiveWatchdogRef.current);
             nativeLiveWatchdogRef.current = null;
@@ -598,7 +634,11 @@ export function VideoPlayer({
           void stopNative().catch(() => undefined);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          if (autoFallback) {
+            setError(null);
+          } else {
+            showStreamDiagnostic("Não foi possível reproduzir este canal (ExoPlayer). Veja o diagnóstico abaixo.");
+          }
         }
       },
       onExit: (pos) => {
@@ -657,14 +697,13 @@ export function VideoPlayer({
 
 
 
-  // REVERT (estado que funcionava no APK): LIVE toca pelo pipeline web
-  // (proxy /api/stream + hls.js/mpegts) dentro da WebView. ExoPlayer nativo
-  // só é usado quando o usuário escolhe "exo" nas configurações ou quando o
-  // perfil do host exige (forceNativeForLive). Forçar ExoPlayer para todo
-  // LIVE foi o que quebrou os canais no APK.
+  // shouldUseNativePlayer: inclui ExoPlayer por padrão no APK LIVE
+  // (apkLiveAutoNative, declarado acima). Se ExoPlayer não abrir, watchdog cai
+  // pro pipeline Web.
   const shouldUseNativePlayer =
     settings.defaultPlayer === "exo" ||
-    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive));
+    (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive)) ||
+    apkLiveAutoNative;
 
 
 
@@ -753,27 +792,35 @@ export function VideoPlayer({
       pushDbg(`ETAPA 4 native openNative=${ok}`);
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
-        pushDbg("ETAPA 9 native init falhou/timeout; exibindo diagnóstico sem cair em loop");
+        const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+        pushDbg(`ETAPA 9 native init falhou/timeout; autoFallback=${autoFallback}`);
         nativeOpenedRef.current = false;
         setPlayerMode("web");
-        showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        if (autoFallback) {
+          setError(null);
+        } else {
+          showStreamDiagnostic("Falha ao abrir o ExoPlayer. Veja o diagnóstico abaixo.");
+        }
         return;
       }
       if (ok && isLiveSrc) {
+        // Watchdog auto-native no APK: 25s (mais curto que 35s do modo forced,
+        // porque temos fallback silencioso para o pipeline Web).
+        const watchdogMs = apkLiveAutoNativeRef.current ? 25_000 : 35_000;
         nativeLiveWatchdogRef.current = setTimeout(() => {
           if (cancelled || !nativeOpenedRef.current || nativeLivePlayedRef.current) return;
-          pushDbg("ETAPA 9 native watchdog: sem evento READY/PLAY; fechando ExoPlayer para mostrar diagnóstico");
-          // FIX E: stopNative() é fire-and-forget — closeFullscreen() pode travar
-          // no Android (ExoPlayer em loading state). Disparamos setPlayerMode/setError
-          // imediatamente para o React atualizar o DOM; o timer de segurança de 4 s
-          // garante que a segunda chamada de stopNative() tente novamente caso o
-          // overlay nativo não tenha fechado na primeira tentativa.
+          const autoFallback = apkLiveAutoNativeRef.current;
+          pushDbg(`ETAPA 9 native watchdog: sem READY/PLAY em ${watchdogMs}ms autoFallback=${autoFallback}`);
           nativeOpenedRef.current = false;
           setPlayerMode("web");
-          showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          if (autoFallback) {
+            setError(null);
+          } else {
+            showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
+          }
           void stopNative().catch(() => undefined);
           setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
-        }, 35_000);
+        }, watchdogMs);
       }
       if (cancelled) {
         if (ok) void stopNative();
