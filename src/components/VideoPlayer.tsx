@@ -1392,6 +1392,7 @@ export function VideoPlayer({
       pushDbg(`APK LIVE host ${h ?? "?"} não persiste forceNativeForLive automático reason=${reason}`);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
+      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
       markCurrentLiveHostNativePreferred(reason);
       pushDbg(`APK LIVE freeze: mantendo pipeline Web, sem fallback automático para ExoPlayer reason=${reason}`);
       return false;
