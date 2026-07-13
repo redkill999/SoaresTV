@@ -1424,7 +1424,7 @@ export function VideoPlayer({
         return;
       }
       const shouldFallbackNow =
-        !shouldUseNativePlayer && (liveEndedOnApkWeb || apkLiveEndedRecoveries >= 2);
+        !shouldUseNativePlayer && (liveEndedOnApkWeb || apkLiveEndedRecoveries >= 3);
       if (shouldFallbackNow) {
         void fallbackToNativeFromApkFreeze(
           `live-ended-${source}${liveEndedOnApkWeb ? "-apkweb" : "-repeated"}`,
@@ -1507,7 +1507,7 @@ export function VideoPlayer({
         if (apkLiveStillTicks >= 1) {
           softRecoverApkLiveFreeze("silent-currentTime");
         }
-        if (apkLiveStillTicks >= (nativeRuntimeRef.current ? 2 : 4)) {
+        if (apkLiveStillTicks >= 4) {
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
             if (!usedNative && !cancelled && !nativeFallbackStarted) {
               reconnectCurrentLiveWeb("silent-currentTime:hard");
