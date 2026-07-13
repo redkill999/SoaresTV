@@ -56,6 +56,15 @@ export type HostProfile = {
    * do proxy edge. Web mostra aviso claro; APK ignora (ExoPlayer funciona).
    */
   webIncompatibleLive?: boolean;
+  /**
+   * APENAS LIVE/Web: host já foi observado abrindo LIVE rapidamente (primeiro
+   * frame < 12s) com o pipeline HLS padrão. Nas próximas aberturas o VideoPlayer
+   * usa `liveSyncDurationCount: 3 / liveMaxLatencyDurationCount: 10` (default do
+   * hls.js) em vez do baseline conservador 4/12, cortando ~5s no start-up.
+   * Se der erro fatal antes do primeiro frame, o flag é limpo automaticamente
+   * (aprende-desaprende). NUNCA aplicado a hosts `isLockedHlsFirstLiveHost`.
+   */
+  liveFastStart?: boolean;
   /** Última atualização (ms epoch). */
   updatedAt?: number;
 
