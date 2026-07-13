@@ -1389,50 +1389,12 @@ export function VideoPlayer({
     const markCurrentLiveHostNativePreferred = (reason: string) => {
       if (!isLive || !nativeRuntimeRef.current) return;
       const h = hostOf(workingSrc);
-      if (isNoNativeFallbackLiveHost(h)) {
-        pushDbg(`APK LIVE host ${h} não usa forceNativeForLive reason=${reason}`);
-        return;
-      }
-      if (!h || getHostProfile(h).forceNativeForLive) return;
-      updateHostProfile(h, {
-        bypassProxyForLive: true,
-        disableHlsConversion: true,
-        preferTs: true,
-        forceNativeForLive: true,
-      });
-      pushDbg(`APK LIVE host ${h} marcado forceNativeForLive=true reason=${reason}`);
+      pushDbg(`APK LIVE host ${h ?? "?"} não persiste forceNativeForLive automático reason=${reason}`);
     };
     const fallbackToNativeFromApkFreeze = async (reason: string) => {
-      if (isNoNativeFallbackLiveHost(hostOf(workingSrc))) return false;
-      if (nativeFallbackStarted || cancelled || !isLive || !nativeRuntimeRef.current || shouldUseNativePlayer) return false;
-      nativeFallbackStarted = true;
-      clearApkLiveFreezeTimer();
-      clearApkLiveProgressTimer();
       markCurrentLiveHostNativePreferred(reason);
-      pushDbg(`APK LIVE freeze fallback -> ExoPlayer reason=${reason}`);
-      detachStallListeners?.();
-      if (hls) {
-        try { hls.destroy(); } catch { /* noop */ }
-        hls = null;
-      }
-      destroyTsPlayer();
-      try { video.pause(); } catch { /* noop */ }
-      try { video.removeAttribute("src"); video.load(); } catch { /* noop */ }
-      const ok = await openNative();
-      pushDbg(`APK LIVE freeze fallback openNative=${ok}`);
-      if (cancelled) {
-        if (ok) void stopNative().catch(() => undefined);
-        return ok;
-      }
-      if (ok) {
-        nativeOpenedRef.current = true;
-        setPlayerMode("native");
-      } else {
-        nativeFallbackStarted = false;
-        setPlayerMode("web");
-        showStreamDiagnostic("Canal LIVE travou no player interno do APK e o ExoPlayer não abriu. Veja o diagnóstico abaixo.");
-      }
-      return ok;
+      pushDbg(`APK LIVE freeze: mantendo pipeline Web, sem fallback automático para ExoPlayer reason=${reason}`);
+      return false;
     };
     const handleLiveEndedState = (source: "event" | "poll") => {
       if (!isLive || cancelled || nativeFallbackStarted) return;
