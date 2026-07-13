@@ -1651,6 +1651,31 @@ export function VideoPlayer({
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
+        // Aprendizado fast-start (LIVE, hosts NÃO travados): se o primeiro
+        // frame chega em <12s com o baseline atual, promove o host para 3/10
+        // nas próximas aberturas. Se der erro fatal antes do primeiro frame
+        // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
+        if (isLive && !lockedHlsFirstLive && liveHost) {
+          const learnFastStart = () => {
+            if (sawFirstFrameThisAttach) return;
+            sawFirstFrameThisAttach = true;
+            const elapsed = Date.now() - attachStartedAt;
+            if (elapsed < 12_000 && !liveHostProfile.liveFastStart) {
+              pushDbg(`ETAPA 8.5 fast-start APRENDIDO host=${liveHost} elapsed=${elapsed}ms`);
+              updateHostProfile(liveHost, { liveFastStart: true });
+            }
+          };
+          video.addEventListener("playing", learnFastStart, { once: true });
+          hls.on(Hls.Events.ERROR, (_e, d) => {
+            if (!d.fatal || sawFirstFrameThisAttach) return;
+            if (liveHostProfile.liveFastStart) {
+              pushDbg(`ETAPA 8.5 fast-start REVERTIDO host=${liveHost} (erro fatal antes do primeiro frame)`);
+              updateHostProfile(liveHost, { liveFastStart: false });
+            }
+          });
+        }
+
+
         // Watchdog LIVE: se o manifest não parsear em alguns segundos (host lento,
         // mixed-content silencioso, IP bloqueado sem devolver 4xx), destrói o HLS
         // e avança para o próximo candidato. Para o host travado em HLS-first,
