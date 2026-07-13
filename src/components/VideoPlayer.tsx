@@ -1589,6 +1589,16 @@ export function VideoPlayer({
       triedUrls.add(normUrl(url));
       pushDbg(`attachHls url=${maskIptvUrl(url)}`);
 
+      // Aprendizado de fast-start: hosts que já provaram abrir rápido usam
+      // 3/10 (default do hls.js), cortando ~5s do start-up. Hosts travados
+      // (cdnchurras.space) NUNCA participam — a invariante 4/12 é sagrada.
+      const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart;
+      const liveSyncCount = canFastStart ? 3 : 4;
+      const liveMaxLatCount = canFastStart ? 10 : 12;
+      const attachStartedAt = Date.now();
+      let sawFirstFrameThisAttach = false;
+      pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
+
       if (Hls.isSupported()) {
         hls = new Hls({
           enableWorker: true,
@@ -1613,9 +1623,10 @@ export function VideoPlayer({
           fragLoadingTimeOut: 20_000,
           manifestLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
           levelLoadingTimeOut: lockedHlsFirstLive ? 30_000 : 15_000,
-          // Baseline validada: 4/12. Reduzir causou canais pararem de abrir.
-          liveSyncDurationCount: 4,
-          liveMaxLatencyDurationCount: 12,
+          // Baseline validada: 4/12 (locked ou primeira execução). Após um
+          // primeiro frame rápido, o host é promovido para 3/10.
+          liveSyncDurationCount: liveSyncCount,
+          liveMaxLatencyDurationCount: liveMaxLatCount,
 
           // Live: começa pelo nível mais baixo e sem teste de banda — muitos
           // servidores IPTV não respondem ao probe de bandwidth do hls.js
