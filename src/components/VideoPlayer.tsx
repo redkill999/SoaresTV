@@ -926,6 +926,11 @@ export function VideoPlayer({
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
     const sourceFormat = sourceIsHls ? "hls" : sourceIsTs ? "ts" : "auto";
+    // APK LIVE: quando o usuário não forçou TS, preferimos HLS mesmo que o
+    // perfil antigo do host tenha aprendido TS-only. MPEG-TS via WebView/mpegts
+    // abre muitos canais, mas é bem mais sensível a microtravadas no celular.
+    // Mantém TS como fallback — não altera VOD nem navegador desktop.
+    const apkLivePreferHls = isLive && nativeRuntimeRef.current && compat.streamFormat !== "ts";
     // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
@@ -936,7 +941,7 @@ export function VideoPlayer({
       compat.streamFormat === "ts" ||
       compat.streamFormat === "mp4" ||
       webDesktopPreferTsLive ||
-      (isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
+      (!apkLivePreferHls && isLive && !!liveHostProfile.disableHlsConversion && !sourceIsHls) ||
       (compat.streamFormat == null && (auto === "mp4" || auto === "mkv"))
     );
 
@@ -1004,7 +1009,7 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
-      if (!isLive || (!lockedHlsFirstLive && (liveHostProfile.preferTs || webDesktopPreferTsLive))) return candidates;
+      if (!isLive || (!lockedHlsFirstLive && !apkLivePreferHls && (liveHostProfile.preferTs || webDesktopPreferTsLive))) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
       // flipex.pro redireciona para CDN sem CORS e isso fazia o hls.js morrer
@@ -1045,7 +1050,7 @@ export function VideoPlayer({
         //   tenta a URL direta como último recurso antes de "FIM sem candidatos"
         //   (ETAPA 8.6). VOD mantém o fluxo próprio acima.
 
-    pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs}`);
+    pushDbg(`ETAPA 4 sourceFormat=${sourceFormat} originalUrlPreserved=${workingSrc === src} profileDisableHlsConversion=${!!liveHostProfile.disableHlsConversion} profilePreferTs=${!!liveHostProfile.preferTs} apkPreferHls=${apkLivePreferHls}`);
     pushDbg(`ETAPA 5 isLive=${isLive} isVod=${isVod} sourceIsHls=${sourceIsHls} skipHls=${skipHls} bypassProxy=${liveBypassProxy} hlsLock=${lockedHlsFirstLive} httpsPort=${liveHostProfile.httpsPort ?? "-"} httpsDirect=${httpsPortCandidates.length}`);
     pushDbg(`ETAPA 6 hlsCandidate=${hlsCandidate ? maskIptvUrl(hlsCandidate) : "-"}`);
     pushDbg(`ETAPA 7 candidates(${playbackCandidates.length})=${playbackCandidates.slice(0,4).map(maskIptvUrl).join(" | ")}`);
