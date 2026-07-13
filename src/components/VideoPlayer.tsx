@@ -1378,10 +1378,19 @@ export function VideoPlayer({
     const softRecoverApkLiveFreeze = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       const now = Date.now();
-      if (now - apkLiveLastSoftRecoverAt < 4_000) return;
+      if (now - apkLiveLastSoftRecoverAt < 8_000) return;
       apkLiveLastSoftRecoverAt = now;
       apkLiveSoftRecoveries += 1;
-      pushDbg(`LIVE web soft recover #${apkLiveSoftRecoveries} reason=${reason} ready=${video.readyState} ahead=${bufferedAhead().toFixed(2)}`);
+      const ahead = bufferedAhead();
+      pushDbg(`LIVE web soft recover #${apkLiveSoftRecoveries} reason=${reason} ready=${video.readyState} ahead=${ahead.toFixed(2)}`);
+      // Se ainda existe buffer suficiente, não mexe no MediaSource: muitas
+      // microtravadas do APK são apenas jitter curto e startLoad/recoverMediaError
+      // agressivo vira corte perceptível. Só recupera de fato quando o buffer
+      // acabou ou o elemento perdeu o frame atual.
+      if (ahead >= 1.25 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        void video.play().catch(() => undefined);
+        return;
+      }
       try { hls?.startLoad(); } catch { /* noop */ }
       try {
         if (hls && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) hls.recoverMediaError();
@@ -1511,7 +1520,9 @@ export function VideoPlayer({
           openManualDebug("apk-live-freeze");
         }
         if (apkLiveStillTicks >= 1) {
-          softRecoverApkLiveFreeze("silent-currentTime");
+          if (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            softRecoverApkLiveFreeze("silent-currentTime");
+          }
         }
         if (apkLiveStillTicks >= 4) {
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
@@ -1563,9 +1574,10 @@ export function VideoPlayer({
       // Aprendizado de fast-start: hosts que já provaram abrir rápido usam
       // 3/10 (default do hls.js), cortando ~5s do start-up. Hosts travados
       // (cdnchurras.space) NUNCA participam — a invariante 4/12 é sagrada.
-      const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart;
-      const liveSyncCount = canFastStart ? 3 : 4;
-      const liveMaxLatCount = canFastStart ? 10 : 12;
+      const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart && !nativeRuntimeRef.current;
+      const apkStableLive = isLive && nativeRuntimeRef.current;
+      const liveSyncCount = apkStableLive ? 6 : canFastStart ? 3 : 4;
+      const liveMaxLatCount = apkStableLive ? 18 : canFastStart ? 10 : 12;
       const attachStartedAt = Date.now();
       let sawFirstFrameThisAttach = false;
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
@@ -1579,9 +1591,9 @@ export function VideoPlayer({
           // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
           // mantém latência aceitável (~12s do edge) sem travar abertura.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          backBufferLength: isLive ? 15 : 30,
-          maxBufferLength: isLive ? 45 : 60,
-          maxMaxBufferLength: isLive ? 90 : 180,
+          backBufferLength: isLive ? (apkStableLive ? 20 : 15) : 30,
+          maxBufferLength: isLive ? (apkStableLive ? 60 : 45) : 60,
+          maxMaxBufferLength: isLive ? (apkStableLive ? 120 : 90) : 180,
           maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
           maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
@@ -1605,11 +1617,11 @@ export function VideoPlayer({
           startLevel: isLive ? 0 : -1,
           testBandwidth: !isLive,
           startFragPrefetch: true,
-          abrEwmaDefaultEstimate: 1_000_000,
-          abrBandWidthFactor: 0.8,
-          abrBandWidthUpFactor: 0.7,
-          maxStarvationDelay: 4,
-          maxLoadingDelay: 4,
+          abrEwmaDefaultEstimate: apkStableLive ? 650_000 : 1_000_000,
+          abrBandWidthFactor: apkStableLive ? 0.7 : 0.8,
+          abrBandWidthUpFactor: apkStableLive ? 0.6 : 0.7,
+          maxStarvationDelay: apkStableLive ? 8 : 4,
+          maxLoadingDelay: apkStableLive ? 8 : 4,
           capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
@@ -1835,7 +1847,7 @@ export function VideoPlayer({
                 const isAuthFail = httpCode === 401 || httpCode === 403;
                 // 404/410 no .m3u8 = host não fornece HLS. Memoriza para
                 // próximos canais desse provedor pularem a conversão.
-                if (!lockedHlsFirstLive && (httpCode === 404 || httpCode === 410) && hlsCandidate) {
+                if (!nativeRuntimeRef.current && !lockedHlsFirstLive && (httpCode === 404 || httpCode === 410) && hlsCandidate) {
                   const h = hostOf(workingSrc);
                   if (h) rememberHlsUnsupported(h);
                 }
