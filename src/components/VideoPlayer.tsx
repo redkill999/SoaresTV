@@ -462,6 +462,19 @@ export function VideoPlayer({
   const isLiveSrc = kind === "live" || /\/live\/[^/]+\/[^/]+\//i.test(src);
   const mandatoryNativeLive = isLiveSrc && isMandatoryNativeLiveHost(hostOf(src));
 
+  // APK-only: tenta ExoPlayer PRIMEIRO para LIVE no celular. Exclui hosts
+  // conhecidos como incompatíveis (multop100, cdnchurras). Se falhar, o
+  // watchdog cai silenciosamente para o pipeline Web.
+  const apkLiveAutoNative =
+    isLiveSrc &&
+    isNativeAppSync() &&
+    !srcHostProfile.forceNativeForLive &&
+    !mandatoryNativeLive &&
+    settings.defaultPlayer !== "exo" &&
+    shouldPreferNativeOnApkLive(hostOf(src));
+  const apkLiveAutoNativeRef = useRef(apkLiveAutoNative);
+  useEffect(() => { apkLiveAutoNativeRef.current = apkLiveAutoNative; }, [apkLiveAutoNative]);
+
   // --- Decisão de player + ponte ExoPlayer ---------------------------------
   // No APK Android (Capacitor) tentamos o plugin nativo `capacitor-video-player`
   // que usa ExoPlayer/Media3 em overlay fullscreen, fora do WebView. Ganhos:
