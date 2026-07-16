@@ -1416,8 +1416,10 @@ export function VideoPlayer({
       try {
         if (hls && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) hls.recoverMediaError();
       } catch { /* noop */ }
-      if (tsPlayer && (apkLiveSoftRecoveries <= 2 || apkLiveSoftRecoveries % 4 === 0)) {
-        reconnectCurrentLiveWeb(`${reason}:mpegts-soft`);
+      if (tsPlayer) {
+        pushDbg(`LIVE web soft recover ignorado em TS para evitar loop roda/trava reason=${reason}`);
+        void video.play().catch(() => undefined);
+        return;
       }
       void video.play().catch(() => undefined);
     };
