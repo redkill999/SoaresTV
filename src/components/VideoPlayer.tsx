@@ -1515,12 +1515,12 @@ export function VideoPlayer({
         }
         apkLiveStillTicks += 1;
         pushDbg(`LIVE web progress stuck tick=${apkLiveStillTicks} t=${nowTime.toFixed(2)} ready=${video.readyState} net=${video.networkState} ahead=${bufferedAhead().toFixed(2)}`);
-        if (apkLiveStillTicks >= 1) {
+        if (apkLiveStillTicks >= 2) {
           if (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
             softRecoverApkLiveFreeze("silent-currentTime");
           }
         }
-        if (apkLiveStillTicks >= 6 && (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
+        if (apkLiveStillTicks >= 8 && (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
             if (!usedNative && !cancelled && !nativeFallbackStarted) {
               reconnectCurrentLiveWeb("silent-currentTime:hard");
@@ -1529,7 +1529,7 @@ export function VideoPlayer({
             }
           });
         }
-      }, 3_000);
+      }, 4_000);
     };
 
     const onVideoError = () => {
