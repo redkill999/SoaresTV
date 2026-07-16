@@ -1745,9 +1745,6 @@ export function VideoPlayer({
         const MAX_NET_RETRIES = 5;
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
-        let apkPostPlayHlsRefreshes = 0;
-        const MAX_APK_POST_PLAY_HLS_REFRESHES = 3;
-
         // Stall watchdog para LIVE: recuperação rápida, sem destruir/recarregar o
         // player. Se acabou o buffer, religamos o loader; se ainda tem buffer,
         // só forçamos play(). Isso corta travadas sem voltar ao bug de reload.
@@ -1863,28 +1860,6 @@ export function VideoPlayer({
                 const httpCode = (data as { response?: { code?: number } }).response?.code ?? 0;
                 const hardFail = httpCode >= 400 && httpCode < 500;
                 const isAuthFail = httpCode === 401 || httpCode === 403;
-                const isManifestFail = data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR;
-                const canRefreshApkPostPlayHls =
-                  nativeRuntimeRef.current &&
-                  sawFirstFrameThisAttach &&
-                  !isAuthFail &&
-                  !isManifestFail &&
-                  !!currentHlsUrl &&
-                  apkPostPlayHlsRefreshes < MAX_APK_POST_PLAY_HLS_REFRESHES;
-                if (hardFail && canRefreshApkPostPlayHls) {
-                  apkPostPlayHlsRefreshes += 1;
-                  const retryUrl = currentHlsUrl!;
-                  const delay = Math.min(900 * apkPostPlayHlsRefreshes, 2_500);
-                  pushDbg(`APK LIVE HLS refresh #${apkPostPlayHlsRefreshes} após ${data.details} http=${httpCode} — mantendo HLS antes de cair para TS`);
-                  setTimeout(() => {
-                    if (cancelled || !hls) return;
-                    try { hls.stopLoad(); } catch { /* noop */ }
-                    try { hls.loadSource(retryUrl); } catch { /* noop */ }
-                    try { hls.startLoad(-1); } catch { try { hls.startLoad(); } catch { /* noop */ } }
-                    void video.play().catch(() => undefined);
-                  }, delay);
-                  return;
-                }
                 // 404/410 no .m3u8 = host não fornece HLS. Memoriza para
                 // próximos canais desse provedor pularem a conversão.
                 if (!nativeRuntimeRef.current && !lockedHlsFirstLive && (httpCode === 404 || httpCode === 410) && hlsCandidate) {
