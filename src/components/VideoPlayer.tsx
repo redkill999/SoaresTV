@@ -1271,7 +1271,6 @@ export function VideoPlayer({
       if (isLive) {
         clearApkLiveFreezeTimer();
         clearApkLiveProgressTimer();
-        apkLiveHasPlayed = false;
         apkLiveFreezeEvents.length = 0;
       }
       if (hls) {
