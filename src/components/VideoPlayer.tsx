@@ -1094,6 +1094,7 @@ export function VideoPlayer({
     let mpegtsRecoverAttempts = 0;
     const MAX_MPEGTS_RECOVER = 2;
     let lastMpegtsUrl: string | null = null;
+    let mpegtsHadFirstFrame = false;
     const clearMpegtsStallWatchdog = () => { /* noop — mantido p/ compat */ };
     const reloadMpegts = () => {
       if (!lastMpegtsUrl || cancelled) return;
@@ -1208,6 +1209,11 @@ export function VideoPlayer({
             return url;
           }
         })();
+        const isNewMpegtsUrl = lastMpegtsUrl !== url;
+        if (isNewMpegtsUrl) {
+          mpegtsRecoverAttempts = 0;
+          mpegtsHadFirstFrame = false;
+        }
         lastMpegtsUrl = url;
         if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
         tsPlayer = mpegts.createPlayer(
@@ -1224,9 +1230,18 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: 1,
           },
         );
+        const markMpegtsFirstFrame = () => { mpegtsHadFirstFrame = true; };
+        video.addEventListener("playing", markMpegtsFirstFrame, { once: true });
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
           pushDbg(`mpegts ERROR type=${String(errType)} detail=${String(errDetail)}`);
           if (cancelled) return;
+          const detail = String(errDetail);
+          const failedBeforeFirstFrame = asLive && !mpegtsHadFirstFrame;
+          if (failedBeforeFirstFrame && /HttpStatusCodeInvalid|UnrecoverableEarlyEof/i.test(detail)) {
+            pushDbg("mpegts sem primeiro frame; erro não recuperável neste candidato — próximo candidato");
+            tryNextVod();
+            return;
+          }
           // Stream ao vivo pode ter erros transitórios de rede/CDN. Tenta
           // reconectar preservando o player antes de desistir para o próximo
           // candidato (que muitas vezes nem existe pra LIVE).
@@ -1253,6 +1268,12 @@ export function VideoPlayer({
     };
 
     const playDirect = () => {
+      if (isLive) {
+        clearApkLiveFreezeTimer();
+        clearApkLiveProgressTimer();
+        apkLiveHasPlayed = false;
+        apkLiveFreezeEvents.length = 0;
+      }
       if (hls) {
         hls.destroy();
         hls = null;
@@ -1724,6 +1745,8 @@ export function VideoPlayer({
         const MAX_NET_RETRIES = 5;
         let mediaRetries = 0;
         const MAX_MEDIA_RETRIES = 3;
+        let apkPostPlayHlsRefreshes = 0;
+        const MAX_APK_POST_PLAY_HLS_REFRESHES = 3;
 
         // Stall watchdog para LIVE: recuperação rápida, sem destruir/recarregar o
         // player. Se acabou o buffer, religamos o loader; se ainda tem buffer,
@@ -1840,6 +1863,28 @@ export function VideoPlayer({
                 const httpCode = (data as { response?: { code?: number } }).response?.code ?? 0;
                 const hardFail = httpCode >= 400 && httpCode < 500;
                 const isAuthFail = httpCode === 401 || httpCode === 403;
+                const isManifestFail = data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR;
+                const canRefreshApkPostPlayHls =
+                  nativeRuntimeRef.current &&
+                  sawFirstFrameThisAttach &&
+                  !isAuthFail &&
+                  !isManifestFail &&
+                  !!currentHlsUrl &&
+                  apkPostPlayHlsRefreshes < MAX_APK_POST_PLAY_HLS_REFRESHES;
+                if (hardFail && canRefreshApkPostPlayHls) {
+                  apkPostPlayHlsRefreshes += 1;
+                  const retryUrl = currentHlsUrl!;
+                  const delay = Math.min(900 * apkPostPlayHlsRefreshes, 2_500);
+                  pushDbg(`APK LIVE HLS refresh #${apkPostPlayHlsRefreshes} após ${data.details} http=${httpCode} — mantendo HLS antes de cair para TS`);
+                  setTimeout(() => {
+                    if (cancelled || !hls) return;
+                    try { hls.stopLoad(); } catch { /* noop */ }
+                    try { hls.loadSource(retryUrl); } catch { /* noop */ }
+                    try { hls.startLoad(-1); } catch { try { hls.startLoad(); } catch { /* noop */ } }
+                    void video.play().catch(() => undefined);
+                  }, delay);
+                  return;
+                }
                 // 404/410 no .m3u8 = host não fornece HLS. Memoriza para
                 // próximos canais desse provedor pularem a conversão.
                 if (!nativeRuntimeRef.current && !lockedHlsFirstLive && (httpCode === 404 || httpCode === 410) && hlsCandidate) {
