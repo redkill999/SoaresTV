@@ -1596,6 +1596,8 @@ export function VideoPlayer({
       const liveMaxLatCount = canFastStart ? 10 : 12;
       const attachStartedAt = Date.now();
       let sawFirstFrameThisAttach = false;
+      const markFirstFrameThisAttach = () => { sawFirstFrameThisAttach = true; };
+      video.addEventListener("playing", markFirstFrameThisAttach, { once: true });
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
 
       if (Hls.isSupported()) {
@@ -1656,8 +1658,6 @@ export function VideoPlayer({
         // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
         if (isLive && !lockedHlsFirstLive && liveHost && !nativeRuntimeRef.current) {
           const learnFastStart = () => {
-            if (sawFirstFrameThisAttach) return;
-            sawFirstFrameThisAttach = true;
             const elapsed = Date.now() - attachStartedAt;
             if (elapsed < 12_000 && !liveHostProfile.liveFastStart) {
               pushDbg(`ETAPA 8.5 fast-start APRENDIDO host=${liveHost} elapsed=${elapsed}ms`);
