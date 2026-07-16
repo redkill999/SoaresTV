@@ -1571,9 +1571,8 @@ export function VideoPlayer({
       // 3/10 (default do hls.js), cortando ~5s do start-up. Hosts travados
       // (cdnchurras.space) NUNCA participam — a invariante 4/12 é sagrada.
       const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart && !nativeRuntimeRef.current;
-      const apkStableLive = isLive && nativeRuntimeRef.current;
-      const liveSyncCount = apkStableLive ? 6 : canFastStart ? 3 : 4;
-      const liveMaxLatCount = apkStableLive ? 18 : canFastStart ? 10 : 12;
+      const liveSyncCount = canFastStart ? 3 : 4;
+      const liveMaxLatCount = canFastStart ? 10 : 12;
       const attachStartedAt = Date.now();
       let sawFirstFrameThisAttach = false;
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
