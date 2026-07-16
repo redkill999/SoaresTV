@@ -1586,9 +1586,9 @@ export function VideoPlayer({
           // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
           // mantém latência aceitável (~12s do edge) sem travar abertura.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
-          backBufferLength: isLive ? (apkStableLive ? 20 : 15) : 30,
-          maxBufferLength: isLive ? (apkStableLive ? 60 : 45) : 60,
-          maxMaxBufferLength: isLive ? (apkStableLive ? 120 : 90) : 180,
+          backBufferLength: isLive ? 15 : 30,
+          maxBufferLength: isLive ? 45 : 60,
+          maxMaxBufferLength: isLive ? 90 : 180,
           maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
           maxBufferHole: isLive ? 1.5 : 0.5,
           highBufferWatchdogPeriod: isLive ? 2 : 3,
@@ -1612,11 +1612,11 @@ export function VideoPlayer({
           startLevel: isLive ? 0 : -1,
           testBandwidth: !isLive,
           startFragPrefetch: true,
-          abrEwmaDefaultEstimate: apkStableLive ? 650_000 : 1_000_000,
-          abrBandWidthFactor: apkStableLive ? 0.7 : 0.8,
-          abrBandWidthUpFactor: apkStableLive ? 0.6 : 0.7,
-          maxStarvationDelay: apkStableLive ? 8 : 4,
-          maxLoadingDelay: apkStableLive ? 8 : 4,
+          abrEwmaDefaultEstimate: 1_000_000,
+          abrBandWidthFactor: 0.8,
+          abrBandWidthUpFactor: 0.7,
+          maxStarvationDelay: 4,
+          maxLoadingDelay: 4,
           capLevelToPlayerSize: true,
         });
         hls.loadSource(url);
