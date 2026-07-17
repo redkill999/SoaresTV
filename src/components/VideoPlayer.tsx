@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-apk-web-first";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v8-apk-hls-freeze-fallback";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -1441,6 +1441,45 @@ export function VideoPlayer({
     };
     // (auto-reconnect APK LIVE removido: causava falha na abertura de canais)
 
+    const isHlsPlaybackCandidate = (candidate?: string) => {
+      if (!candidate) return false;
+      return isHlsUrl(normUrl(candidate));
+    };
+
+    const skipUnstableApkHlsCandidate = (reason: string) => {
+      if (
+        cancelled ||
+        nativeFallbackStarted ||
+        !isLive ||
+        !nativeRuntimeRef.current ||
+        shouldUseNativePlayer ||
+        lockedHlsFirstLive ||
+        !hls
+      ) return false;
+
+      const fromIdx = vodIdx;
+      let nextIdx = fromIdx + 1;
+      // Se o HLS já abriu mas ficou congelando no APK, não insistimos em outra
+      // variante HLS do mesmo canal; vamos para o próximo formato real (normalmente
+      // .ts/mpegts) dentro da mesma fila, sem persistir perfil e sem afetar desktop.
+      while (nextIdx < playbackCandidates.length && isHlsPlaybackCandidate(playbackCandidates[nextIdx])) {
+        nextIdx += 1;
+      }
+      if (nextIdx >= playbackCandidates.length) nextIdx = fromIdx + 1;
+      if (nextIdx >= playbackCandidates.length) return false;
+
+      pushDbg(`APK LIVE HLS instável -> fallback candidato idx=${nextIdx} reason=${reason}`);
+      clearApkLiveFreezeTimer();
+      clearApkLiveProgressTimer();
+      try { detachStallListeners?.(); } catch { /* noop */ }
+      try { hls.destroy(); } catch { /* noop */ }
+      hls = null;
+      currentHlsUrl = null;
+      vodIdx = nextIdx;
+      playDirect();
+      return true;
+    };
+
     const softRecoverApkLiveFreeze = (reason: string) => {
       if (cancelled || nativeFallbackStarted || !isLive || shouldUseNativePlayer) return;
       const now = Date.now();
@@ -1449,6 +1488,13 @@ export function VideoPlayer({
       apkLiveSoftRecoveries += 1;
       const ahead = bufferedAhead();
       pushDbg(`LIVE web soft recover #${apkLiveSoftRecoveries} reason=${reason} ready=${video.readyState} ahead=${ahead.toFixed(2)}`);
+      if (
+        nativeRuntimeRef.current &&
+        hls &&
+        apkLiveSoftRecoveries >= 3 &&
+        (ahead < 0.75 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) &&
+        skipUnstableApkHlsCandidate(`soft-recover-${reason}`)
+      ) return;
       // Se ainda existe buffer suficiente, não mexe no MediaSource: muitas
       // microtravadas do APK são apenas jitter curto e startLoad/recoverMediaError
       // agressivo vira corte perceptível. Só recupera de fato quando o buffer
@@ -1538,6 +1584,7 @@ export function VideoPlayer({
           const moved = Math.abs((video.currentTime || 0) - baselineTime) > 0.5;
           const stuck = !moved && !video.paused && !video.ended && (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || bufferedAhead() < 0.5);
           if (stuck) {
+            if (apkLiveFreezeEvents.length >= 3 && skipUnstableApkHlsCandidate(`${reason}:stuck`)) return;
             void fallbackToNativeFromApkFreeze(`${reason}:stuck`).then((usedNative) => {
               if (!usedNative) reconnectCurrentLiveWeb(`${reason}:stuck`);
             });
@@ -1589,6 +1636,7 @@ export function VideoPlayer({
           }
         }
         if (apkLiveStillTicks >= 8 && (bufferedAhead() < 1.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) {
+          if (skipUnstableApkHlsCandidate("silent-currentTime:hard")) return;
           void fallbackToNativeFromApkFreeze("silent-currentTime").then((usedNative) => {
             if (!usedNative && !cancelled && !nativeFallbackStarted) {
               reconnectCurrentLiveWeb("silent-currentTime:hard");
