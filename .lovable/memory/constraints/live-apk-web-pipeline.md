@@ -4,7 +4,7 @@ description: LIVE no APK toca pelo pipeline Web (/api/stream + HLS). ExoPlayer s
 type: constraint
 ---
 
-## Estado atual (a partir de 2026-07-13, build v7)
+## Estado atual (a partir de 2026-07-17, build v8)
 
 **REVERTIDO** o experimento "ExoPlayer primeiro no APK LIVE" (build v6).
 Ele quebrou os canais na maioria dos painéis: usuário confirmou que apenas
@@ -28,6 +28,10 @@ documentado em `mem://fixes/live-apk-working-baseline`.
   gate para qualquer alteração APK-específica em outras partes do player).
 - VOD (filme/série) no APK também usa pipeline web por default e continua
   intocado.
+- Se um canal LIVE no APK abre via HLS mas fica congelando repetidamente, o
+  player pode pular SOMENTE o candidato HLS instável e tentar o próximo formato
+  da mesma fila (normalmente `.ts`/mpegts), sem gravar perfil do host e sem cair
+  automaticamente para ExoPlayer. Isso é APK-only e não vale para Web Desktop.
 
 ## O que NÃO fazer
 
@@ -43,6 +47,6 @@ documentado em `mem://fixes/live-apk-working-baseline`.
   `isNoNativeFallbackLiveHost` — elas ainda servem para bloquear ExoPlayer em
   hosts problemáticos quando o usuário liga `forceNativeForLive` manualmente
   ou seleciona `defaultPlayer="exo"`.
-- Marcador de build: `LIVE_PLAYER_BUILD = "live-hls-first-restore-v7-apk-web-first"`.
+- Marcador de build: `LIVE_PLAYER_BUILD = "live-hls-first-restore-v8-apk-hls-freeze-fallback"`.
 - APK é casca do site publicado: fix só chega ao celular depois de publicar.
 
