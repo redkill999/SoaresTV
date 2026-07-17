@@ -42,6 +42,8 @@ export type HostProfile = {
   disableHlsConversion?: boolean;
   /** APENAS LIVE: priorizar candidato `.ts` sobre `.m3u8`. */
   preferTs?: boolean;
+  /** APENAS LIVE/WebView HTTPS: tentar variantes HTTPS antes de proxy/HTTP. */
+  preferHttpsForLive?: boolean;
   /** APENAS LIVE/APK: abrir direto no ExoPlayer nativo para evitar WebView/proxy. */
   forceNativeForLive?: boolean;
   /**
@@ -94,6 +96,7 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
+    preferHttpsForLive: true,
   },
   // athra.sbs: painel bloqueia IPs de datacenter. Mantemos proxy ATIVO
   // (não setar disableProxy/forceHttp aqui — quebra login/lista). Só pedimos
