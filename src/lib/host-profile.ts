@@ -281,6 +281,17 @@ if (isNativeAppSync()) {
     console.log("[HOST PROFILE] APK limpou forceNativeForLive aprendido automaticamente");
   }
 }
+// Limpeza pontual: preset anterior de ultrapremium.live marcava forceHttp:true.
+// Como a página do APK/Web roda em HTTPS, isso gera mixed-content e o hls.js
+// nem consegue fetchar o stream (log ETAPA 8.6 WARN mixed-content). O painel
+// aceita HTTPS normalmente — remover a flag persistida.
+if (memory["ultrapremium.live"]?.forceHttp) {
+  const cur = memory["ultrapremium.live"];
+  const { forceHttp: _fh, ...rest } = cur;
+  memory["ultrapremium.live"] = rest;
+  writeStorage(memory);
+  console.log("[HOST PROFILE] limpou forceHttp de ultrapremium.live (mixed-content)");
+}
 // Baseline validada: cdnchurras.space/Space FHD funciona no Web Desktop pelo
 // HLS-first via proxy. Tentativas anteriores de TS-first/webIncompatible/HTTPS
 // quebraram esse canal; removemos qualquer memória persistida que desvie disso.
