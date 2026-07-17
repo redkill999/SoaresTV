@@ -1015,6 +1015,24 @@ export function VideoPlayer({
           .filter((u): u is string => !!u)
       : [];
     const orderLiveCandidates = (candidates: string[]) => {
+      if (isLive && nativeRuntimeRef.current && liveHostProfile.preferHttpsForLive) {
+        // APK + DNS Ultra Premium: precisa tentar HTTPS direto antes de proxy/HTTP.
+        // O proxy pode ser bloqueado pelo provedor e HTTP direto vira mixed-content.
+        // Mantém HLS antes de TS dentro de cada grupo, mas não deixa o sorter
+        // global empurrar /api/stream para o topo.
+        const decode = (u: string) => { try { return decodeURIComponent(u); } catch { return u; } };
+        const rank = (u: string) => {
+          const d = decode(u);
+          const directHttps = /^https:\/\//i.test(u);
+          const proxy = /^\/api\/stream\?/i.test(u);
+          const underlyingHttps = /^https:\/\//i.test(d);
+          const directHttp = /^http:\/\//i.test(u);
+          const group = directHttps ? 0 : proxy && underlyingHttps ? 1 : proxy ? 2 : directHttp ? 3 : 4;
+          const hlsRank = isHlsUrl(d) ? 0 : 1;
+          return group * 10 + hlsRank;
+        };
+        return [...candidates].sort((a, b) => rank(a) - rank(b));
+      }
       if (!isLive || (!lockedHlsFirstLive && !apkLivePreferHls && (liveHostProfile.preferTs || webDesktopPreferTsLive))) return candidates;
       // Em Web Desktop, prioriza HLS via proxy same-origin. A URL original
       // continua preservada como fallback, mas não deve vir antes do proxy:
@@ -1325,6 +1343,23 @@ export function VideoPlayer({
       }
       pushDbg(`ETAPA 8 playDirect idx=${vodIdx} url=${maskIptvUrl(url)}`);
       const decodedUrl = normUrl(url);
+
+      const apkLiveDirectHttpsNativeElement =
+        isLive &&
+        nativeRuntimeRef.current &&
+        liveHostProfile.preferHttpsForLive &&
+        !isProxied &&
+        /^https:\/\//i.test(url);
+
+      if (apkLiveDirectHttpsNativeElement) {
+        pushDbg(`ETAPA 8.4 APK LIVE HTTPS direto via <video> nativo (sem hls.js/mpegts)`);
+        video.pause();
+        video.currentTime = 0;
+        video.src = url;
+        video.load();
+        video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
+        return;
+      }
 
       if (/\.m3u8(\?|&|$)/i.test(decodedUrl)) {
         attachHls(url);
