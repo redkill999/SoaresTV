@@ -20,5 +20,6 @@ LIVE no APK toca pelo pipeline WEB (/api/stream + HLS/mpegts) por padrão. NUNCA
 - [Home hotspots alignment](mem://design/home-hotspots-alignment) — % dos hotspots casadas com bordas da arte home-bg.png; `.hotspot-ring` inset:0 e `<img>` object-fill obrigatórios; vale web + APK
 - [LIVE APK working baseline](mem://fixes/live-apk-working-baseline) — multop100 sem forceNativeForLive; LIVE_PLAYER_BUILD=live-hls-first-restore-v4; botão DIAG removido; não reverter
 - [LIVE 403 + watchdog fallback](mem://fixes/live-403-watchdog-fallback) — 401/403 avança candidato em vez de abortar; watchdog 4s no MANIFEST_PARSED; ETAPA 8.6 não persiste bypassProxyForLive. Faz sexyhot/adultos abrirem em ~8s.
+- [Ultra Premium LIVE APK HTTPS](mem://fixes/ultrapremium-live-apk-https) — ultrapremium.live no APK normaliza perfis com porta, nunca forceHttp, tenta HTTPS direto antes de proxy/HTTP.
 - [fetchM3U login rápido](mem://fixes/fetchm3u-series-fast-login) — mapXtreamSeries não chama mais get_series_info por série; login M3U cai de 20–60s para poucos segundos.
 - [LIVE fast-start aprendizado](mem://features/live-fast-start-learning) — hls.js 4/12 (baseline) → 3/10 após host abrir <12s; auto-reverte em erro fatal; NUNCA em hosts locked-hls-first
