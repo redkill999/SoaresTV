@@ -126,6 +126,12 @@ const HOST_PRESETS: Record<string, HostProfile> = {
 };
 
 
+function hostKeyMatchesBase(host: string, base: string): boolean {
+  const h = host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+  return h === base || h.endsWith(`.${base}`);
+}
+
+
 const STORAGE_KEY = "iptv.hostProfiles.v1";
 // Chaves legadas migradas no boot.
 const LEGACY_BYPASS = "iptv.bypass503Hosts.v1";
@@ -284,16 +290,29 @@ if (isNativeAppSync()) {
     console.log("[HOST PROFILE] APK limpou forceNativeForLive aprendido automaticamente");
   }
 }
-// Limpeza pontual: preset anterior de ultrapremium.live marcava forceHttp:true.
-// Como a página do APK/Web roda em HTTPS, isso gera mixed-content e o hls.js
-// nem consegue fetchar o stream (log ETAPA 8.6 WARN mixed-content). O painel
-// aceita HTTPS normalmente — remover a flag persistida.
-if (memory["ultrapremium.live"]?.forceHttp) {
-  const cur = memory["ultrapremium.live"];
-  const { forceHttp: _fh, ...rest } = cur;
-  memory["ultrapremium.live"] = rest;
-  writeStorage(memory);
-  console.log("[HOST PROFILE] limpou forceHttp de ultrapremium.live (mixed-content)");
+// Limpeza/override pontual: builds anteriores podiam salvar o perfil com porta
+// explícita (ultrapremium.live:80). Como getHostProfile usa match exato antes
+// do preset sem porta, esse registro antigo mantinha forceHttp e/ou perdia
+// preferHttpsForLive, fazendo LIVE cair em mixed-content no APK. Para esta DNS,
+// o preset HTTPS é obrigatório em todas as variações do host.
+{
+  let cleanedUltraPremium = false;
+  const ultraPreset = HOST_PRESETS["ultrapremium.live"];
+  for (const [host, prof] of Object.entries(memory)) {
+    if (!hostKeyMatchesBase(host, "ultrapremium.live")) continue;
+    const {
+      forceHttp: _fh,
+      forceNativeForLive: _fn,
+      webIncompatibleLive: _wi,
+      ...rest
+    } = prof;
+    memory[host] = { ...rest, ...ultraPreset, updatedAt: prof.updatedAt ?? Date.now() };
+    cleanedUltraPremium = true;
+  }
+  if (cleanedUltraPremium) {
+    writeStorage(memory);
+    console.log("[HOST PROFILE] normalizou ultrapremium.live para HTTPS LIVE");
+  }
 }
 // Baseline validada: cdnchurras.space/Space FHD funciona no Web Desktop pelo
 // HLS-first via proxy. Tentativas anteriores de TS-first/webIncompatible/HTTPS
@@ -319,6 +338,14 @@ if (memory["cdnchurras.space"]?.forceNativeForLive || memory["cdnchurras.space"]
 // sobrescrevendo: preset → storage → updateHostProfile.
 for (const [host, preset] of Object.entries(HOST_PRESETS)) {
   memory[host] = { ...preset, ...memory[host] };
+}
+// Garante que variações com porta/subdomínio de ultrapremium.live também herdem
+// o preset obrigatório; sem isso, `ultrapremium.live:80` continua usando o
+// perfil salvo antigo e o APK tenta http:// em página HTTPS.
+for (const [host, prof] of Object.entries(memory)) {
+  if (!hostKeyMatchesBase(host, "ultrapremium.live")) continue;
+  const { forceHttp: _fh, forceNativeForLive: _fn, webIncompatibleLive: _wi, ...rest } = prof;
+  memory[host] = { ...rest, ...HOST_PRESETS["ultrapremium.live"] };
 }
 // Override obrigatório: este host NÃO pode manter flags salvas de TS-only nem
 // forceNativeForLive, porque isso quebrou a abertura dos canais no APK.
