@@ -84,11 +84,13 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // Lista validada estável (canais, filmes e séries OK em web + APK).
-  // Mantém HTTP original e pula proxy para evitar regressões.
+  // Lista DNS Ultra Premium. Painel aceita HTTPS (confirmado 200).
+  // NÃO usar forceHttp: com página HTTPS (APK/Web) o browser bloqueia
+  // mixed-content e o hls.js/mpegts nem chega a fetchar o stream —
+  // reproduz "ETAPA 8.6 WARN mixed-content". VOD funciona com proxy
+  // fallback; LIVE precisa ir direto em HTTPS.
   "ultrapremium.live": {
     disableProxy: true,
-    forceHttp: true,
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
