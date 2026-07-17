@@ -1024,13 +1024,18 @@ export function VideoPlayer({
       return [...candidates].sort((a, b) => rank(a) - rank(b));
     };
 
+    // VOD: alguns painéis (ex.: ultrapremium.live) bloqueiam IP de datacenter,
+    // então o proxy /api/stream toma 4xx e o <video> aborta com Format error
+    // (netState=3 readyState=0). Quando o perfil pede bypass, priorizamos a
+    // URL direta (sai pelo IP do dispositivo) e mantemos proxy como fallback.
+    const vodBypassProxy = !!baseHostProfile.disableProxy;
     const playbackCandidates = isVod
       ? vodCandidates.flatMap((url) => {
           const secure = mayUseHttpsVariant ? httpsVariant(url) : null;
           // Por padrão (web): proxy primeiro (https same-origin, sem mixed content).
-          // forceDirect inverte: tenta direto antes; forceProxy: só proxy.
+          // forceDirect / vodBypassProxy invertem: tenta direto antes.
           let candidates: (string | null)[];
-          if (forceDirect) {
+          if (forceDirect || vodBypassProxy) {
             candidates = [secure, url, proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
           } else if (forceProxy) {
             candidates = [proxiedX(url, "vod"), secure ? proxiedX(secure, "vod") : null];
