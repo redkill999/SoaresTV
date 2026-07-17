@@ -84,11 +84,13 @@ const HOST_PRESETS: Record<string, HostProfile> = {
     disableHlsConversion: true,
     preferTs: true,
   },
-  // Lista validada estável (canais, filmes e séries OK em web + APK).
-  // Mantém HTTP original e pula proxy para evitar regressões.
+  // Lista DNS Ultra Premium. Painel aceita HTTPS (confirmado 200).
+  // NÃO usar forceHttp: com página HTTPS (APK/Web) o browser bloqueia
+  // mixed-content e o hls.js/mpegts nem chega a fetchar o stream —
+  // reproduz "ETAPA 8.6 WARN mixed-content". VOD funciona com proxy
+  // fallback; LIVE precisa ir direto em HTTPS.
   "ultrapremium.live": {
     disableProxy: true,
-    forceHttp: true,
     bypassProxyForLive: true,
     disableHlsConversion: true,
     preferTs: true,
@@ -278,6 +280,17 @@ if (isNativeAppSync()) {
     writeStorage(memory);
     console.log("[HOST PROFILE] APK limpou forceNativeForLive aprendido automaticamente");
   }
+}
+// Limpeza pontual: preset anterior de ultrapremium.live marcava forceHttp:true.
+// Como a página do APK/Web roda em HTTPS, isso gera mixed-content e o hls.js
+// nem consegue fetchar o stream (log ETAPA 8.6 WARN mixed-content). O painel
+// aceita HTTPS normalmente — remover a flag persistida.
+if (memory["ultrapremium.live"]?.forceHttp) {
+  const cur = memory["ultrapremium.live"];
+  const { forceHttp: _fh, ...rest } = cur;
+  memory["ultrapremium.live"] = rest;
+  writeStorage(memory);
+  console.log("[HOST PROFILE] limpou forceHttp de ultrapremium.live (mixed-content)");
 }
 // Baseline validada: cdnchurras.space/Space FHD funciona no Web Desktop pelo
 // HLS-first via proxy. Tentativas anteriores de TS-first/webIncompatible/HTTPS
