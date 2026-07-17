@@ -994,6 +994,12 @@ export function VideoPlayer({
     const pageIsHttps = typeof window !== "undefined" && window.location?.protocol === "https:";
     const liveCandidatePair = (url: string) => {
       const proxy = proxiedX(url, kind);
+      const httpsDirect = liveHostProfile.preferHttpsForLive ? httpsVariant(url) : null;
+      if (pageIsHttps && httpsDirect) {
+        const httpsProxy = proxiedX(httpsDirect, kind);
+        const tail = liveBypassProxy ? [url, proxy] : [proxy, url];
+        return [httpsDirect, httpsProxy, ...tail];
+      }
       // Web Desktop em HTTPS não consegue abrir http:// direto (mixed content).
       // Mesmo que o host esteja marcado como bypass para APK/TV, no browser o
       // proxy precisa vir antes para os candidatos HTTP; HTTPS direto continua
