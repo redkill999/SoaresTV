@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v8-apk-hls-freeze-fallback";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v9-apk-fast-start";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -1686,7 +1686,10 @@ export function VideoPlayer({
       // Aprendizado de fast-start: hosts que já provaram abrir rápido usam
       // 3/10 (default do hls.js), cortando ~5s do start-up. Hosts travados
       // (cdnchurras.space) NUNCA participam — a invariante 4/12 é sagrada.
-      const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart && !nativeRuntimeRef.current;
+      // Fast-start vale também no APK (aprendizado por host, auto-reverte
+      // em erro fatal antes do primeiro frame — não contamina o host
+      // permanentemente se der ruim).
+      const canFastStart = isLive && !lockedHlsFirstLive && !!liveHostProfile.liveFastStart;
       const liveSyncCount = canFastStart ? 3 : 4;
       const liveMaxLatCount = canFastStart ? 10 : 12;
       const attachStartedAt = Date.now();
@@ -1751,7 +1754,7 @@ export function VideoPlayer({
         // frame chega em <12s com o baseline atual, promove o host para 3/10
         // nas próximas aberturas. Se der erro fatal antes do primeiro frame
         // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
-        if (isLive && !lockedHlsFirstLive && liveHost && !nativeRuntimeRef.current) {
+        if (isLive && !lockedHlsFirstLive && liveHost) {
           const learnFastStart = () => {
             const elapsed = Date.now() - attachStartedAt;
             if (elapsed < 12_000 && !liveHostProfile.liveFastStart) {
