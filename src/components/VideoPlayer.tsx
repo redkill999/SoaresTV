@@ -1754,7 +1754,7 @@ export function VideoPlayer({
         // frame chega em <12s com o baseline atual, promove o host para 3/10
         // nas próximas aberturas. Se der erro fatal antes do primeiro frame
         // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
-        if (isLive && !lockedHlsFirstLive && liveHost && !nativeRuntimeRef.current) {
+        if (isLive && !lockedHlsFirstLive && liveHost) {
           const learnFastStart = () => {
             const elapsed = Date.now() - attachStartedAt;
             if (elapsed < 12_000 && !liveHostProfile.liveFastStart) {
