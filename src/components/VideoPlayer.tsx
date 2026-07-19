@@ -1755,9 +1755,14 @@ export function VideoPlayer({
         // nas próximas aberturas. Se der erro fatal antes do primeiro frame
         // E o host já estava promovido, rebaixa (auto-reverte o aprendizado).
         if (isLive && !lockedHlsFirstLive && liveHost) {
+          // Janela de aprendizado ampliada para 20s: em APK celular a primeira
+          // abertura de um canal costuma ficar entre 15-20s (rede móvel + probe
+          // de manifest). Sem esta janela larga, o host nunca era promovido e
+          // toda abertura seguinte repetia o baseline lento. Auto-revert em
+          // erro fatal antes do primeiro frame continua protegendo.
           const learnFastStart = () => {
             const elapsed = Date.now() - attachStartedAt;
-            if (elapsed < 12_000 && !liveHostProfile.liveFastStart) {
+            if (elapsed < 20_000 && !liveHostProfile.liveFastStart) {
               pushDbg(`ETAPA 8.5 fast-start APRENDIDO host=${liveHost} elapsed=${elapsed}ms`);
               updateHostProfile(liveHost, { liveFastStart: true });
             }
