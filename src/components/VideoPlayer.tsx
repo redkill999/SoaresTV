@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v11-apk-live-fastfail";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v12-apk-live-smooth-buffer";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -540,7 +540,7 @@ export function VideoPlayer({
           }
           nativeLiveStillTicksRef.current += 1;
           pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-          if (nativeLiveStillTicksRef.current >= 4) {
+          if (nativeLiveStillTicksRef.current >= 7) {
             nativeLiveStillTicksRef.current = 0;
             reloadNativeLiveRef.current();
           }
@@ -1251,18 +1251,21 @@ export function VideoPlayer({
         }
         lastMpegtsUrl = url;
         if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
+        const apkLiveMpegts = asLive && nativeRuntimeRef.current;
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
             isLive: asLive,
             enableWorker: false,
-            // Config original que abria mais canais. Ajustes de stash/latência
-            // aumentaram compatibilidade contra travas em alguns hosts, mas
-            // impediram a abertura de outros no APK/WebView.
-            enableStashBuffer: !asLive,
-            liveBufferLatencyChasing: asLive,
-            liveBufferLatencyMaxLatency: 6,
-            liveBufferLatencyMinRemain: 1,
+            // Web Desktop mantém o baseline original. No APK LIVE, um stash
+            // pequeno absorve jitter do Wi-Fi/4G sem voltar ao atraso de 30-60s.
+            enableStashBuffer: apkLiveMpegts ? true : !asLive,
+            stashInitialSize: apkLiveMpegts ? 256 * 1024 : undefined,
+            // Chasing agressivo em WebView causava microcongeladas em TS ao vivo.
+            // Desktop segue com chase=6s; APK deixa o buffer respirar até 12s.
+            liveBufferLatencyChasing: asLive && !apkLiveMpegts,
+            liveBufferLatencyMaxLatency: apkLiveMpegts ? 12 : 6,
+            liveBufferLatencyMinRemain: apkLiveMpegts ? 2 : 1,
           },
         );
         const markMpegtsFirstFrame = () => { mpegtsHadFirstFrame = true; };
@@ -1730,20 +1733,22 @@ export function VideoPlayer({
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
 
       if (Hls.isSupported()) {
+        // Config estável (revertida da versão agressiva que travava abertura).
+        const apkLiveHlsSmooth = isLive && nativeRuntimeRef.current;
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          // Config estável (revertida da versão agressiva que travava abertura).
           // Live: buffer com margem contra jitter (era 30s — muito enxuto,
           // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
           // mantém latência aceitável (~12s do edge) sem travar abertura.
           // VOD: caps reduzidos para não estourar RAM em TV Box (1-2GB).
           backBufferLength: isLive ? 15 : 30,
-          maxBufferLength: isLive ? 45 : 60,
-          maxMaxBufferLength: isLive ? 90 : 180,
+          maxBufferLength: isLive ? (apkLiveHlsSmooth ? 60 : 45) : 60,
+          maxMaxBufferLength: isLive ? (apkLiveHlsSmooth ? 120 : 90) : 180,
           maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
-          maxBufferHole: isLive ? 1.5 : 0.5,
-          highBufferWatchdogPeriod: isLive ? 2 : 3,
+          maxBufferHole: isLive ? (apkLiveHlsSmooth ? 2.5 : 1.5) : 0.5,
+          maxFragLookUpTolerance: apkLiveHlsSmooth ? 0.5 : 0.25,
+          highBufferWatchdogPeriod: isLive ? (apkLiveHlsSmooth ? 3 : 2) : 3,
           nudgeMaxRetry: 6,
           nudgeOffset: 0.1,
           fragLoadingMaxRetry: 8,
@@ -1927,22 +1932,39 @@ export function VideoPlayer({
         let manifestReady = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
 
+        let apkHlsStallRecoverTicks = 0;
+        let apkHlsRecoverLoopTicks = 0;
         const recoverLiveStall = () => {
           if (!isLive || cancelled || !manifestReady) return;
+          if (nativeRuntimeRef.current && apkHlsRecoverLoopTicks >= 8) {
+            pushDbg("APK LIVE HLS recover loop pausado; aguardando próximo sinal real de stall");
+            return;
+          }
           clearStall();
+          if (nativeRuntimeRef.current) apkHlsRecoverLoopTicks += 1;
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
             try { hls.startLoad(); } catch { /* noop */ }
-            if (ahead < 0.75 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            if (nativeRuntimeRef.current) {
+              // APK/WebView: recoverMediaError é pesado e pode causar o próprio
+              // congelamento perceptível. Só força recover após underflow real
+              // persistente; micro-jitter deixa o buffer se recompor sozinho.
+              const hardUnderflow = ahead < 0.25 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+              apkHlsStallRecoverTicks = hardUnderflow ? apkHlsStallRecoverTicks + 1 : 0;
+              if (apkHlsStallRecoverTicks >= 2) {
+                apkHlsStallRecoverTicks = 0;
+                try { hls.recoverMediaError(); } catch { /* noop */ }
+              }
+            } else if (ahead < 0.75 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
               try { hls.recoverMediaError(); } catch { /* noop */ }
             }
             void video.play().catch(() => undefined);
             if (!cancelled && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) recoverLiveStall();
-          }, 1_000);
+          }, nativeRuntimeRef.current ? 2_200 : 1_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
-        const onResumed = () => clearStall();
+        const onResumed = () => { apkHlsStallRecoverTicks = 0; apkHlsRecoverLoopTicks = 0; clearStall(); };
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
 

@@ -13,6 +13,8 @@ Correção de 2026-07-20 para canais LIVE demorando >1min no APK celular em list
 - URL `.m3u8` original da M3U continua preservada e não deve ser rebaixada automaticamente.
 - Watchdog de primeiro frame HLS no APK não travado: 18s. Web Desktop continua 35s; `cdnchurras.space` continua 40s/locked.
 - HTTPS direto no APK tem watchdog curto (10–14s) para avançar de candidato se o `<video>` nativo ficar sem primeiro frame.
+- Correção v12: microcongeladas no APK LIVE devem ser tratadas suavizando apenas o runtime nativo: HLS ganha buffer maior/tolerância maior no WebView e `recoverMediaError()` só roda após underflow persistente; mpegts.js no APK usa stash pequeno e desliga latency chasing agressivo. Web Desktop e VOD permanecem no baseline.
+- Correção v12 adicional: watchdog do ExoPlayer nativo só recarrega após 7 ticks sem avanço (evita falsos stalls da bridge), e o loop de recover do HLS no APK é limitado para não martelar MediaSource a cada segundo.
 
 ## Não fazer
 
@@ -20,3 +22,5 @@ Correção de 2026-07-20 para canais LIVE demorando >1min no APK celular em list
 - Não reativar ExoPlayer-primeiro global.
 - Não persistir `forceNativeForLive` automaticamente.
 - Não mexer em VOD/filmes/séries para resolver atraso de LIVE.
+- Não voltar a chamar `recoverMediaError()` agressivamente a cada `waiting` no APK LIVE — isso causa microcongeladas perceptíveis.
+- Não reduzir o watchdog nativo para 4 ticks novamente; isso derruba/recria o player por falso stall e aparece como congelamento/piscada.
