@@ -342,7 +342,7 @@ function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
   return true;
 }
 
-const LIVE_PLAYER_BUILD = "live-hls-first-restore-v10-apk-learn-wider";
+const LIVE_PLAYER_BUILD = "live-hls-first-restore-v11-apk-live-fastfail";
 
 export type VideoPlayerHandle = {
   /** Faz seek apenas se o vídeo estiver no caminho web (<video> visível). */
@@ -926,11 +926,17 @@ export function VideoPlayer({
     const sourceIsHls = isHlsUrl(workingSrc);
     const sourceIsTs = isTsUrl(workingSrc);
     const sourceFormat = sourceIsHls ? "hls" : sourceIsTs ? "ts" : "auto";
-    // APK LIVE: quando o usuário não forçou TS, preferimos HLS mesmo que o
-    // perfil antigo do host tenha aprendido TS-only. MPEG-TS via WebView/mpegts
-    // abre muitos canais, mas é bem mais sensível a microtravadas no celular.
-    // Mantém TS como fallback — não altera VOD nem navegador desktop.
-    const apkLivePreferHls = isLive && nativeRuntimeRef.current && compat.streamFormat !== "ts";
+    // APK LIVE: quando o usuário não forçou TS, preferimos HLS por padrão.
+    // Exceção segura: se o perfil do host já é TS-only/preferTs E a URL original
+    // veio `.ts`, respeitamos TS primeiro no APK. Isso evita gastar 30-60s em
+    // playlists HLS inventadas que alguns painéis até abrem, mas demoram demais
+    // para entregar primeiro frame. URL M3U `.m3u8` original continua preservada.
+    const hostPrefersOriginalTsOnApk =
+      isLive &&
+      nativeRuntimeRef.current &&
+      sourceIsTs &&
+      !!(liveHostProfile.preferTs || liveHostProfile.disableHlsConversion);
+    const apkLivePreferHls = isLive && nativeRuntimeRef.current && compat.streamFormat !== "ts" && !hostPrefersOriginalTsOnApk;
     // No web desktop, manter HLS-first para `.ts` ao vivo (canais Xtream):
     // o provedor quase sempre expõe variante .m3u8 na mesma rota, e mpegts.js
     // direto falha em muitos painéis (CORS / codecs). Só pulamos HLS para
@@ -1028,7 +1034,7 @@ export function VideoPlayer({
           const underlyingHttps = /^https:\/\//i.test(d);
           const directHttp = /^http:\/\//i.test(u);
           const group = directHttps ? 0 : proxy && underlyingHttps ? 1 : proxy ? 2 : directHttp ? 3 : 4;
-          const hlsRank = isHlsUrl(d) ? 0 : 1;
+          const hlsRank = hostPrefersOriginalTsOnApk ? (isHlsUrl(d) ? 1 : 0) : (isHlsUrl(d) ? 0 : 1);
           return group * 10 + hlsRank;
         };
         return [...candidates].sort((a, b) => rank(a) - rank(b));
@@ -1357,6 +1363,30 @@ export function VideoPlayer({
         video.currentTime = 0;
         video.src = url;
         video.load();
+        clearWatchdog();
+        let directNativeResolved = false;
+        const clearDirectNativeWatchdog = () => {
+          directNativeResolved = true;
+          clearWatchdog();
+          video.removeEventListener("loadeddata", clearDirectNativeWatchdog);
+          video.removeEventListener("canplay", clearDirectNativeWatchdog);
+          video.removeEventListener("playing", clearDirectNativeWatchdog);
+        };
+        video.addEventListener("loadeddata", clearDirectNativeWatchdog, { once: true });
+        video.addEventListener("canplay", clearDirectNativeWatchdog, { once: true });
+        video.addEventListener("playing", clearDirectNativeWatchdog, { once: true });
+        const directNativeWatchdogMs = hostPrefersOriginalTsOnApk ? 10_000 : 14_000;
+        watchdog = setTimeout(() => {
+          if (cancelled || directNativeResolved) return;
+          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || video.currentTime > 0) return;
+          pushDbg(`ETAPA 8.4 watchdog APK direto sem primeiro frame em ${Math.round(directNativeWatchdogMs / 1000)}s — próximo candidato`);
+          clearDirectNativeWatchdog();
+          try { video.pause(); } catch { /* noop */ }
+          try { video.removeAttribute("src"); video.load(); } catch { /* noop */ }
+          vodIdx += 1;
+          if (vodIdx < playbackCandidates.length) playDirect();
+          else setError("Não foi possível reproduzir este canal.");
+        }, directNativeWatchdogMs);
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         return;
       }
@@ -1818,11 +1848,12 @@ export function VideoPlayer({
         let firstFrameWatchdog: ReturnType<typeof setTimeout> | null = null;
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (!isLive || firstFrameWatchdog) return;
+          const firstFrameWatchdogMs = lockedHlsFirstLive ? 40_000 : nativeRuntimeRef.current ? 18_000 : 35_000;
           firstFrameWatchdog = setTimeout(() => {
             firstFrameWatchdog = null;
             if (cancelled) return;
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA || video.currentTime > 0) return;
-            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em ${lockedHlsFirstLive ? 40 : 35}s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — ${lockedHlsFirstLive ? "reiniciando HLS" : "avançando"}`);
+            pushDbg(`ETAPA 8.8 watchdog: sem primeiro frame em ${Math.round(firstFrameWatchdogMs / 1000)}s (ready=${video.readyState} t=${video.currentTime.toFixed(2)}) — ${lockedHlsFirstLive ? "reiniciando HLS" : "avançando"}`);
             try { detachStallListeners?.(); } catch { /* noop */ }
             try { hls?.destroy(); } catch { /* noop */ }
             hls = null;
@@ -1837,7 +1868,7 @@ export function VideoPlayer({
             vodIdx += 1;
             if (vodIdx < playbackCandidates.length) playDirect();
             else setError("Não foi possível reproduzir este canal.");
-          }, lockedHlsFirstLive ? 40_000 : 35_000);
+          }, firstFrameWatchdogMs);
         });
         const clearFirstFrameWatchdog = () => { if (firstFrameWatchdog) { clearTimeout(firstFrameWatchdog); firstFrameWatchdog = null; } };
         video.addEventListener("loadedmetadata", clearFirstFrameWatchdog, { once: true });
