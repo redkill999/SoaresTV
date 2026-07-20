@@ -540,7 +540,7 @@ export function VideoPlayer({
           }
           nativeLiveStillTicksRef.current += 1;
           pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-          if (nativeLiveStillTicksRef.current >= 4) {
+          if (nativeLiveStillTicksRef.current >= 7) {
             nativeLiveStillTicksRef.current = 0;
             reloadNativeLiveRef.current();
           }
@@ -1933,9 +1933,15 @@ export function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestReady = true; });
 
         let apkHlsStallRecoverTicks = 0;
+        let apkHlsRecoverLoopTicks = 0;
         const recoverLiveStall = () => {
           if (!isLive || cancelled || !manifestReady) return;
+          if (nativeRuntimeRef.current && apkHlsRecoverLoopTicks >= 8) {
+            pushDbg("APK LIVE HLS recover loop pausado; aguardando próximo sinal real de stall");
+            return;
+          }
           clearStall();
+          if (nativeRuntimeRef.current) apkHlsRecoverLoopTicks += 1;
           stallTimer = setTimeout(() => {
             if (cancelled || !hls) return;
             const ahead = bufferedAhead();
@@ -1958,7 +1964,7 @@ export function VideoPlayer({
           }, nativeRuntimeRef.current ? 2_200 : 1_000);
         };
         const onWaiting = () => { registerStall(); recoverLiveStall(); };
-        const onResumed = () => { apkHlsStallRecoverTicks = 0; clearStall(); };
+        const onResumed = () => { apkHlsStallRecoverTicks = 0; apkHlsRecoverLoopTicks = 0; clearStall(); };
         video.addEventListener("waiting", onWaiting);
         video.addEventListener("playing", onResumed);
 
