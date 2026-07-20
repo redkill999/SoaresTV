@@ -1817,7 +1817,8 @@ export function VideoPlayer({
         // readyState=0 por minutos e sem erro fatal do hls.js.
         let manifestParsedForWatchdog = false;
         hls.on(Hls.Events.MANIFEST_PARSED, () => { manifestParsedForWatchdog = true; });
-        const manifestWatchdogMs = lockedHlsFirstLive ? 30_000 : 7_000;
+        // 4s calibrado (mem://fixes/live-403-watchdog-fallback). NÃO alterar sem novo teste.
+        const manifestWatchdogMs = lockedHlsFirstLive ? 30_000 : 4_000;
         const manifestWatchdog = isLive ? setTimeout(() => {
           if (cancelled || manifestParsedForWatchdog) return;
           pushDbg(`ETAPA 8.7 watchdog: manifest HLS não parseou em ${Math.round(manifestWatchdogMs / 1000)}s idx=${vodIdx} — avançando`);
