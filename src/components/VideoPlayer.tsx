@@ -1733,11 +1733,11 @@ export function VideoPlayer({
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
 
       if (Hls.isSupported()) {
+        // Config estável (revertida da versão agressiva que travava abertura).
+        const apkLiveHlsSmooth = isLive && nativeRuntimeRef.current;
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-      // Config estável (revertida da versão agressiva que travava abertura).
-      const apkLiveHlsSmooth = isLive && nativeRuntimeRef.current;
           // Live: buffer com margem contra jitter (era 30s — muito enxuto,
           // qualquer glitch de rede virava rebuffering). 45s + liveSync 4
           // mantém latência aceitável (~12s do edge) sem travar abertura.
