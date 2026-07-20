@@ -36,7 +36,13 @@ export const getRouter = () => {
     scrollRestoration: true,
     // Preload the route module/chunk on hover/focus
     defaultPreload: "intent",
-    defaultPreloadStaleTime: 0,
+    // Reaproveita cache de rota já carregada: se a rota foi visitada nos
+    // últimos 5 min, navegar volta instantâneo (sem refetch bloqueante).
+    // Combina com staleTime dos useQuery (10 min) — revalidação silenciosa.
+    defaultPreloadStaleTime: 5 * 60_000,
+    // Mantém dados de rota em memória por 30 min mesmo sem visitantes,
+    // então voltar para /live após passar por /movies e /series é imediato.
+    defaultGcTime: 30 * 60_000,
     defaultErrorComponent: ({ error, reset }) => (
       <RouteErrorState error={error as Error} reset={reset} />
     ),
