@@ -43,12 +43,14 @@ export function MiniLivePlayer({
 
   useEffect(() => {
     if (!streamId) return;
-    // eslint-disable-next-line no-console
-    console.log("[LIVE DEBUG]", {
-      hasSrc: !!originalSrc,
-      finalSrc: src,
-      streamId,
-    });
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log("[LIVE DEBUG]", {
+        hasSrc: !!originalSrc,
+        finalSrc: src,
+        streamId,
+      });
+    }
   }, [originalSrc, src, streamId]);
 
   const now = Math.floor(Date.now() / 1000);
@@ -61,7 +63,7 @@ export function MiniLivePlayer({
 
   const goFullscreen = () => {
     if (!streamId) return;
-    navigate({
+    void navigate({
       to: "/player/$type/$id",
       params: { type: "live", id: String(streamId) },
       // Envia a MESMA url final resolvida (fonte única) para o player fullscreen.

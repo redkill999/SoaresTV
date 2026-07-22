@@ -31,6 +31,7 @@ export function FloatingMiniPlayer() {
       const v = wrapRef.current?.querySelector("video");
       if (v && !v.hasAttribute("data-mini-video")) {
         v.setAttribute("data-mini-video", "true");
+        window.clearInterval(id);
       }
     }, 300);
     return () => window.clearInterval(id);

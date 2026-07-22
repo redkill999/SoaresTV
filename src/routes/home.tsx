@@ -315,10 +315,13 @@ function VpnDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
     if (!open) return;
     setIp(null); setErr(null);
-    fetch("https://api.ipify.org?format=json")
+    const ctrl = new AbortController();
+    let alive = true;
+    fetch("https://api.ipify.org?format=json", { signal: ctrl.signal })
       .then((r) => r.json())
-      .then((d: { ip: string }) => setIp(d.ip))
-      .catch(() => setErr("Sem conexão"));
+      .then((d: { ip: string }) => { if (alive) setIp(d.ip); })
+      .catch(() => { if (alive) setErr("Sem conexão"); });
+    return () => { alive = false; ctrl.abort(); };
   }, [open]);
   const online = typeof navigator !== "undefined" ? navigator.onLine : true;
   return (
