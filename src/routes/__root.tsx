@@ -256,6 +256,15 @@ function RootComponent() {
       window.addEventListener("unhandledrejection", (ev) => {
         try { console.error("[UnhandledRejection]", (ev as PromiseRejectionEvent).reason); } catch {}
       });
+      // Toast amigável quando o localStorage estala (quota cheia).
+      // storage.ts já faz throttle de 30s por chave — aqui só reagimos.
+      window.addEventListener("storage-quota-exceeded", () => {
+        void import("sonner").then(({ toast }) => {
+          toast.error(
+            "Armazenamento cheio. Remova listas antigas ou limpe o cache para salvar novos itens.",
+          );
+        }).catch(() => { /* sonner indisponível — silencioso */ });
+      });
     }
     // Aplica idioma salvo após hidratação (evita mismatch SSR).
     syncLangFromStorage();
