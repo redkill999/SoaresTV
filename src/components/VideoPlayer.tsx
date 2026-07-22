@@ -1093,6 +1093,12 @@ export function VideoPlayer({
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
+    // Listeners `{ once: true }` registrados dentro de attachHls/attach* que
+    // podem NUNCA disparar (troca de canal antes do primeiro frame). Sem
+    // remoção explícita, ficam órfãos no <video> reaproveitado e disparam
+    // no próximo canal — contaminando host-profile do host errado
+    // (learnFastStart marcando fastStart em host que nem chegou a tocar).
+    const attachCleanups: Array<() => void> = [];
     let cancelled = false;
     let vodIdx = 0;
     let triedDirect = false;
