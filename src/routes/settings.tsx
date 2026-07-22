@@ -219,8 +219,24 @@ function OutrasDialog({ open, onClose }: { open: boolean; onClose: () => void })
   useEffect(() => { if (open) setLists(store.getM3U()); }, [open]);
 
   const addList = () => {
-    if (!name || !url) return;
-    const next = [...lists, { name, url }];
+    const trimmedName = name.trim();
+    const trimmedUrl = url.trim();
+    if (!trimmedName || !trimmedUrl) {
+      toast.error("Preencha nome e URL da lista.");
+      return;
+    }
+    // Valida URL cedo — evita que `new URL(...)` quebre outras telas depois.
+    try {
+      const parsed = new URL(trimmedUrl);
+      if (!/^https?:$/.test(parsed.protocol)) {
+        toast.error("A URL precisa começar com http:// ou https://");
+        return;
+      }
+    } catch {
+      toast.error("URL inválida. Confira o endereço e tente novamente.");
+      return;
+    }
+    const next = [...lists, { name: trimmedName, url: trimmedUrl }];
     store.setM3U(next); setLists(next); setName(""); setUrl("");
     toast.success("Lista M3U adicionada");
   };

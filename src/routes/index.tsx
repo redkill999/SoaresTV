@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tv, Loader2, PlayCircle, Eye, EyeOff } from "lucide-react";
 import { store } from "@/lib/storage";
-import { api, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl, type LiveStream } from "@/lib/xtream";
+import { api, apiList, discoverPanelServer, isNativeApp, login, normalizeServer, loadM3U, xtreamCredsFromUrl, type LiveStream } from "@/lib/xtream";
 import { m3uCache } from "@/lib/m3u-cache";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -86,7 +86,9 @@ function LoginPage() {
     // nunca vê a animação porque a navegação acontece em milissegundos.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    void isNativeApp().then((native) => {
+    void isNativeApp()
+      .catch(() => false) // Ponte Capacitor indisponível → tratar como web, nunca travar
+      .then((native) => {
       if (cancelled) return;
       setIsNative(native);
       // TV = detecção normal OU APK em tela larga landscape (>= 1000px)
@@ -186,9 +188,17 @@ function LoginPage() {
       setResult("");
       setTimeout(() => navigate({ to: "/loading" }), 400);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro";
-      setResult(msg);
-      toast.error(msg);
+      const raw = err instanceof Error ? err.message : "Erro";
+      // Traduz erros técnicos para linguagem do usuário. Mantém o texto
+      // original para casos já amigáveis (mensagens em português vindas
+      // do fluxo Xtream/M3U acima).
+      const friendly = /Failed to fetch|NetworkError|ECONNREFUSED|ENOTFOUND/i.test(raw)
+        ? "Servidor offline ou DNS incorreto. Verifique o endereço e tente novamente."
+        : /timeout|Tempo esgotado/i.test(raw)
+          ? "O servidor demorou demais para responder. Tente novamente em instantes."
+          : raw;
+      setResult(friendly);
+      toast.error(friendly);
     } finally {
       setLoading(false);
     }
@@ -201,8 +211,9 @@ function LoginPage() {
     }
     const creds = { server, username, password };
     try {
-      const streams = await api<LiveStream[]>(creds, "get_live_streams");
-      const first = streams?.[0];
+      // apiList normaliza respostas Xtream que vêm como objeto em vez de array.
+      const streams = await apiList<LiveStream>(creds, "get_live_streams");
+      const first = streams[0];
       if (!first) {
         toast.error("Nenhum canal encontrado");
         return;

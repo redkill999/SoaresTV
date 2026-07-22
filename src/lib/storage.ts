@@ -184,7 +184,8 @@ function read<T>(k: string, fallback: T): T {
 }
 // Avisos de quota são "throttled" por chave — uma lista cheia pode disparar
 // dezenas de writes seguidos e não queremos floodar o console nem virar
-// fonte de jank no APK.
+// fonte de jank no APK. Emite um CustomEvent global uma vez a cada 30s
+// para a UI mostrar um toast amigável (armazenamento cheio).
 const lastQuotaWarn: Record<string, number> = {};
 function warnQuota(k: string, err: unknown) {
   const now = Date.now();
@@ -193,6 +194,14 @@ function warnQuota(k: string, err: unknown) {
   const name = err instanceof Error ? err.name : "Error";
   const msg = err instanceof Error ? err.message : String(err);
   console.warn(`[storage] write falhou em "${k}" (${name}): ${msg}`);
+  const isQuota = /quota|QuotaExceeded|NS_ERROR_DOM_QUOTA/i.test(`${name} ${msg}`);
+  if (isQuota && typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("storage-quota-exceeded", { detail: { key: k } }),
+      );
+    } catch { /* noop */ }
+  }
 }
 function write<T>(k: string, v: T) {
   if (!isBrowser()) return;
