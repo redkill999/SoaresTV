@@ -322,25 +322,10 @@ function isNoNativeFallbackLiveHost(host: string | null | undefined): boolean {
   return h === "multop100.top" || h.endsWith(".multop100.top");
 }
 
-// APK-only: no celular Android, o pipeline Web (hls.js/mpegts dentro da WebView
-// + proxy /api/stream) é frágil para LIVE — muitos canais simplesmente não
-// abrem. ExoPlayer nativo (via capacitor-video-player) toca MPEG-TS/HLS direto
-// sem MSE e é o padrão de apps IPTV Android (XCIPTV, TiviMate).
-//
-// Estratégia: no APK, tentar ExoPlayer PRIMEIRO para LIVE — EXCETO:
-//   1) `cdnchurras.space` (Space FHD) → travado no HLS-first via proxy
-//      (mem://constraints/live-pipeline-lock)
-//   2) `multop100.top` (canais adultos) → ExoPlayer não abre este host
-//      (mem://fixes/live-apk-working-baseline)
-//
-// Se o ExoPlayer não emitir READY/PLAY em ~30s, cai automaticamente pro
-// pipeline Web (mesmo caminho de hoje) — sem diagnóstico intrusivo.
-// Web Desktop não é afetado: só liga quando `isNativeAppSync()===true`.
-function shouldPreferNativeOnApkLive(host: string | null | undefined): boolean {
-  if (isNoNativeFallbackLiveHost(host)) return false;
-  if (isLockedHlsFirstLiveHost(host)) return false;
-  return true;
-}
+// Nota histórica: existiu aqui uma função `shouldPreferNativeOnApkLive()` que
+// tentava ExoPlayer PRIMEIRO no APK para LIVE. Foi REVERTIDA (ver
+// mem://constraints/live-apk-web-pipeline e apkLiveAutoNative=false abaixo).
+// NÃO reintroduzir — LIVE no APK usa pipeline Web (hls.js/mpegts + proxy).
 
 const LIVE_PLAYER_BUILD = "live-hls-first-restore-v12-apk-live-smooth-buffer";
 
@@ -1093,6 +1078,12 @@ export function VideoPlayer({
 
     let hls: Hls | null = null;
     let tsPlayer: MpegTsPlayer | null = null;
+    // Listeners `{ once: true }` registrados dentro de attachHls/attach* que
+    // podem NUNCA disparar (troca de canal antes do primeiro frame). Sem
+    // remoção explícita, ficam órfãos no <video> reaproveitado e disparam
+    // no próximo canal — contaminando host-profile do host errado
+    // (learnFastStart marcando fastStart em host que nem chegou a tocar).
+    const attachCleanups: Array<() => void> = [];
     let cancelled = false;
     let vodIdx = 0;
     let triedDirect = false;
@@ -1730,6 +1721,7 @@ export function VideoPlayer({
       let sawFirstFrameThisAttach = false;
       const markFirstFrameThisAttach = () => { sawFirstFrameThisAttach = true; };
       video.addEventListener("playing", markFirstFrameThisAttach, { once: true });
+      attachCleanups.push(() => video.removeEventListener("playing", markFirstFrameThisAttach));
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
 
       if (Hls.isSupported()) {
@@ -1804,6 +1796,7 @@ export function VideoPlayer({
             }
           };
           video.addEventListener("playing", learnFastStart, { once: true });
+          attachCleanups.push(() => video.removeEventListener("playing", learnFastStart));
           hls.on(Hls.Events.ERROR, (_e, d) => {
             if (!d.fatal || sawFirstFrameThisAttach) return;
             if (liveHostProfile.liveFastStart) {
@@ -2172,6 +2165,7 @@ export function VideoPlayer({
       video.removeEventListener("stalled", onStalledGeneric);
       video.removeEventListener("ended", onEndedLive);
       if (hls) hls.destroy();
+      attachCleanups.splice(0).forEach((fn) => { try { fn(); } catch { /* noop */ } });
       destroyTsPlayer();
       video.removeAttribute("src");
       video.load();
