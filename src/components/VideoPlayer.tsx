@@ -1811,6 +1811,7 @@ export function VideoPlayer({
             }
           };
           video.addEventListener("playing", learnFastStart, { once: true });
+          attachCleanups.push(() => video.removeEventListener("playing", learnFastStart));
           hls.on(Hls.Events.ERROR, (_e, d) => {
             if (!d.fatal || sawFirstFrameThisAttach) return;
             if (liveHostProfile.liveFastStart) {
