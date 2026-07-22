@@ -1006,7 +1006,10 @@ export async function getShortEpg(c: XtreamCreds, streamId: number | string, lim
       stop_timestamp: string;
     }>;
   }>(c, "get_short_epg", { stream_id: streamId, limit });
-  const list = r?.epg_listings ?? [];
+  const list = normalizeEpgListings<{
+    id: string; title: string; description?: string;
+    start_timestamp: string; stop_timestamp: string;
+  }>(r);
   return list.map((e) => ({
     ...e,
     title: b64decode(e.title),
