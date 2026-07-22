@@ -1031,7 +1031,10 @@ export async function getFullEpg(c: XtreamCreds, streamId: number | string): Pro
       stop_timestamp: string;
     }>;
   }>(c, "get_simple_data_table", { stream_id: streamId });
-  const list = r?.epg_listings ?? [];
+  const list = normalizeEpgListings<{
+    id: string; title: string; description?: string;
+    start_timestamp: string; stop_timestamp: string;
+  }>(r);
   return list.map((e) => ({
     ...e,
     title: b64decode(e.title),
