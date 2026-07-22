@@ -1736,6 +1736,7 @@ export function VideoPlayer({
       let sawFirstFrameThisAttach = false;
       const markFirstFrameThisAttach = () => { sawFirstFrameThisAttach = true; };
       video.addEventListener("playing", markFirstFrameThisAttach, { once: true });
+      attachCleanups.push(() => video.removeEventListener("playing", markFirstFrameThisAttach));
       pushDbg(`ETAPA 8.5 hls-tuning liveSync=${liveSyncCount}/${liveMaxLatCount} fastStart=${canFastStart}`);
 
       if (Hls.isSupported()) {
