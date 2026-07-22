@@ -2180,6 +2180,7 @@ export function VideoPlayer({
       video.removeEventListener("stalled", onStalledGeneric);
       video.removeEventListener("ended", onEndedLive);
       if (hls) hls.destroy();
+      attachCleanups.splice(0).forEach((fn) => { try { fn(); } catch { /* noop */ } });
       destroyTsPlayer();
       video.removeAttribute("src");
       video.load();
