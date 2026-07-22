@@ -153,8 +153,37 @@ async function nativeHttpGet(
 const COMMON_XTREAM_PORTS = ["", "80", "8080", "8081", "8880", "25461", "2052", "2082", "2095", "8000", "8001", "8088"] as const;
 
 function parseNativeJson(data: unknown) {
-  if (typeof data === "string") return JSON.parse(data);
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      throw new Error("O servidor Xtream retornou uma resposta que não é JSON válido.");
+    }
+  }
   return data;
+}
+
+/**
+ * Normaliza a lista `epg_listings` retornada por get_short_epg / get_simple_data_table.
+ * Alguns painéis devolvem string JSON ou objeto com chaves numéricas em vez de array.
+ * Retorna [] em qualquer formato inesperado (EPG é opcional; não deve quebrar UI).
+ */
+function normalizeEpgListings<T>(raw: unknown): T[] {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return []; }
+  }
+  if (!value || typeof value !== "object") return [];
+  const listings = (value as { epg_listings?: unknown }).epg_listings;
+  if (Array.isArray(listings)) return listings as T[];
+  if (listings && typeof listings === "object") {
+    const entries = Object.entries(listings as Record<string, unknown>);
+    const numeric = entries.filter(([k]) => /^\d+$/.test(k));
+    if (numeric.length > 0) return numeric.map(([, v]) => v as T);
+  }
+  return [];
 }
 
 async function nativeApi<T = unknown>(
