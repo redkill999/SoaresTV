@@ -63,9 +63,17 @@ function PlaylistPage() {
       return;
     }
     let cancelled = false;
-    void m3uCache.loadPersisted(fallbackUrl).then(() => {
-      if (!cancelled) setHydrated(true);
-    });
+    // IndexedDB pode falhar (corrompido, quota, modo privado). `finally`
+    // garante que `hydrated` vira true mesmo em erro — evita a tela ficar
+    // presa em "carregando" para sempre.
+    void m3uCache
+      .loadPersisted(fallbackUrl)
+      .catch(() => {
+        /* cache indisponível — segue sem hidratar; useQuery vai buscar */
+      })
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -165,10 +173,18 @@ function PlaylistPage() {
           variant="outline"
           size="sm"
           onClick={() => {
-            m3uCache.clear(fallbackUrl);
-            qc.invalidateQueries({ queryKey: ["m3u"] });
-            setActive(null);
-            toast.success("Cache da lista limpo");
+            try {
+              m3uCache.clear(fallbackUrl);
+              qc.invalidateQueries({ queryKey: ["m3u"] });
+              setActive(null);
+              toast.success("Cache da lista limpo");
+            } catch (err) {
+              toast.error(
+                err instanceof Error && err.message
+                  ? `Não foi possível limpar o cache: ${err.message}`
+                  : "Não foi possível limpar o cache. Tente novamente.",
+              );
+            }
           }}
         >
           <Trash2 className="size-4" /> Limpar cache

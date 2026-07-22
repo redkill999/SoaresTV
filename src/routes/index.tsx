@@ -211,8 +211,9 @@ function LoginPage() {
     }
     const creds = { server, username, password };
     try {
-      const streams = await api<LiveStream[]>(creds, "get_live_streams");
-      const first = streams?.[0];
+      // apiList normaliza respostas Xtream que vêm como objeto em vez de array.
+      const streams = await apiList<LiveStream>(creds, "get_live_streams");
+      const first = streams[0];
       if (!first) {
         toast.error("Nenhum canal encontrado");
         return;

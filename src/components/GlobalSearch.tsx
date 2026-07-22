@@ -161,19 +161,28 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
           />
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-2">
-          {!enabled && (
+          {!creds && (
+            <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+              Faça login ou adicione uma lista para pesquisar no catálogo.
+            </div>
+          )}
+          {creds && !enabled && (
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">
               Digite pelo menos {MIN_QUERY} caracteres para buscar.
             </div>
           )}
-          {enabled && flat.length === 0 && (
+          {creds && enabled && flat.length === 0 && (
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">
               Nenhum resultado para "{trimmed}".
             </div>
           )}
-          <Section title="Ao Vivo" icon={Tv} results={liveResults} onSelect={handleSelect} />
-          <Section title="Filmes" icon={Film} results={movieResults} onSelect={handleSelect} />
-          <Section title="Séries" icon={Clapperboard} results={seriesResults} onSelect={handleSelect} />
+          {creds && (
+            <>
+              <Section title="Ao Vivo" icon={Tv} results={liveResults} onSelect={handleSelect} />
+              <Section title="Filmes" icon={Film} results={movieResults} onSelect={handleSelect} />
+              <Section title="Séries" icon={Clapperboard} results={seriesResults} onSelect={handleSelect} />
+            </>
+          )}
         </div>
         <div className="border-t border-border/60 px-3 py-1.5 text-[10px] text-muted-foreground flex justify-between">
           <span>Enter para abrir o primeiro</span>
