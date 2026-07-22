@@ -188,9 +188,17 @@ function LoginPage() {
       setResult("");
       setTimeout(() => navigate({ to: "/loading" }), 400);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro";
-      setResult(msg);
-      toast.error(msg);
+      const raw = err instanceof Error ? err.message : "Erro";
+      // Traduz erros técnicos para linguagem do usuário. Mantém o texto
+      // original para casos já amigáveis (mensagens em português vindas
+      // do fluxo Xtream/M3U acima).
+      const friendly = /Failed to fetch|NetworkError|ECONNREFUSED|ENOTFOUND/i.test(raw)
+        ? "Servidor offline ou DNS incorreto. Verifique o endereço e tente novamente."
+        : /timeout|Tempo esgotado/i.test(raw)
+          ? "O servidor demorou demais para responder. Tente novamente em instantes."
+          : raw;
+      setResult(friendly);
+      toast.error(friendly);
     } finally {
       setLoading(false);
     }
