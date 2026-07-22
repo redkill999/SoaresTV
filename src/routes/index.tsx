@@ -86,7 +86,9 @@ function LoginPage() {
     // nunca vê a animação porque a navegação acontece em milissegundos.
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    void isNativeApp().then((native) => {
+    void isNativeApp()
+      .catch(() => false) // Ponte Capacitor indisponível → tratar como web, nunca travar
+      .then((native) => {
       if (cancelled) return;
       setIsNative(native);
       // TV = detecção normal OU APK em tela larga landscape (>= 1000px)
