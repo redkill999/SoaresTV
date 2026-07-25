@@ -256,6 +256,9 @@ html[data-tv-mode] {
   overflow: hidden;
   width: 100vw;
   height: 100vh;
+  /* Overscan opcional (3–5%). Default 0 => visual idêntico. Ativado
+     por localStorage 'tv:overscan' (lido em TV_MODE_SCRIPT). */
+  --tv-overscan-pct: 0;
 }
 
 html[data-tv-mode] body {
@@ -271,15 +274,24 @@ html[data-tv-mode] body {
 /* Portrait: rotate 90deg, fill screen (scale X/Y independentes) */
 html[data-tv-mode][data-tv-orientation="portrait"] body {
   transform:
-    translate(var(--tv-vw), 0)
+    translate(calc(var(--tv-vw) - var(--tv-vw) * var(--tv-overscan-pct)), calc(var(--tv-vh) * var(--tv-overscan-pct)))
     rotate(90deg)
-    scale(var(--tv-scale-y, var(--tv-scale)), var(--tv-scale-x, var(--tv-scale)));
+    scale(
+      calc(var(--tv-scale-y, var(--tv-scale)) * (1 - 2 * var(--tv-overscan-pct))),
+      calc(var(--tv-scale-x, var(--tv-scale)) * (1 - 2 * var(--tv-overscan-pct)))
+    );
 }
 
 /* Landscape: sem rotação, preenche a tela inteira (XCIPTV-like, sem tarjas) */
 html[data-tv-mode][data-tv-orientation="landscape"] body {
-  transform: scale(var(--tv-scale-x, var(--tv-scale)), var(--tv-scale-y, var(--tv-scale)));
+  transform:
+    translate(calc(var(--tv-vw) * var(--tv-overscan-pct)), calc(var(--tv-vh) * var(--tv-overscan-pct)))
+    scale(
+      calc(var(--tv-scale-x, var(--tv-scale)) * (1 - 2 * var(--tv-overscan-pct))),
+      calc(var(--tv-scale-y, var(--tv-scale)) * (1 - 2 * var(--tv-overscan-pct)))
+    );
 }
+
 
 /* Tailwind's *-screen utilities use 100vh which now equals the inflated
    layout-viewport height (e.g. 2770px). Pin to the canvas. */
