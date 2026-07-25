@@ -9,11 +9,15 @@
 //     X-Proxy-UA-Timings.
 //   - eventos `playing`/`loadeddata` de qualquer <video> em capture phase
 //     (media events não bubblam, mas capture recebe em ancestrais).
-//   - click em elementos com [data-live-channel] (opcional; se não houver o
-//     atributo, usa a última navegação para /player/live/*).
+//   - clique bruto (pointerdown/click em capture) — para medir a fase
+//     "clique → Router" separadamente.
+//   - navegação para /player/{live,movie,series}/*.
 //
-// Uso: `installPlaybackMetrics()` chamado uma vez do __root em client-only.
-// Reporte: `window.__playbackReport()` no console → tabela resumida.
+// Uso:
+//   - installPlaybackMetrics() chamado uma vez do __root em client-only.
+//   - window.__playbackReport()  → tabela + estatísticas (avg, mediana,
+//                                  P90, P95, min, max) e fases.
+//   - window.__playbackReset()   → limpa amostras entre testes A/B.
 // =========================================================================
 
 type ProxyCall = {
@@ -39,6 +43,7 @@ type Navigation = {
   t: number;
   path: string;
   kind: "live" | "vod";
+  clickT?: number; // clique bruto associado (pointerdown/click < nav)
 };
 
 type Metrics = {
@@ -62,8 +67,54 @@ function maskUrl(u: string): string {
   return u.replace(/([?&](username|password|token|u)=)[^&]+/gi, "$1***");
 }
 
-function fmt(ms: number): string {
+function fmt(ms: number | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return "—";
   return `${ms.toFixed(0)}ms`;
+}
+
+function percentile(sorted: number[], p: number): number | undefined {
+  if (!sorted.length) return undefined;
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[idx];
+}
+
+type Stats = {
+  n: number;
+  avg?: number;
+  med?: number;
+  p90?: number;
+  p95?: number;
+  min?: number;
+  max?: number;
+};
+
+function statsOf(values: number[]): Stats {
+  const d = values.filter((n) => Number.isFinite(n));
+  if (!d.length) return { n: 0 };
+  const sorted = [...d].sort((a, b) => a - b);
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  return {
+    n: sorted.length,
+    avg: sum / sorted.length,
+    med: percentile(sorted, 50),
+    p90: percentile(sorted, 90),
+    p95: percentile(sorted, 95),
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+  };
+}
+
+function statsRow(label: string, s: Stats) {
+  return {
+    métrica: label,
+    n: s.n,
+    avg: fmt(s.avg),
+    mediana: fmt(s.med),
+    P90: fmt(s.p90),
+    P95: fmt(s.p95),
+    min: fmt(s.min),
+    max: fmt(s.max),
+  };
 }
 
 function summarize(state: Metrics): void {
@@ -85,31 +136,57 @@ function summarize(state: Metrics): void {
   const avgAttempts =
     attempts.length ? attempts.reduce((a, b) => a + b, 0) / attempts.length : 0;
 
-  // Match navigate → first frame por proximidade temporal.
-  const perChannel: Array<{ navAt: number; framedAt?: number; deltaMs?: number; path: string; kind: "live" | "vod"; src?: string }> = [];
-  for (const n of navs) {
-    const f = frames.find((f) => f.t > n.t && f.t - n.t < 60_000);
+  // Match navigate → first frame + fases por navegação.
+  type Row = {
+    kind: "live" | "vod";
+    path: string;
+    clickToRouterMs?: number;
+    routerToProxyMs?: number;
+    proxyMs?: number;
+    manifestToFrameMs?: number;
+    totalMs?: number;
+    src?: string;
+  };
+  const perChannel: Row[] = [];
+
+  for (let i = 0; i < navs.length; i++) {
+    const n = navs[i];
+    const nextNavT = i + 1 < navs.length ? navs[i + 1].t : Number.POSITIVE_INFINITY;
+    const windowEnd = Math.min(nextNavT, n.t + 60_000);
+
+    const f = frames.find((f) => f.t > n.t && f.t < windowEnd);
+    // Primeira chamada de proxy DEPOIS da navegação e ANTES do primeiro
+    // frame (ou dentro da janela). Serve como proxy do "manifest recebido".
+    const proxyEnd = f ? f.t : windowEnd;
+    const firstProxy = calls.find((c) => c.t0 >= n.t && c.t0 < proxyEnd);
+
+    const clickToRouterMs =
+      n.clickT != null && n.t >= n.clickT ? n.t - n.clickT : undefined;
+    const routerToProxyMs = firstProxy ? firstProxy.t0 - n.t : undefined;
+    const proxyMs = firstProxy ? firstProxy.ms : undefined;
+    const manifestToFrameMs =
+      f && firstProxy ? f.t - firstProxy.t1 : undefined;
+    const totalMs = f ? f.t - n.t : undefined;
+
     perChannel.push({
-      navAt: n.t,
-      framedAt: f?.t,
-      deltaMs: f ? f.t - n.t : undefined,
-      path: n.path,
       kind: n.kind,
+      path: n.path,
+      clickToRouterMs,
+      routerToProxyMs,
+      proxyMs,
+      manifestToFrameMs,
+      totalMs,
       src: f?.src ? maskUrl(f.src) : undefined,
     });
   }
 
   const liveRows = perChannel.filter((p) => p.kind === "live");
   const vodRows = perChannel.filter((p) => p.kind === "vod");
-  const avgOf = (rows: typeof perChannel) => {
-    const d = rows.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
-    const avg = d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0;
-    const med = d.length ? [...d].sort((a, b) => a - b)[Math.floor(d.length / 2)] : 0;
-    return { avg, med, n: d.length };
-  };
-  const liveStats = avgOf(liveRows);
-  const vodStats = avgOf(vodRows);
 
+  const collectTotal = (rows: Row[]) =>
+    rows.map((r) => r.totalMs).filter((n): n is number => typeof n === "number");
+  const collect = (rows: Row[], key: keyof Row) =>
+    rows.map((r) => r[key]).filter((n): n is number => typeof n === "number");
 
   const winners: Record<string, number> = {};
   for (const c of calls) {
@@ -121,41 +198,62 @@ function summarize(state: Metrics): void {
       ? { ...window.__perfFlags }
       : undefined;
 
-  // eslint-disable-next-line no-console
+  /* eslint-disable no-console */
   console.group("%c[PLAYBACK METRICS] resumo", "color:#0ff;font-weight:bold");
-  if (flags) {
-    // eslint-disable-next-line no-console
-    console.log("perfFlags:", flags);
-  }
-  // eslint-disable-next-line no-console
+  if (flags) console.log("perfFlags:", flags);
   console.log(`proxy calls: ${calls.length}`);
-  // eslint-disable-next-line no-console
-  console.log(`proxy ms — total ${fmt(sumMs)} | avg/call ${fmt(calls.length ? sumMs / calls.length : 0)}`);
-  // eslint-disable-next-line no-console
+  console.log(
+    `proxy ms — total ${fmt(sumMs)} | avg/call ${fmt(calls.length ? sumMs / calls.length : 0)}`,
+  );
   console.log(`status distribution:`, byStatus, `| suspected timeouts (~20s abort): ${timeouts}`);
-  // eslint-disable-next-line no-console
   console.log(`UAs tentados por chamada — avg: ${avgAttempts.toFixed(2)}`);
-  // eslint-disable-next-line no-console
   console.log(`UA vencedores:`, winners);
-  // eslint-disable-next-line no-console
-  console.log(`navegações totais: ${navs.length} (live=${liveRows.length} vod=${vodRows.length}) | first-frames capturados: ${frames.length}`);
-  // eslint-disable-next-line no-console
   console.log(
-    `LIVE  clique→1º frame — avg ${fmt(liveStats.avg)} | mediana ${fmt(liveStats.med)} | amostras ${liveStats.n}`,
+    `navegações totais: ${navs.length} (live=${liveRows.length} vod=${vodRows.length}) | first-frames capturados: ${frames.length}`,
   );
-  // eslint-disable-next-line no-console
-  console.log(
-    `VOD   clique→1º frame — avg ${fmt(vodStats.avg)} | mediana ${fmt(vodStats.med)} | amostras ${vodStats.n}`,
-  );
-  // eslint-disable-next-line no-console
-  console.table(perChannel.map((p) => ({
-    kind: p.kind,
-    path: p.path,
-    firstFrameMs: p.deltaMs ?? "—",
-    src: p.src ?? "—",
-  })));
-  // eslint-disable-next-line no-console
+
+  console.group("clique → 1º frame (estatísticas)");
+  console.table([
+    statsRow("LIVE total", statsOf(collectTotal(liveRows))),
+    statsRow("VOD  total", statsOf(collectTotal(vodRows))),
+  ]);
   console.groupEnd();
+
+  console.group("fases — LIVE (ms)");
+  console.table([
+    statsRow("clique → Router",       statsOf(collect(liveRows, "clickToRouterMs"))),
+    statsRow("Router → proxy start",  statsOf(collect(liveRows, "routerToProxyMs"))),
+    statsRow("proxy (manifest) dur",  statsOf(collect(liveRows, "proxyMs"))),
+    statsRow("manifest → 1º frame",   statsOf(collect(liveRows, "manifestToFrameMs"))),
+  ]);
+  console.groupEnd();
+
+  console.group("fases — VOD (ms)");
+  console.table([
+    statsRow("clique → Router",       statsOf(collect(vodRows, "clickToRouterMs"))),
+    statsRow("Router → proxy start",  statsOf(collect(vodRows, "routerToProxyMs"))),
+    statsRow("proxy (manifest) dur",  statsOf(collect(vodRows, "proxyMs"))),
+    statsRow("manifest → 1º frame",   statsOf(collect(vodRows, "manifestToFrameMs"))),
+  ]);
+  console.groupEnd();
+
+  console.group("por navegação (detalhado)");
+  console.table(
+    perChannel.map((p) => ({
+      kind: p.kind,
+      path: p.path,
+      "clk→router":    fmt(p.clickToRouterMs),
+      "router→proxy":  fmt(p.routerToProxyMs),
+      "proxy":         fmt(p.proxyMs),
+      "manif→frame":   fmt(p.manifestToFrameMs),
+      total:           fmt(p.totalMs),
+      src: p.src ?? "—",
+    })),
+  );
+  console.groupEnd();
+
+  console.groupEnd();
+  /* eslint-enable no-console */
 }
 
 function isInstalled(): boolean {
@@ -251,6 +349,14 @@ export function installPlaybackMetrics(): void {
   document.addEventListener("playing", onPlaying, true);
   document.addEventListener("loadeddata", onPlaying, true);
 
+  // ---- clique bruto (fase "clique → Router") ------------------------------
+  // Captura o instante do último pointerdown/click em capture. Depois, no
+  // pushState, associamos esse clique à navegação se estiver a < 2s.
+  let lastClickT: number | undefined;
+  const noteClick = () => { lastClickT = performance.now(); };
+  document.addEventListener("pointerdown", noteClick, true);
+  document.addEventListener("click", noteClick, true);
+
   // ---- navegação /player/{live,movie,series}/* (proxy p/ "clique") --------
   const kindOf = (p: string): "live" | "vod" | null => {
     if (/^\/player\/live\//.test(p)) return "live";
@@ -263,7 +369,12 @@ export function installPlaybackMetrics(): void {
     if (p !== lastPath) {
       lastPath = p;
       const k = kindOf(p);
-      if (k) state.navigations.push({ t: performance.now(), path: p, kind: k });
+      if (k) {
+        const now = performance.now();
+        const clickT =
+          lastClickT != null && now - lastClickT < 2_000 ? lastClickT : undefined;
+        state.navigations.push({ t: now, path: p, kind: k, clickT });
+      }
     }
   };
   const origPush = history.pushState.bind(history);
