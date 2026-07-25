@@ -38,6 +38,7 @@ type FirstFrame = {
 type Navigation = {
   t: number;
   path: string;
+  kind: "live" | "vod";
 };
 
 type Metrics = {
@@ -85,7 +86,7 @@ function summarize(state: Metrics): void {
     attempts.length ? attempts.reduce((a, b) => a + b, 0) / attempts.length : 0;
 
   // Match navigate → first frame por proximidade temporal.
-  const perChannel: Array<{ navAt: number; framedAt?: number; deltaMs?: number; path: string; src?: string }> = [];
+  const perChannel: Array<{ navAt: number; framedAt?: number; deltaMs?: number; path: string; kind: "live" | "vod"; src?: string }> = [];
   for (const n of navs) {
     const f = frames.find((f) => f.t > n.t && f.t - n.t < 60_000);
     perChannel.push({
@@ -93,21 +94,39 @@ function summarize(state: Metrics): void {
       framedAt: f?.t,
       deltaMs: f ? f.t - n.t : undefined,
       path: n.path,
+      kind: n.kind,
       src: f?.src ? maskUrl(f.src) : undefined,
     });
   }
 
-  const deltas = perChannel.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
-  const avgFirstFrame = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
-  const medFirstFrame = deltas.length ? [...deltas].sort((a, b) => a - b)[Math.floor(deltas.length / 2)] : 0;
+  const liveRows = perChannel.filter((p) => p.kind === "live");
+  const vodRows = perChannel.filter((p) => p.kind === "vod");
+  const avgOf = (rows: typeof perChannel) => {
+    const d = rows.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
+    const avg = d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0;
+    const med = d.length ? [...d].sort((a, b) => a - b)[Math.floor(d.length / 2)] : 0;
+    return { avg, med, n: d.length };
+  };
+  const liveStats = avgOf(liveRows);
+  const vodStats = avgOf(vodRows);
+
 
   const winners: Record<string, number> = {};
   for (const c of calls) {
     if (c.uaWinner) winners[c.uaWinner] = (winners[c.uaWinner] || 0) + 1;
   }
 
+  const flags =
+    typeof window !== "undefined" && window.__perfFlags
+      ? { ...window.__perfFlags }
+      : undefined;
+
   // eslint-disable-next-line no-console
   console.group("%c[PLAYBACK METRICS] resumo", "color:#0ff;font-weight:bold");
+  if (flags) {
+    // eslint-disable-next-line no-console
+    console.log("perfFlags:", flags);
+  }
   // eslint-disable-next-line no-console
   console.log(`proxy calls: ${calls.length}`);
   // eslint-disable-next-line no-console
@@ -119,11 +138,18 @@ function summarize(state: Metrics): void {
   // eslint-disable-next-line no-console
   console.log(`UA vencedores:`, winners);
   // eslint-disable-next-line no-console
-  console.log(`navegações p/ /player/live: ${navs.length} | first-frames capturados: ${frames.length}`);
+  console.log(`navegações totais: ${navs.length} (live=${liveRows.length} vod=${vodRows.length}) | first-frames capturados: ${frames.length}`);
   // eslint-disable-next-line no-console
-  console.log(`tempo clique → 1º frame — avg ${fmt(avgFirstFrame)} | mediana ${fmt(medFirstFrame)} | amostras ${deltas.length}`);
+  console.log(
+    `LIVE  clique→1º frame — avg ${fmt(liveStats.avg)} | mediana ${fmt(liveStats.med)} | amostras ${liveStats.n}`,
+  );
+  // eslint-disable-next-line no-console
+  console.log(
+    `VOD   clique→1º frame — avg ${fmt(vodStats.avg)} | mediana ${fmt(vodStats.med)} | amostras ${vodStats.n}`,
+  );
   // eslint-disable-next-line no-console
   console.table(perChannel.map((p) => ({
+    kind: p.kind,
     path: p.path,
     firstFrameMs: p.deltaMs ?? "—",
     src: p.src ?? "—",
@@ -225,15 +251,19 @@ export function installPlaybackMetrics(): void {
   document.addEventListener("playing", onPlaying, true);
   document.addEventListener("loadeddata", onPlaying, true);
 
-  // ---- navegação /player/live/* (proxy p/ "clique") ----------------------
+  // ---- navegação /player/{live,movie,series}/* (proxy p/ "clique") --------
+  const kindOf = (p: string): "live" | "vod" | null => {
+    if (/^\/player\/live\//.test(p)) return "live";
+    if (/^\/player\/(movie|series)\//.test(p)) return "vod";
+    return null;
+  };
   let lastPath = window.location.pathname;
   const noteNav = () => {
     const p = window.location.pathname;
     if (p !== lastPath) {
       lastPath = p;
-      if (/^\/player\/live\//.test(p)) {
-        state.navigations.push({ t: performance.now(), path: p });
-      }
+      const k = kindOf(p);
+      if (k) state.navigations.push({ t: performance.now(), path: p, kind: k });
     }
   };
   const origPush = history.pushState.bind(history);
@@ -249,9 +279,10 @@ export function installPlaybackMetrics(): void {
     return r;
   };
   window.addEventListener("popstate", noteNav);
-  // Também captura navegação inicial se já entrar direto em /player/live/*.
-  if (/^\/player\/live\//.test(lastPath)) {
-    state.navigations.push({ t: performance.now(), path: lastPath });
+  // Também captura navegação inicial se já entrar direto num /player/*.
+  {
+    const k = kindOf(lastPath);
+    if (k) state.navigations.push({ t: performance.now(), path: lastPath, kind: k });
   }
 
   // eslint-disable-next-line no-console

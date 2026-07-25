@@ -293,6 +293,8 @@ function RootComponent() {
     // Instrumentação TEMPORÁRIA da cadeia de playback (read-only).
     // Console: window.__playbackReport() para ver resumo; __playbackReset() para zerar.
     void import("@/lib/playback-metrics").then((m) => m.installPlaybackMetrics());
+    // Flags temporárias de A/B para comparar params de buffer no mesmo build.
+    void import("@/lib/perf-flags").then((m) => m.installPerfFlags());
     // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
     if (w.Capacitor?.isNativePlatform?.()) {
       void import("@capacitor/screen-orientation")

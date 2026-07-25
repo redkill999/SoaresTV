@@ -18,6 +18,7 @@ import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-playe
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
+import { getPerfFlags } from "@/lib/perf-flags";
 
 
 
@@ -541,7 +542,9 @@ export function VideoPlayer({
           }
           nativeLiveStillTicksRef.current += 1;
           pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-          if (nativeLiveStillTicksRef.current >= 7) {
+          // v12 subiu de 5 → 7 ticks. legacyApkBuffer volta para 5.
+          const stallTickThreshold = getPerfFlags().legacyApkBuffer ? 5 : 7;
+          if (nativeLiveStillTicksRef.current >= stallTickThreshold) {
             nativeLiveStillTicksRef.current = 0;
             reloadNativeLiveRef.current();
           }
@@ -1272,7 +1275,9 @@ export function VideoPlayer({
         }
         lastMpegtsUrl = url;
         if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
-        const apkLiveMpegts = asLive && nativeRuntimeRef.current;
+        const apkLiveMpegtsRaw = asLive && nativeRuntimeRef.current;
+        // A/B: legacyApkBuffer desliga o stash pré-v12 SOMENTE para LIVE no APK.
+        const apkLiveMpegts = apkLiveMpegtsRaw && !getPerfFlags().legacyApkBuffer;
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
@@ -1764,7 +1769,10 @@ export function VideoPlayer({
 
       if (Hls.isSupported()) {
         // Config estável (revertida da versão agressiva que travava abertura).
-        const apkLiveHlsSmooth = isLive && nativeRuntimeRef.current;
+        const apkLiveHlsSmoothRaw = isLive && nativeRuntimeRef.current;
+        // Flag de A/B: quando legacyApkBuffer=true, desliga o smooth-buffer v12
+        // APENAS para LIVE no APK, restaurando os params pré-commit 2a98f49.
+        const apkLiveHlsSmooth = apkLiveHlsSmoothRaw && !getPerfFlags().legacyApkBuffer;
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
