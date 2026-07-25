@@ -4,7 +4,20 @@ import { Bug, Maximize, Pause, PictureInPicture2, PictureInPicture, Play } from 
 import { toast } from "sonner";
 import { isNativeApp } from "@/lib/xtream";
 import { isNativeAppSync } from "@/lib/platform";
-import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatibleLive, updateHostProfile } from "@/lib/host-profile";
+import {
+  getHostProfile,
+  hostOf,
+  rememberHlsUnsupported,
+  rememberWebIncompatibleLive,
+  updateHostProfile,
+  shouldForceNativeVod,
+  recordVodNativeFailure,
+  clearVodNativeLearning,
+  containerFromExtension,
+  extractVideoCodecFromContentType,
+  type VodForceNativeSignature,
+} from "@/lib/host-profile";
+
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
@@ -684,13 +697,35 @@ export function VideoPlayer({
 
 
 
+  // BUG 1: consulta pré-play de aprendizado VOD force-native (APK+VOD apenas).
+  // Se o mesmo host+streamId (ou host+container) já falhou 2+ vezes com MP4
+  // válido, abrimos direto no ExoPlayer. Se o ExoPlayer também falhar, o
+  // aprendizado é apagado (rollback) para evitar loop.
+  const vodNativeLearnedRef = useRef<{ key: string } | null>(null);
+  const vodForceNativeMatch = useMemo(() => {
+    if (isLiveSrc) return null;
+    if (!isNativeAppSync()) return null;
+    const container = containerFromExtension(src);
+    const res = shouldForceNativeVod({
+      host: hostOf(src),
+      streamId: mediaId ?? null,
+      container: container ?? null,
+    });
+    return res.match ? { key: res.key } : null;
+  }, [src, isLiveSrc, mediaId]);
+  useEffect(() => {
+    vodNativeLearnedRef.current = vodForceNativeMatch;
+  }, [vodForceNativeMatch]);
+
   // shouldUseNativePlayer: inclui ExoPlayer por padrão no APK LIVE
   // (apkLiveAutoNative, declarado acima). Se ExoPlayer não abrir, watchdog cai
   // pro pipeline Web.
   const shouldUseNativePlayer =
     settings.defaultPlayer === "exo" ||
     (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive)) ||
-    apkLiveAutoNative;
+    apkLiveAutoNative ||
+    !!vodForceNativeMatch;
+
 
 
 
@@ -788,6 +823,19 @@ export function VideoPlayer({
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
         const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+        // BUG 1 rollback: se abrimos native por aprendizado VOD e ele falhou,
+        // remove o aprendizado imediatamente e cai para o pipeline Web sem
+        // mostrar diagnóstico (evita loop e preserva UX do VOD que funciona).
+        const vodLearned = vodNativeLearnedRef.current;
+        if (!isLiveSrc && vodLearned) {
+          clearVodNativeLearning(vodLearned.key);
+          vodNativeLearnedRef.current = null;
+          pushDbg(`ETAPA 9 VOD force-native falhou; aprendizado removido key=${vodLearned.key}`);
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          setError(null);
+          return;
+        }
         pushDbg(`ETAPA 9 native init falhou/timeout; autoFallback=${autoFallback}`);
         nativeOpenedRef.current = false;
         setPlayerMode("web");
@@ -798,6 +846,7 @@ export function VideoPlayer({
         }
         return;
       }
+
       if (ok && isLiveSrc) {
         // Watchdog auto-native no APK: 25s (mais curto que 35s do modo forced,
         // porque temos fallback silencioso para o pipeline Web).
@@ -1691,8 +1740,33 @@ export function VideoPlayer({
       // bytes + canPlayType + MediaSource.isTypeSupported, classifica a causa
       // e empurra p/ window.__vodErrors. Reporte via window.__vodReport().
       if (isVod && mediaErr?.code === 4 && !cancelled) {
-        try { void diagnoseVodFormatError(video.currentSrc || workingSrc, video, pushDbg); } catch { /* noop */ }
+        try {
+          void diagnoseVodFormatError(video.currentSrc || workingSrc, video, pushDbg).then((sample) => {
+            // BUG 1: só APK + VOD + MP4 válido confirmado pelos magic bytes.
+            // Assinatura: host + streamId + container + codec + mime (ordem
+            // de prioridade). mp4Brand vai apenas como metadado.
+            if (!sample) return;
+            if (!isNativeAppSync()) return;
+            if (sample.realContainer !== "mp4") return;
+            const host = hostOf(workingSrc);
+            if (!host) return;
+            const mime = (sample.contentType || "").split(";")[0]?.trim().toLowerCase() || "video/mp4";
+            const codec = extractVideoCodecFromContentType(sample.contentType);
+            const sig: VodForceNativeSignature = {
+              host,
+              streamId: mediaId ? String(mediaId) : undefined,
+              container: "mp4",
+              codec,
+              mime,
+            };
+            recordVodNativeFailure(sig, {
+              mp4Brand: sample.mp4Brand,
+              reason: `code=4 ${sample.category}`,
+            });
+          }).catch(() => { /* noop */ });
+        } catch { /* noop */ }
       }
+
       if (cancelled || hls) return;
       tryNextVod();
     };

@@ -180,8 +180,8 @@ export async function diagnoseVodFormatError(
   currentSrc: string,
   video: HTMLVideoElement,
   pushDbg: (s: string) => void,
-): Promise<void> {
-  if (typeof window === "undefined" || !currentSrc) return;
+): Promise<VodErrorSample | null> {
+  if (typeof window === "undefined" || !currentSrc) return null;
   const store = ensureStore();
   const extension = extOf(currentSrc);
 
@@ -263,7 +263,9 @@ export async function diagnoseVodFormatError(
   pushDbg(
     `[VOD-DIAG] ext=${extension} ct=${contentType || "-"} real=${real.kind}${real.brand ? "/" + real.brand : ""} magic=[${magic}] status=${httpStatus} → ${c.category} (${c.reason})`,
   );
+  return sample;
 }
+
 
 export function reportVod(): void {
   if (typeof window === "undefined") return;

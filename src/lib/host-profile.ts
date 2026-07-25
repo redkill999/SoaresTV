@@ -465,4 +465,208 @@ export function rememberWebIncompatibleLive(host: string): void {
 }
 
 
+// =========================================================================
+// VOD Force-Native learning (BUG 1)
+//
+// Aprende, por assinatura estável, quais VODs (filmes/séries) falham no
+// <video> WebView com code=4 apesar de o container ser um MP4 válido —
+// tipicamente HEVC/AV1/AC3. Após 2 falhas confirmadas, os próximos playbacks
+// que baterem a mesma assinatura já abrem no ExoPlayer nativo. Se o
+// ExoPlayer também falhar, o aprendizado é apagado (rollback), evitando
+// loops. Só se aplica a APK + VOD.
+//
+// Assinatura (ordem de prioridade):
+//   1) host + streamId + container + codec + mime
+//   2) host + container + codec + mime           (sem streamId confiável)
+//   3) host + container + mime                    (sem codec confiável)
+//
+// mp4Brand (ftyp) NÃO entra na assinatura em hipótese alguma — é armazenado
+// apenas como metadado de telemetria.
+// =========================================================================
+
+const VOD_FORCE_NATIVE_KEY = "iptv.vodForceNative.v1";
+const VOD_FORCE_NATIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+const VOD_FORCE_NATIVE_MIN_HITS = 2;
+
+export type VodForceNativeSignature = {
+  host: string;
+  streamId?: string;
+  container: string;
+  codec?: string;
+  mime: string;
+};
+
+export type VodForceNativeRecord = {
+  sig: VodForceNativeSignature;
+  hits: number;
+  firstFailAt: number;
+  lastFailAt: number;
+  expiresAt: number;
+  mp4Brand?: string;   // telemetria — não participa da chave
+  lastReason?: string;
+};
+
+type VodForceNativeMap = Record<string, VodForceNativeRecord>;
+
+/** Chave estável para dedupe/lookup. mp4Brand nunca entra aqui. */
+export function vodSignatureKey(sig: VodForceNativeSignature): string {
+  const host = sig.host || "-";
+  const sid = sig.streamId ? sig.streamId : "-";
+  const container = sig.container || "-";
+  const codec = sig.codec ? sig.codec : "-";
+  const mime = (sig.mime || "-").toLowerCase();
+  return `${host}|${sid}|${container}|${codec}|${mime}`;
+}
+
+function readVodForceNative(): VodForceNativeMap {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const raw = localStorage.getItem(VOD_FORCE_NATIVE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as VodForceNativeMap;
+  } catch { /* noop */ }
+  return {};
+}
+
+function writeVodForceNative(map: VodForceNativeMap): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(VOD_FORCE_NATIVE_KEY, JSON.stringify(map));
+    }
+  } catch { /* noop */ }
+  void (async () => {
+    try {
+      const { Preferences } = await import("@capacitor/preferences");
+      await Preferences.set({ key: VOD_FORCE_NATIVE_KEY, value: JSON.stringify(map) });
+    } catch { /* plugin ausente: ok */ }
+  })();
+}
+
+function pruneExpired(map: VodForceNativeMap): VodForceNativeMap {
+  const now = Date.now();
+  let mutated = false;
+  for (const [k, rec] of Object.entries(map)) {
+    if (!rec || typeof rec.expiresAt !== "number" || rec.expiresAt <= now) {
+      delete map[k];
+      mutated = true;
+    }
+  }
+  if (mutated) writeVodForceNative(map);
+  return map;
+}
+
+const vodForceNativeMemory: VodForceNativeMap = pruneExpired(readVodForceNative());
+
+/**
+ * Registra uma falha VOD code=4 já confirmada como MP4 válido. Após 2 hits
+ * o `shouldForceNativeVod` passa a retornar true para essa assinatura.
+ * Só deve ser chamada em APK, para VOD, após confirmação de MP4 válido.
+ */
+export function recordVodNativeFailure(
+  sig: VodForceNativeSignature,
+  meta?: { mp4Brand?: string; reason?: string },
+): VodForceNativeRecord {
+  const key = vodSignatureKey(sig);
+  const now = Date.now();
+  const prev = vodForceNativeMemory[key];
+  const next: VodForceNativeRecord = prev
+    ? {
+        sig,
+        hits: prev.hits + 1,
+        firstFailAt: prev.firstFailAt,
+        lastFailAt: now,
+        expiresAt: now + VOD_FORCE_NATIVE_TTL_MS,
+        mp4Brand: meta?.mp4Brand ?? prev.mp4Brand,
+        lastReason: meta?.reason ?? prev.lastReason,
+      }
+    : {
+        sig,
+        hits: 1,
+        firstFailAt: now,
+        lastFailAt: now,
+        expiresAt: now + VOD_FORCE_NATIVE_TTL_MS,
+        mp4Brand: meta?.mp4Brand,
+        lastReason: meta?.reason,
+      };
+  vodForceNativeMemory[key] = next;
+  writeVodForceNative(vodForceNativeMemory);
+  console.log("[VOD FORCE NATIVE] falha registrada", { key, hits: next.hits });
+  return next;
+}
+
+/**
+ * Consulta pré-play: dado o contexto conhecido antes do playback, verifica
+ * se algum registro ativo com hits>=2 casa com este VOD.
+ *
+ * Casamento:
+ *  - record.sig.host === host (obrigatório)
+ *  - se record.sig.streamId estiver definido e `ctx.streamId` também: devem ser iguais
+ *  - se record.sig.streamId estiver definido e `ctx.streamId` NÃO: sem match
+ *  - se record.sig.streamId estiver ausente: match cai para container (extensão)
+ *    quando `ctx.container` estiver disponível; se não, não casa
+ */
+export function shouldForceNativeVod(
+  ctx: { host: string | null | undefined; streamId?: string | null; container?: string | null },
+): { match: true; key: string; record: VodForceNativeRecord } | { match: false } {
+  const host = ctx.host?.toLowerCase();
+  if (!host) return { match: false };
+  const normalizedHost = normalizeHostKey(host);
+  const now = Date.now();
+  for (const [key, rec] of Object.entries(vodForceNativeMemory)) {
+    if (!rec || rec.expiresAt <= now) continue;
+    if (rec.hits < VOD_FORCE_NATIVE_MIN_HITS) continue;
+    const recHost = normalizeHostKey(rec.sig.host);
+    if (recHost !== normalizedHost) continue;
+    if (rec.sig.streamId) {
+      if (!ctx.streamId || String(ctx.streamId) !== rec.sig.streamId) continue;
+      return { match: true, key, record: rec };
+    }
+    // Sem streamId no registro: exige match por container (inferido da extensão pré-play)
+    if (!ctx.container) continue;
+    if (rec.sig.container !== ctx.container) continue;
+    return { match: true, key, record: rec };
+  }
+  return { match: false };
+}
+
+/** Rollback: remove um aprendizado específico (ex.: ExoPlayer também falhou). */
+export function clearVodNativeLearning(key: string): void {
+  if (!vodForceNativeMemory[key]) return;
+  delete vodForceNativeMemory[key];
+  writeVodForceNative(vodForceNativeMemory);
+  console.log("[VOD FORCE NATIVE] aprendizado removido (rollback)", { key });
+}
+
+/** Extrai um FourCC de codec de vídeo confiável do parâmetro `codecs` do Content-Type. */
+export function extractVideoCodecFromContentType(contentType: string | null | undefined): string | undefined {
+  if (!contentType) return undefined;
+  const m = contentType.match(/codecs\s*=\s*"?([^";]+)"?/i);
+  if (!m) return undefined;
+  const list = m[1].split(",").map((s) => s.trim().toLowerCase());
+  for (const c of list) {
+    if (/^(avc1|hvc1|hev1|av01|vp09|vp9)(\.|$)/.test(c)) {
+      return c.split(".")[0];
+    }
+  }
+  return undefined;
+}
+
+/** Mapeia extensão do path para container canônico (mesmos rótulos do detector de bytes). */
+export function containerFromExtension(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const path = new URL(url, typeof location !== "undefined" ? location.origin : "http://x").pathname.toLowerCase();
+    if (/\.(mp4|m4v|mov)(\?|$)/.test(path)) return "mp4";
+    if (/\.mkv(\?|$)/.test(path)) return "mkv";
+    if (/\.webm(\?|$)/.test(path)) return "webm";
+    if (/\.ts(\?|$)/.test(path)) return "mp2t";
+    if (/\.avi(\?|$)/.test(path)) return "riff";
+    if (/\.flv(\?|$)/.test(path)) return "flv";
+  } catch { /* noop */ }
+  return undefined;
+}
+
+
+
 
