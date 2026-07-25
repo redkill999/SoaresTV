@@ -1273,7 +1273,9 @@ export function VideoPlayer({
         }
         lastMpegtsUrl = url;
         if (asLive) pushDbg(`mpegts start live url=${maskIptvUrl(url)}`);
-        const apkLiveMpegts = asLive && nativeRuntimeRef.current;
+        const apkLiveMpegtsRaw = asLive && nativeRuntimeRef.current;
+        // A/B: legacyApkBuffer desliga o stash pré-v12 SOMENTE para LIVE no APK.
+        const apkLiveMpegts = apkLiveMpegtsRaw && !getPerfFlags().legacyApkBuffer;
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
