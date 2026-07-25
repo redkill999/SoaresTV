@@ -17,6 +17,7 @@ export const XciptvTile = memo(function XciptvTile({
   image,
   progress,
   src,
+  defaultFocus,
 }: {
   type: FavItem["type"];
   id: string;
@@ -26,6 +27,8 @@ export const XciptvTile = memo(function XciptvTile({
   progress?: number;
   /** URL real do stream (vinda da M3U) — preservada quando disponível. */
   src?: string;
+  /** Marca este tile como alvo inicial de foco no modo TV/D-pad. */
+  defaultFocus?: boolean;
 }) {
   const fav = useIsFavorite(type, id);
   const [errored, setErrored] = useState(false);
@@ -43,6 +46,7 @@ export const XciptvTile = memo(function XciptvTile({
       to="/player/$type/$id"
       params={{ type, id }}
       search={type === "live" && validSrc ? { name, src: validSrc } : { name }}
+      data-tv-default-focus={defaultFocus ? "" : undefined}
       onClick={() => {
         if (type === "live") miniPlayerStore.set({ streamId: id, name, logo: image, src: validSrc });
       }}
@@ -68,6 +72,8 @@ export const XciptvTile = memo(function XciptvTile({
 
         <button
           type="button"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={(e) => {
             e.preventDefault();
             store.toggleFav({ type, id, name, logo: image });

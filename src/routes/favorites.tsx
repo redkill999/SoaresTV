@@ -171,7 +171,7 @@ function FavoritesPage() {
         emptyTitle={t("empty.noResults")}
         emptyHint={t("empty.favHint")}
       >
-        {filtered.map((f) => (
+        {filtered.map((f, i) => (
           <MediaCard
             key={`${f.type}-${f.id}`}
             type={f.type}
@@ -179,6 +179,7 @@ function FavoritesPage() {
             name={f.name}
             image={f.logo}
             aspect={f.type === "live" ? "wide" : "poster"}
+            defaultFocus={i === 0}
           />
         ))}
       </MediaGrid>

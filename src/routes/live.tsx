@@ -228,13 +228,14 @@ function LiveGrid({ filtered, creds }: { filtered: LiveStream[]; creds: XtreamCr
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((s) => (
+        {visible.map((s, i) => (
           <XciptvTile
             key={s.stream_id}
             type="live"
             id={String(s.stream_id)}
             name={s.name}
             image={s.stream_icon}
+            defaultFocus={i === 0}
             // FONTE ÚNICA: streaming layer isolada (src M3U → Xtream .ts).
             src={tryResolveStreamUrl({ src: s.url, stream_id: s.stream_id }, creds) || undefined}
           />
