@@ -1832,6 +1832,7 @@ export function VideoPlayer({
         // autoPlay do browser engatar, reduz delay até primeiro frame.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
+          markPlayback("manifest-parsed");
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
