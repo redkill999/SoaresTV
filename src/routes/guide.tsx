@@ -68,15 +68,44 @@ function GuidePage() {
   }, []);
 
   const acct = creds ? `${creds.server}|${creds.username}` : "";
+  // Perf: reaproveita o padrão de cache persistido (IndexedDB) já usado em
+  // /live e /movies — evita tela de loading a frio e refetch da lista completa
+  // a cada visita. Chaves mantidas locais ao Guia (não colide com /live).
+  const catsCacheKey = `guide-live-cats:v1:${acct}`;
+  const streamsCacheKey = `guide-live-streams:v1:${acct}`;
+  const nonEmptyArr = <T,>(v: T[] | undefined | null): v is T[] => Array.isArray(v) && v.length > 0;
+  const catsPersisted = useMemo(() => (acct ? loadPersisted<LiveCategory[]>(catsCacheKey) : null), [catsCacheKey, acct]);
+  const streamsPersisted = useMemo(() => (acct ? loadPersisted<LiveStream[]>(streamsCacheKey) : null), [streamsCacheKey, acct]);
+  const catsInitial = nonEmptyArr(catsPersisted?.data) ? catsPersisted!.data : undefined;
+  const streamsInitial = nonEmptyArr(streamsPersisted?.data) ? streamsPersisted!.data : undefined;
+
   const categoriesQ = useQuery({
-    queryKey: ["live-cats", acct],
+    queryKey: ["guide-live-cats", "v1", acct],
     enabled: !!creds,
-    queryFn: () => api<LiveCategory[]>(creds!, "get_live_categories"),
+    queryFn: withPersist(
+      catsCacheKey,
+      () => api<LiveCategory[]>(creds!, "get_live_categories"),
+      { shouldPersist: (d) => Array.isArray(d) && d.length > 0 },
+    ),
+    initialData: catsInitial,
+    initialDataUpdatedAt: catsInitial ? catsPersisted?.updatedAt : undefined,
+    staleTime: 10 * 60_000,
+    refetchOnMount: catsInitial ? false : "always",
+    retry: 2,
   });
   const streamsQ = useQuery({
-    queryKey: ["live-streams", acct, "all"],
+    queryKey: ["guide-live-streams", "v1", acct],
     enabled: !!creds,
-    queryFn: () => api<LiveStream[]>(creds!, "get_live_streams"),
+    queryFn: withPersist(
+      streamsCacheKey,
+      () => api<LiveStream[]>(creds!, "get_live_streams"),
+      { shouldPersist: (d) => Array.isArray(d) && d.length > 0 },
+    ),
+    initialData: streamsInitial,
+    initialDataUpdatedAt: streamsInitial ? streamsPersisted?.updatedAt : undefined,
+    staleTime: 5 * 60_000,
+    refetchOnMount: streamsInitial ? false : "always",
+    retry: 2,
   });
 
   const filteredChannels = useMemo(() => {
