@@ -54,6 +54,7 @@ declare global {
   interface Window {
     __vodErrors?: VodErrorSample[];
     __vodReport?: () => void;
+    __vodReportJson?: () => string;
     __vodReset?: () => void;
   }
 }
@@ -63,10 +64,12 @@ function ensureStore(): VodErrorSample[] {
   if (!window.__vodErrors) {
     window.__vodErrors = [];
     window.__vodReport = () => reportVod();
+    window.__vodReportJson = () => buildVodReportJson();
     window.__vodReset = () => { if (window.__vodErrors) window.__vodErrors.length = 0; };
   }
   return window.__vodErrors;
 }
+
 
 function extOf(url: string): string {
   try {
