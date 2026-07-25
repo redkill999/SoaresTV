@@ -1129,17 +1129,16 @@ export function VideoPlayer({
     // currentTime — isso causa loop "roda-congela-roda-congela" (reload
     // reseta contador, próximo stall reloada de novo). Deixamos o próprio
     // mpegts.js gerenciar buffering; só reagimos a ERROR events.
+    // (Watchdog de stall via mpegts intencionalmente ausente — não reintroduzir.)
     let mpegtsRecoverAttempts = 0;
     const MAX_MPEGTS_RECOVER = 2;
     let lastMpegtsUrl: string | null = null;
     let mpegtsHadFirstFrame = false;
-    const clearMpegtsStallWatchdog = () => { /* noop — mantido p/ compat */ };
     const reloadMpegts = () => {
       if (!lastMpegtsUrl || cancelled) return;
       pushDbg(`mpegts reload url=${maskIptvUrl(lastMpegtsUrl)}`);
       void playMpegTs(lastMpegtsUrl);
     };
-    const armMpegtsStallWatchdog = () => { /* noop */ };
 
 
 
