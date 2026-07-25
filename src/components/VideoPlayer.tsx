@@ -542,7 +542,9 @@ export function VideoPlayer({
           }
           nativeLiveStillTicksRef.current += 1;
           pushDbg(`NATIVE LIVE stall tick=${nativeLiveStillTicksRef.current} t=${t.toFixed(2)}`);
-          if (nativeLiveStillTicksRef.current >= 7) {
+          // v12 subiu de 5 → 7 ticks. legacyApkBuffer volta para 5.
+          const stallTickThreshold = getPerfFlags().legacyApkBuffer ? 5 : 7;
+          if (nativeLiveStillTicksRef.current >= stallTickThreshold) {
             nativeLiveStillTicksRef.current = 0;
             reloadNativeLiveRef.current();
           }
