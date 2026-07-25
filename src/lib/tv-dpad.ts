@@ -470,9 +470,17 @@ export function destroyTvDpad() {
 /** Detecta se o ambiente parece ser Smart TV / TV Box. */
 export function isSmartTvEnv(): boolean {
   if (typeof navigator === "undefined") return false;
+  // Sinais de plataforma (globals do próprio SO da TV) — mais confiáveis
+  // que UA em marcas "brancas" (AOC, Philips, TVs Android genéricas).
+  const w = window as Window & {
+    tizen?: unknown; webOS?: unknown; webOSSystem?: unknown;
+    PalmSystem?: unknown; __tv?: boolean;
+  };
+  if (w.tizen || w.webOS || w.webOSSystem || w.PalmSystem || w.__tv === true) return true;
   const ua = navigator.userAgent || "";
-  return /Tizen|Web0S|WebOS|SmartTV|SMART-TV|HbbTV|NetCast|VIDAA|AFT[A-Z]|AndroidTV|Android TV|GoogleTV|BRAVIA|Hisense|Roku|TCL|MiBOX|MiTV|Chromecast|CrKey|AOSP on IAT|Linux;\s?Android[^)]*;\s?(?:TV|ATV|MiBOX|TCL)/i.test(ua);
+  return /Smart[- ]?TV|SMART-TV|Tizen|Web0S|WebOS|PalmSystem|NetCast|GoogleTV|Google TV|AndroidTV|Android TV|Android[^;)]*;\s?(?:TV|ATV)|HbbTV|AppleTV|Apple TV|CrKey|NetTV|InetTV|Opera TV|SmartCast|Viera|NetRange|AFT[A-Z]|FireTV|Fire TV|BRAVIA|VIDAA|Hisense|Philips|PhilipsTV|AOC|DTV|Roku|TCL|MiBOX|MiTV|Chromecast|AOSP on IAT/i.test(ua);
 }
+
 
 /**
  * Detecta especificamente TV/TV Box (diferente de `data-tv-mode`, que também
