@@ -1396,6 +1396,7 @@ export function VideoPlayer({
         pushDbg(`ETAPA 8.4 APK LIVE HTTPS direto via <video> nativo (sem hls.js/mpegts)`);
         video.pause();
         video.currentTime = 0;
+        markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         video.src = url;
         video.load();
         clearWatchdog();
