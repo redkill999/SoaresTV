@@ -2180,6 +2180,7 @@ export function VideoPlayer({
         });
 
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
