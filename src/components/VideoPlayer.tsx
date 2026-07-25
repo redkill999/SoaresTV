@@ -18,6 +18,7 @@ import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-playe
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
 import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
+import { getPerfFlags } from "@/lib/perf-flags";
 
 
 
