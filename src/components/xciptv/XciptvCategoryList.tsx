@@ -52,6 +52,7 @@ export const XciptvCategoryList = memo(function XciptvCategoryList({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="BUSCAR CATEGORIA"
+            aria-label="Buscar categoria"
             className="w-full bg-black/30 border border-white/10 rounded-sm pl-7 pr-2 py-1.5 text-[11px] uppercase tracking-wide text-white placeholder:text-white/30 focus:outline-none focus:border-[#1FB6FF]"
           />
         </label>

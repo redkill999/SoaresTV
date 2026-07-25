@@ -163,6 +163,7 @@ function FavoritesPage() {
         </div>
       </div>
 
+      <div data-tv-scope>
       <MediaGrid
         empty={filtered.length === 0}
         aspect={tab === "live" ? "wide" : "poster"}
@@ -181,6 +182,7 @@ function FavoritesPage() {
           />
         ))}
       </MediaGrid>
+      </div>
       </div>
     </PremiumChrome>
   );

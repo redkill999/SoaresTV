@@ -91,6 +91,7 @@ export function XciptvHeader({
               value={search ?? ""}
               onChange={(e) => onSearch(e.target.value)}
               placeholder="Buscar…"
+              aria-label="Buscar"
               className="bg-transparent outline-none text-sm text-white placeholder:text-white/40 w-32 sm:w-48"
             />
             <button
