@@ -697,6 +697,10 @@ export function VideoPlayer({
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
   // potencialmente matando outra instância do plugin.
   const nativeOpenedRef = useRef(false);
+  // Timer defensivo de stopNative() +4s do watchdog manual do ExoPlayer.
+  // Guardado em ref para ser cancelado no unmount — sem isso, sair da tela
+  // durante os 4s dispararia stopNative() órfão após navegação.
+  const nativeStopDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const launchNativeFromDebug = useCallback(async () => {
     manualNativeStartRef.current = true;
@@ -719,7 +723,11 @@ export function VideoPlayer({
           setPlayerMode("web");
           showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
           void stopNative().catch(() => undefined);
-          setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
+          if (nativeStopDelayRef.current) clearTimeout(nativeStopDelayRef.current);
+          nativeStopDelayRef.current = setTimeout(() => {
+            nativeStopDelayRef.current = null;
+            void stopNative().catch(() => undefined);
+          }, 4_000);
         }, 35_000);
       }
       return;
@@ -824,6 +832,10 @@ export function VideoPlayer({
       if (nativeLiveWatchdogRef.current) {
         clearTimeout(nativeLiveWatchdogRef.current);
         nativeLiveWatchdogRef.current = null;
+      }
+      if (nativeStopDelayRef.current) {
+        clearTimeout(nativeStopDelayRef.current);
+        nativeStopDelayRef.current = null;
       }
       stopNativeLiveStallWatchdog();
     };
@@ -1104,7 +1116,6 @@ export function VideoPlayer({
     };
 
     const destroyTsPlayer = () => {
-      clearMpegtsStallWatchdog();
       if (!tsPlayer) return;
       try { tsPlayer.pause(); } catch { /* noop */ }
       try { tsPlayer.unload(); } catch { /* noop */ }
@@ -1117,17 +1128,16 @@ export function VideoPlayer({
     // currentTime — isso causa loop "roda-congela-roda-congela" (reload
     // reseta contador, próximo stall reloada de novo). Deixamos o próprio
     // mpegts.js gerenciar buffering; só reagimos a ERROR events.
+    // (Watchdog de stall via mpegts intencionalmente ausente — não reintroduzir.)
     let mpegtsRecoverAttempts = 0;
     const MAX_MPEGTS_RECOVER = 2;
     let lastMpegtsUrl: string | null = null;
     let mpegtsHadFirstFrame = false;
-    const clearMpegtsStallWatchdog = () => { /* noop — mantido p/ compat */ };
     const reloadMpegts = () => {
       if (!lastMpegtsUrl || cancelled) return;
       pushDbg(`mpegts reload url=${maskIptvUrl(lastMpegtsUrl)}`);
       void playMpegTs(lastMpegtsUrl);
     };
-    const armMpegtsStallWatchdog = () => { /* noop */ };
 
 
 
@@ -1289,7 +1299,6 @@ export function VideoPlayer({
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
-        armMpegtsStallWatchdog();
         return true;
       } catch {
         return false;
@@ -1737,7 +1746,7 @@ export function VideoPlayer({
           backBufferLength: isLive ? 15 : 30,
           maxBufferLength: isLive ? (apkLiveHlsSmooth ? 60 : 45) : 60,
           maxMaxBufferLength: isLive ? (apkLiveHlsSmooth ? 120 : 90) : 180,
-          maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
+          maxBufferSize: 90 * 1000 * 1000,
           maxBufferHole: isLive ? (apkLiveHlsSmooth ? 2.5 : 1.5) : 0.5,
           maxFragLookUpTolerance: apkLiveHlsSmooth ? 0.5 : 0.25,
           highBufferWatchdogPeriod: isLive ? (apkLiveHlsSmooth ? 3 : 2) : 3,

@@ -375,13 +375,23 @@ export function hostOf(url: string): string | null {
   try { return new URL(url).host.toLowerCase(); } catch { return null; }
 }
 
+// Normaliza a chave de host usada em memory[]. Compartilhado entre leitura e
+// escrita para evitar fragmentação (ex.: "painel.com:8080" e "painel.com"
+// virando entradas separadas — causa histórica de 5+ hotfixes manuais neste
+// arquivo). Só remove porta e prefixo www — não altera subdomínios reais.
+function normalizeHostKey(host: string): string {
+  return host.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+}
+
 export function getHostProfile(host: string | null | undefined): HostProfile {
   if (!host) return {};
   const h = host.toLowerCase();
+  // 1) match exato (mantém compat com chaves antigas já persistidas com porta)
   if (memory[h]) return memory[h];
-  // Presets como "athra.sbs" precisam valer também quando o Xtream gera URLs
-  // com porta explícita (ex.: athra.sbs:80 / :8080). Sem este fallback, o APK
-  // não ativava forceNativeForLive nem o diagnóstico visual para canais LIVE.
+  // 2) match normalizado (chave canônica após esta correção)
+  const normalized = normalizeHostKey(h);
+  if (normalized !== h && memory[normalized]) return memory[normalized];
+  // 3) fallbacks legados (sem porta / sem www isoladamente) — preservados
   const withoutPort = h.replace(/:\d+$/, "");
   if (memory[withoutPort]) return memory[withoutPort];
   const withoutWww = withoutPort.replace(/^www\./, "");
@@ -392,7 +402,10 @@ export function getHostProfile(host: string | null | undefined): HostProfile {
 
 export function updateHostProfile(host: string, patch: Partial<HostProfile>): HostProfile {
   if (!host) return {};
-  const h = host.toLowerCase();
+  // Escrita SEMPRE na chave normalizada. Isso elimina a fragmentação em que
+  // "host:8080", "host:80" e "host" geravam três perfis distintos — cada um
+  // aprendendo liveFastStart/preferTs/etc. de forma isolada.
+  const h = normalizeHostKey(host);
   const current = memory[h] ?? {};
   // Só persiste se algo mudou de fato (evita escrita inútil).
   let changed = false;
@@ -406,6 +419,7 @@ export function updateHostProfile(host: string, patch: Partial<HostProfile>): Ho
   console.log("[HOST PROFILE] atualizado", { host: h, perfil: next });
   return next;
 }
+
 
 // =========================================================================
 // Helpers de alto nível usados pelo VideoPlayer.
