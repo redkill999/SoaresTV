@@ -576,6 +576,7 @@ export function VideoPlayer({
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
     pushDbg(`ETAPA 3.1 native UA=${ua}`);
+    markPlayback("native-open-start", { pipeline: "native-exo", url: src });
     return playNative({
       url: src,
       userAgent: ua,
