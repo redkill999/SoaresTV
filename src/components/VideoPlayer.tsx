@@ -19,6 +19,7 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type Aspe
 import { maskIptvUrl } from "@/lib/iptv-url";
 import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
 import { getPerfFlags } from "@/lib/perf-flags";
+import { markPlayback } from "@/lib/playback-telemetry";
 
 
 
