@@ -823,6 +823,19 @@ export function VideoPlayer({
       if (ok) nativeOpenedRef.current = true;
       if (!ok) {
         const autoFallback = isLiveSrc && apkLiveAutoNativeRef.current;
+        // BUG 1 rollback: se abrimos native por aprendizado VOD e ele falhou,
+        // remove o aprendizado imediatamente e cai para o pipeline Web sem
+        // mostrar diagnóstico (evita loop e preserva UX do VOD que funciona).
+        const vodLearned = vodNativeLearnedRef.current;
+        if (!isLiveSrc && vodLearned) {
+          clearVodNativeLearning(vodLearned.key);
+          vodNativeLearnedRef.current = null;
+          pushDbg(`ETAPA 9 VOD force-native falhou; aprendizado removido key=${vodLearned.key}`);
+          nativeOpenedRef.current = false;
+          setPlayerMode("web");
+          setError(null);
+          return;
+        }
         pushDbg(`ETAPA 9 native init falhou/timeout; autoFallback=${autoFallback}`);
         nativeOpenedRef.current = false;
         setPlayerMode("web");
@@ -833,6 +846,7 @@ export function VideoPlayer({
         }
         return;
       }
+
       if (ok && isLiveSrc) {
         // Watchdog auto-native no APK: 25s (mais curto que 35s do modo forced,
         // porque temos fallback silencioso para o pipeline Web).
