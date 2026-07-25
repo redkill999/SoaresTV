@@ -1780,6 +1780,7 @@ export function VideoPlayer({
         // Flag de A/B: quando legacyApkBuffer=true, desliga o smooth-buffer v12
         // APENAS para LIVE no APK, restaurando os params pré-commit 2a98f49.
         const apkLiveHlsSmooth = apkLiveHlsSmoothRaw && !getPerfFlags().legacyApkBuffer;
+        markPlayback("player-create-start", { pipeline: "hls.js", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
