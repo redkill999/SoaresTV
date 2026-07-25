@@ -1116,7 +1116,6 @@ export function VideoPlayer({
     };
 
     const destroyTsPlayer = () => {
-      clearMpegtsStallWatchdog();
       if (!tsPlayer) return;
       try { tsPlayer.pause(); } catch { /* noop */ }
       try { tsPlayer.unload(); } catch { /* noop */ }
