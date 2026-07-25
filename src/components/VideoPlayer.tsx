@@ -1439,6 +1439,7 @@ export function VideoPlayer({
           if (!handled && !cancelled) {
             video.pause();
             video.currentTime = 0;
+            markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
             video.src = url;
             video.load();
             video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
