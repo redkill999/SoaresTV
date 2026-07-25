@@ -45,7 +45,12 @@ function PlayerPage() {
   const { name = "", src: customSrc = "" } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [creds, setCreds] = useState<XtreamCreds | null>(null);
+  // Lazy init: lê creds do storage já no primeiro render (client-only),
+  // evitando 1 render extra antes do <VideoPlayer> montar. Em SSR fica null
+  // e o useEffect abaixo hidrata normalmente.
+  const [creds, setCreds] = useState<XtreamCreds | null>(() =>
+    typeof window !== "undefined" ? store.getCreds() : null,
+  );
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     setHydrated(true);
