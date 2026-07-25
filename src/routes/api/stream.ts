@@ -19,7 +19,7 @@ function corsHeadersFor(request: Request): Record<string, string> {
   const base: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Proxy-UA-Attempts, X-Proxy-UA-Winner, X-Proxy-UA-Timings, X-Proxy-Total-Ms",
     Vary: "Origin",
   };
   const reqOrigin = request.headers.get("origin");
@@ -226,7 +226,17 @@ async function handle(request: Request) {
   let lastNonPlayableReason = "";
   let acceptedLooksBinary = false;
   let authRejected = false;
+
+  // ---- INSTRUMENTAÇÃO TEMPORÁRIA (read-only) ----------------------------
+  // Coleta tempos por UA para relatório do gargalo do proxy. Não altera
+  // nenhuma decisão de fluxo. Removível sem impacto funcional.
+  const uaTimings: Array<{ ua: string; ms: number; status: number | "err"; note?: string }> = [];
+  let uaWinner: string | null = null;
+  const overallStart = Date.now();
+  // -----------------------------------------------------------------------
+
   for (const ua of uaCandidates) {
+    const uaStart = Date.now();
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -240,6 +250,7 @@ async function handle(request: Request) {
       lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
         authRejected = true;
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "auth-reject" });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
@@ -255,6 +266,7 @@ async function handle(request: Request) {
         if (AUTH_FAIL_RE.test(preview)) {
           authRejected = true;
           lastStatus = 401;
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: 401, note: "body-auth-reject" });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -264,23 +276,51 @@ async function handle(request: Request) {
       }
       if ((isProbe || isLive) && !res.ok) {
         lastNonPlayableReason = reasonForStatus(res.status) || `Stream upstream HTTP ${res.status}`;
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "not-ok" });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
       if ((isProbe || isLive) && res.ok) {
         if (!loopPlayable) {
           lastNonPlayableReason = "Resposta upstream não parece vídeo.";
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "non-playable" });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
       }
       upstream = res;
       acceptedLooksBinary = loopBodyLooksBinary;
+      uaWinner = ua;
+      uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "winner" });
       break;
     } catch (e) {
+      const errMs = Date.now() - uaStart;
+      const isAbort = e instanceof Error && (e.name === "AbortError" || /abort/i.test(e.message));
+      uaTimings.push({ ua, ms: errMs, status: "err", note: isAbort ? "timeout-abort" : "fetch-fail" });
       lastError = e;
     }
   }
+
+  // Log estruturado — grep no server-function-logs por [STREAM-PROXY-METRIC].
+  const totalProxyMs = Date.now() - overallStart;
+  try {
+    const summary = uaTimings.map((t) => `${t.ua.split("/")[0]}=${t.ms}ms/${t.status}${t.note ? `(${t.note})` : ""}`).join(" | ");
+    // eslint-disable-next-line no-console
+    console.log(
+      `[STREAM-PROXY-METRIC] host=${upstreamUrl.host} kind=${isLive ? "live" : "vod"} probe=${isProbe} total=${totalProxyMs}ms attempts=${uaTimings.length} winner=${uaWinner ?? "none"} | ${summary}`,
+    );
+  } catch { /* noop */ }
+
+  // Injeta métricas nos headers CORS para o cliente ler (window.__playbackMetrics).
+  // Não altera nenhum comportamento do proxy — só instrumentação.
+  cors["X-Proxy-UA-Attempts"] = String(uaTimings.length);
+  cors["X-Proxy-Total-Ms"] = String(totalProxyMs);
+  if (uaWinner) cors["X-Proxy-UA-Winner"] = uaWinner.split("/")[0];
+  cors["X-Proxy-UA-Timings"] = uaTimings
+    .map((t) => `${t.ua.split("/")[0]}:${t.ms}:${t.status}${t.note ? `:${t.note}` : ""}`)
+    .join(",");
+
+
 
   if (!upstream) {
     const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";

@@ -271,6 +271,9 @@ function RootComponent() {
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
+    // Instrumentação TEMPORÁRIA da cadeia de playback (read-only).
+    // Console: window.__playbackReport() para ver resumo; __playbackReset() para zerar.
+    void import("@/lib/playback-metrics").then((m) => m.installPlaybackMetrics());
     // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
     if (w.Capacitor?.isNativePlatform?.()) {
       void import("@capacitor/screen-orientation")
