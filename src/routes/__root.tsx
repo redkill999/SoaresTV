@@ -143,8 +143,17 @@ const TV_MODE_SCRIPT = `(function(){
       var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
       var ua = (navigator.userAgent || '').toLowerCase();
       var isPhoneOrTablet = hasTouch || /android|iphone|ipad|ipod|mobile/.test(ua);
-      // Smart TVs: Tizen (Samsung), WebOS (LG), AndroidTV, GoogleTV, FireTV (AFT*), Hisense/VIDAA, NetCast, Roku, BRAVIA
-      var isSmartTV = /smart-tv|smarttv|tizen|web0s|webos|netcast|googletv|android tv|androidtv|hbbtv|appletv|crkey|nettv|aft[a-z]|firetv|bravia|vidaa|hisense|philipstv|roku|playstation|nintendo|xbox|tcl|mibox|mitv|chromecast|aosp on iat|linux; ?android[^)]*; ?(?:tv|atv|mibox|tcl)/.test(ua);
+      // Sinais de plataforma (globals injetadas pelo próprio SO da TV) —
+      // mais confiáveis que UA em TVs de marca branca (AOC, Philips, etc.).
+      // NÃO reintroduzir heurística "sem touch": WebViews de Android TV
+      // frequentemente reportam touch, e desktops reportam sem touch.
+      var w = window;
+      var hasTvGlobal = !!(w.tizen || w.webOS || w.webOSSystem || w.PalmSystem || w.__tv === true);
+      // Smart TVs: Tizen (Samsung), WebOS (LG), AndroidTV, GoogleTV, FireTV (AFT*),
+      // Hisense/VIDAA, NetCast, Roku, BRAVIA, Philips, AOC, TCL, Xiaomi, Chromecast
+      // e marcas "brancas" que usam Android TV genérico (padrão "Android X; TV").
+      var isSmartTVUA = /smart[- ]?tv|smarttv|tizen|web0s|webos|palmsystem|netcast|googletv|google tv|android tv|androidtv|android[^;)]*;\\s?(?:tv|atv)|hbbtv|appletv|apple tv|crkey|nettv|inettv|opera tv|smartcast|viera|netrange|aft[a-z]|firetv|fire tv|bravia|vidaa|hisense|philips|philipstv|aoc|dtv|roku|playstation|nintendo|xbox|tcl|mibox|mitv|chromecast|aosp on iat/.test(ua);
+      var isSmartTV = hasTvGlobal || isSmartTVUA;
       // Flag opcional injetada por plugin nativo (UiModeManager em Android):
       // "tv" | "phone" | "tablet". Se presente, tem prioridade sobre heurísticas.
       var injectedType = window.__deviceType || '';
@@ -165,6 +174,14 @@ const TV_MODE_SCRIPT = `(function(){
         : 'width=device-width, initial-scale=1, viewport-fit=cover');
       document.head.appendChild(m);
       if (isTV) {
+        // Overscan opcional (3-5%) — só aplica se usuário optar via
+        // localStorage 'tv:overscan' (valores 0, 3, 4 ou 5). Default = 0
+        // (visual idêntico ao atual). O CSS lê --tv-overscan-pct.
+        try {
+          var ov = parseFloat(localStorage.getItem('tv:overscan') || '0');
+          if (!(ov >= 0 && ov <= 5)) ov = 0;
+          html.style.setProperty('--tv-overscan-pct', String(ov / 100));
+        } catch(_) { html.style.setProperty('--tv-overscan-pct', '0'); }
         // Calcula scale ANTES de setar data-tv-mode pra evitar FOUC.
         // Se ligássemos data-tv-mode primeiro, o CSS aplicaria
         // scale(var(--tv-scale-x)) com a var inexistente → body de
@@ -198,6 +215,7 @@ const TV_MODE_SCRIPT = `(function(){
         html.style.removeProperty('--tv-scale-y');
         html.style.removeProperty('--tv-vw');
         html.style.removeProperty('--tv-vh');
+        html.style.removeProperty('--tv-overscan-pct');
       }
     }
     apply();
@@ -208,6 +226,7 @@ const TV_MODE_SCRIPT = `(function(){
     }
   } catch(e) {}
 })();`;
+
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
