@@ -380,12 +380,39 @@ async function handle(request: Request) {
 
 
 
+  // Envelope de diagnóstico (read-only). Nunca influencia decisão de fluxo:
+  // é apenas anexado aos JSONs de erro/probe para o cliente registrar o
+  // motivo real da falha, etapa, resposta upstream e UA vencedora/tentadas.
+  const buildDiagnosticEnvelope = (stage: string, decision: string, reason: string): Record<string, unknown> => ({
+    stage,
+    decision,
+    reason,
+    host: upstreamUrl.host,
+    kind: isLive ? "live" : "vod",
+    isProbe,
+    totalProxyMs,
+    attempts: uaTimings.length,
+    uaWinner: uaWinner ?? null,
+    uaAttempts: uaTimings.map((t) => ({
+      ua: t.ua,
+      ms: t.ms,
+      status: t.status,
+      note: t.note,
+      upstreamHeaders: t.upstreamHeaders,
+    })),
+    lastStatus,
+    lastContentType,
+    forcedUA: forcedUA || undefined,
+    hasClientRange: !!clientRange,
+  });
+
   if (!upstream) {
     const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
     const msg = maskIptvUrl(rawMsg);
     // 401/403 explícito do upstream: propaga com mensagem clara.
     if (authRejected || lastStatus === 401 || lastStatus === 403) {
       const status = lastStatus === 403 ? 403 : 401;
+      const diag = buildDiagnosticEnvelope("auth", "reject", AUTH_REASON);
       if (isProbe) {
         return jdata({
           ok: false,
@@ -394,25 +421,30 @@ async function handle(request: Request) {
           finalUrlHost: upstreamUrl.host,
           reason: AUTH_REASON,
           bodyPreview: maskIptvUrl(lastPreview),
+          diag,
         });
       }
-      return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
+      return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status, undefined, diag);
     }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
+    const failReason = lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg;
+    const diag = buildDiagnosticEnvelope("upstream-fetch", uaTimings.length ? "all-attempts-failed" : "no-attempts", failReason);
     if (isProbe) {
       return jdata({
         ok: false,
         status: lastStatus || 424,
           contentType: lastContentType,
         finalUrlHost: upstreamUrl.host,
-          reason: lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg,
+          reason: failReason,
           bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
+          diag,
       });
     }
-    return jerr(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
+    return jerr(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424, undefined, diag);
   }
+
 
   const ct = upstream.headers.get("content-type") || "";
   const finalUrlHost = (() => {
