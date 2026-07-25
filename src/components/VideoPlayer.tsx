@@ -8,6 +8,7 @@ import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatible
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
 
 
 
@@ -1685,6 +1686,13 @@ export function VideoPlayer({
     const onVideoError = () => {
       const mediaErr = video.error;
       pushDbg(`<video> error code=${mediaErr?.code ?? "?"} msg=${mediaErr?.message ?? "-"} netState=${video.networkState} readyState=${video.readyState}`);
+      // Instrumentação read-only p/ diagnóstico VOD code=4 (Format error).
+      // NÃO altera fluxo: dispara em paralelo, coleta Content-Type + magic
+      // bytes + canPlayType + MediaSource.isTypeSupported, classifica a causa
+      // e empurra p/ window.__vodErrors. Reporte via window.__vodReport().
+      if (isVod && mediaErr?.code === 4 && !cancelled) {
+        try { void diagnoseVodFormatError(video.currentSrc || workingSrc, video, pushDbg); } catch { /* noop */ }
+      }
       if (cancelled || hls) return;
       tryNextVod();
     };

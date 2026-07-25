@@ -19,7 +19,7 @@ function corsHeadersFor(request: Request): Record<string, string> {
   const base: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Proxy-UA-Attempts, X-Proxy-UA-Winner, X-Proxy-UA-Timings, X-Proxy-Total-Ms",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Proxy-UA-Attempts, X-Proxy-UA-Winner, X-Proxy-UA-Timings, X-Proxy-Total-Ms, X-Proxy-Detected-Container, X-Proxy-Magic",
     Vary: "Origin",
   };
   const reqOrigin = request.headers.get("origin");
@@ -94,6 +94,10 @@ function looksBinary(bytes: Uint8Array): boolean {
   if (!bytes.length) return false;
   // MPEG-TS packets normally start with sync byte 0x47 every 188 bytes.
   if (bytes[0] === 0x47 && (bytes.length < 189 || bytes[188] === 0x47)) return true;
+  // MP4/MOV/M4V: bytes 4-7 == "ftyp" (66 74 79 70)
+  if (bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) return true;
+  // Matroska/WebM: EBML header 1A 45 DF A3
+  if (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true;
   let control = 0;
   for (const b of bytes) {
     const isWhitespace = b === 9 || b === 10 || b === 13;
@@ -102,7 +106,36 @@ function looksBinary(bytes: Uint8Array): boolean {
   return control / bytes.length > 0.05;
 }
 
-async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<{ preview: string; binaryLike: boolean }> {
+// Read-only container detection from the first bytes. Instrumentação:
+// não altera nenhuma decisão do proxy, só é exposta via header X-Proxy-*.
+function detectContainer(bytes: Uint8Array): { kind: string; brand?: string } {
+  if (!bytes.length) return { kind: "empty" };
+  if (bytes[0] === 0x47 && (bytes.length < 189 || bytes[188] === 0x47)) return { kind: "mp2t" };
+  if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]).replace(/[^\x20-\x7e]/g, "");
+    return { kind: "mp4", brand };
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return { kind: "mkv" };
+  if (bytes.length >= 4 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return { kind: "riff" };
+  if (bytes.length >= 4 && bytes[0] === 0x46 && bytes[1] === 0x4c && bytes[2] === 0x56 && bytes[3] === 0x01) return { kind: "flv" };
+  // ASCII sniff
+  try {
+    const head = new TextDecoder().decode(bytes.slice(0, 64)).toLowerCase();
+    if (head.startsWith("#extm3u")) return { kind: "m3u8" };
+    if (head.startsWith("<!doctype") || head.startsWith("<html")) return { kind: "html" };
+    if (head.startsWith("<?xml")) return { kind: "xml" };
+    if (head.startsWith("{") || head.startsWith("[")) return { kind: "json" };
+  } catch { /* noop */ }
+  return { kind: "unknown" };
+}
+
+function magicHex(bytes: Uint8Array, n = 16): string {
+  const out: string[] = [];
+  for (let i = 0; i < Math.min(n, bytes.length); i++) out.push(bytes[i].toString(16).padStart(2, "0"));
+  return out.join(" ");
+}
+
+async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Promise<{ preview: string; binaryLike: boolean; container: string; brand?: string; magic: string }> {
   const clone = res.clone();
   const timeout = new Promise<Uint8Array[]>((resolve) => setTimeout(() => resolve([]), timeoutMs));
   const read = (async () => {
@@ -132,13 +165,18 @@ async function sniffBody(res: Response, maxBytes = 512, timeoutMs = 1_500): Prom
     offset += slice.byteLength;
     if (offset >= bytes.length) break;
   }
+  const container = detectContainer(bytes);
+  const magic = magicHex(bytes);
   try {
     return {
       preview: new TextDecoder().decode(bytes).replace(/\s+/g, " ").trim().slice(0, 240),
       binaryLike: looksBinary(bytes),
+      container: container.kind,
+      brand: container.brand,
+      magic,
     };
   } catch {
-    return { preview: "", binaryLike: looksBinary(bytes) };
+    return { preview: "", binaryLike: looksBinary(bytes), container: container.kind, brand: container.brand, magic };
   }
 }
 
@@ -374,11 +412,19 @@ async function handle(request: Request) {
   const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok);
   let preview = lastPreview;
   let bodyLooksBinary = acceptedLooksBinary;
+  let detectedContainer: string | undefined;
+  let detectedBrand: string | undefined;
+  let detectedMagic: string | undefined;
   if (needsPreview) {
     try {
-      const sniff = preview ? { preview, binaryLike: bodyLooksBinary } : await sniffBody(upstream);
+      const sniff = preview
+        ? { preview, binaryLike: bodyLooksBinary, container: undefined as string | undefined, brand: undefined as string | undefined, magic: undefined as string | undefined }
+        : await sniffBody(upstream);
       preview = sniff.preview;
       bodyLooksBinary = bodyLooksBinary || sniff.binaryLike;
+      detectedContainer = sniff.container;
+      detectedBrand = sniff.brand;
+      detectedMagic = sniff.magic;
       if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
         if (isProbe) {
@@ -389,6 +435,9 @@ async function handle(request: Request) {
             finalUrlHost,
             reason: AUTH_REASON,
             bodyPreview: maskIptvUrl(preview),
+            container: detectedContainer,
+            brand: detectedBrand,
+            magic: detectedMagic,
           });
         }
         return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
@@ -406,6 +455,9 @@ async function handle(request: Request) {
       finalUrlHost,
       reason: playable ? undefined : reasonForStatus(upstream.status) || "Resposta upstream não parece vídeo.",
       bodyPreview: !playable && preview ? maskIptvUrl(preview) : undefined,
+      container: detectedContainer,
+      brand: detectedBrand,
+      magic: detectedMagic,
     });
   }
 
