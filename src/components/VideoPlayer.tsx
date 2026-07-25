@@ -1746,7 +1746,7 @@ export function VideoPlayer({
           backBufferLength: isLive ? 15 : 30,
           maxBufferLength: isLive ? (apkLiveHlsSmooth ? 60 : 45) : 60,
           maxMaxBufferLength: isLive ? (apkLiveHlsSmooth ? 120 : 90) : 180,
-          maxBufferSize: isLive ? 90 * 1000 * 1000 : 90 * 1000 * 1000,
+          maxBufferSize: 90 * 1000 * 1000,
           maxBufferHole: isLive ? (apkLiveHlsSmooth ? 2.5 : 1.5) : 0.5,
           maxFragLookUpTolerance: apkLiveHlsSmooth ? 0.5 : 0.25,
           highBufferWatchdogPeriod: isLive ? (apkLiveHlsSmooth ? 3 : 2) : 3,
