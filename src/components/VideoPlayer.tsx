@@ -833,6 +833,10 @@ export function VideoPlayer({
         clearTimeout(nativeLiveWatchdogRef.current);
         nativeLiveWatchdogRef.current = null;
       }
+      if (nativeStopDelayRef.current) {
+        clearTimeout(nativeStopDelayRef.current);
+        nativeStopDelayRef.current = null;
+      }
       stopNativeLiveStallWatchdog();
     };
   }, [src, kind, openNative, shouldUseNativePlayer, srcHostProfile, pushDbg, isLiveSrc, showStreamDiagnostic, stopNativeLiveStallWatchdog]);
