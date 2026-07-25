@@ -54,6 +54,7 @@ declare global {
   interface Window {
     __vodErrors?: VodErrorSample[];
     __vodReport?: () => void;
+    __vodReportJson?: () => string;
     __vodReset?: () => void;
   }
 }
@@ -63,10 +64,12 @@ function ensureStore(): VodErrorSample[] {
   if (!window.__vodErrors) {
     window.__vodErrors = [];
     window.__vodReport = () => reportVod();
+    window.__vodReportJson = () => buildVodReportJson();
     window.__vodReset = () => { if (window.__vodErrors) window.__vodErrors.length = 0; };
   }
   return window.__vodErrors;
 }
+
 
 function extOf(url: string): string {
   try {
@@ -301,3 +304,22 @@ export function reportVod(): void {
   // eslint-disable-next-line no-console
   console.groupEnd();
 }
+
+export function buildVodReportJson(): string {
+  const rows = (typeof window !== "undefined" && window.__vodErrors) || [];
+  const byCat: Record<string, number> = {};
+  let exoWouldFix = 0;
+  for (const r of rows) {
+    byCat[r.category] = (byCat[r.category] || 0) + 1;
+    if (r.wouldFixWithExo) exoWouldFix++;
+  }
+  const summary = {
+    total: rows.length,
+    exoWouldFix,
+    byCategory: byCat,
+    generatedAt: new Date().toISOString(),
+    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+  };
+  return JSON.stringify({ summary, samples: rows }, null, 2);
+}
+

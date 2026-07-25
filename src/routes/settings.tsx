@@ -24,6 +24,8 @@ import {
 import { SUPPORTED_LANGS, getStoredLang, setLang, type LangCode } from "@/lib/i18n";
 import homeBg from "@/assets/home-bg.png.asset.json";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { buildVodReportJson } from "@/lib/vod-error-diag";
+
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Ajustes — SoaresTV" }] }),
@@ -1188,6 +1190,79 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void })
             <Upload className="size-4" /> Restaurar
           </Button>
         </div>
+        <div className="mt-2 rounded-md border border-white/10 bg-white/5 p-3">
+          <div className="mb-2 text-xs uppercase tracking-wider text-white/60">
+            Diagnóstico VOD (temporário)
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const json = buildVodReportJson();
+                  const rows = (window as unknown as { __vodErrors?: unknown[] }).__vodErrors?.length ?? 0;
+                  const file = new File([json], `vod-report-${Date.now()}.json`, { type: "application/json" });
+                  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+                  if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
+                    await nav.share({ files: [file], title: "Diagnóstico VOD", text: `Total: ${rows}` });
+                    return;
+                  }
+                  if (typeof nav.share === "function") {
+                    await nav.share({ title: "Diagnóstico VOD", text: json });
+                    return;
+                  }
+                  toast.error("Share indisponível — use Copiar ou Baixar");
+                } catch { toast.error("Falha ao compartilhar"); }
+              }}
+            >
+              <Upload className="size-4" /> Compartilhar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const json = buildVodReportJson();
+                  const rows = (window as unknown as { __vodErrors?: unknown[] }).__vodErrors?.length ?? 0;
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(json);
+                  } else {
+                    const ta = document.createElement("textarea");
+                    ta.value = json; ta.style.position = "fixed"; ta.style.opacity = "0";
+                    document.body.appendChild(ta); ta.select();
+                    document.execCommand("copy"); document.body.removeChild(ta);
+                  }
+                  toast.success(`Copiado (${rows} erro${rows === 1 ? "" : "s"})`);
+                } catch { toast.error("Falha ao copiar"); }
+              }}
+            >
+              <CloudUpload className="size-4" /> Copiar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                try {
+                  const json = buildVodReportJson();
+                  const rows = (window as unknown as { __vodErrors?: unknown[] }).__vodErrors?.length ?? 0;
+                  const blob = new Blob([json], { type: "application/json" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `vod-report-${Date.now()}.json`;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  toast.success(`Baixado (${rows} erro${rows === 1 ? "" : "s"})`);
+                } catch { toast.error("Falha ao baixar"); }
+              }}
+            >
+              <Download className="size-4" /> Baixar
+            </Button>
+          </div>
+          <div className="mt-2 text-[10px] leading-relaxed text-white/40">
+            Conteúdo idêntico ao <code>window.__vodReport()</code>. Após a investigação, esta seção pode ser removida.
+          </div>
+        </div>
         <input
           ref={inputRef} type="file" accept="application/json" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); }}
@@ -1196,6 +1271,7 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose: () => void })
     </Dialog>
   );
 }
+
 
 function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [s, set] = useAppSettings();
