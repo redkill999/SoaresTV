@@ -19,6 +19,7 @@ import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type Aspe
 import { maskIptvUrl } from "@/lib/iptv-url";
 import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
 import { getPerfFlags } from "@/lib/perf-flags";
+import { markPlayback } from "@/lib/playback-telemetry";
 
 
 
@@ -575,6 +576,7 @@ export function VideoPlayer({
           ? USER_AGENT_STRINGS.xciptv
         : "XCIPTV/7.0 (Linux; Android 13)";
     pushDbg(`ETAPA 3.1 native UA=${ua}`);
+    markPlayback("native-open-start", { pipeline: "native-exo", url: src });
     return playNative({
       url: src,
       userAgent: ua,
@@ -595,6 +597,7 @@ export function VideoPlayer({
           name === "jeepCapVideoPlayerPlay" ||
           /\b(?:ready|play)\b/i.test(name)
         ) {
+          if (!nativeLivePlayedRef.current) markPlayback("native-open-end");
           nativeLivePlayedRef.current = true;
           nativeLivePausedRef.current = false;
           if (nativeLiveWatchdogRef.current) {
@@ -1278,6 +1281,7 @@ export function VideoPlayer({
         const apkLiveMpegtsRaw = asLive && nativeRuntimeRef.current;
         // A/B: legacyApkBuffer desliga o stash pré-v12 SOMENTE para LIVE no APK.
         const apkLiveMpegts = apkLiveMpegtsRaw && !getPerfFlags().legacyApkBuffer;
+        markPlayback("player-create-start", { pipeline: "mpegts.js", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
@@ -1294,6 +1298,7 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: apkLiveMpegts ? 2 : 1,
           },
         );
+        markPlayback("player-create-end");
         const markMpegtsFirstFrame = () => { mpegtsHadFirstFrame = true; };
         video.addEventListener("playing", markMpegtsFirstFrame, { once: true });
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
@@ -1316,7 +1321,9 @@ export function VideoPlayer({
           }
           tryNextVod();
         });
+        markPlayback("attach-media-start");
         tsPlayer.attachMediaElement(video);
+        markPlayback("attach-media-end");
         tsPlayer.load();
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
@@ -1389,6 +1396,7 @@ export function VideoPlayer({
         pushDbg(`ETAPA 8.4 APK LIVE HTTPS direto via <video> nativo (sem hls.js/mpegts)`);
         video.pause();
         video.currentTime = 0;
+        markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         video.src = url;
         video.load();
         clearWatchdog();
@@ -1432,6 +1440,7 @@ export function VideoPlayer({
           if (!handled && !cancelled) {
             video.pause();
             video.currentTime = 0;
+            markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
             video.src = url;
             video.load();
             video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
@@ -1441,6 +1450,7 @@ export function VideoPlayer({
       }
       video.pause();
       video.currentTime = 0;
+      markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
       video.src = url;
       video.load();
       armVodWatchdog();
@@ -1773,6 +1783,7 @@ export function VideoPlayer({
         // Flag de A/B: quando legacyApkBuffer=true, desliga o smooth-buffer v12
         // APENAS para LIVE no APK, restaurando os params pré-commit 2a98f49.
         const apkLiveHlsSmooth = apkLiveHlsSmoothRaw && !getPerfFlags().legacyApkBuffer;
+        markPlayback("player-create-start", { pipeline: "hls.js", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
@@ -1814,13 +1825,17 @@ export function VideoPlayer({
           maxLoadingDelay: 4,
           capLevelToPlayerSize: true,
         });
+        markPlayback("player-create-end");
         hls.loadSource(url);
+        markPlayback("attach-media-start");
         hls.attachMedia(video);
+        markPlayback("attach-media-end");
 
         // Dispara play() assim que o manifest é parseado — não espera o
         // autoPlay do browser engatar, reduz delay até primeiro frame.
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (cancelled) return;
+          markPlayback("manifest-parsed");
           video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         });
 
@@ -2168,6 +2183,7 @@ export function VideoPlayer({
         });
 
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        markPlayback("video-src-set", { pipeline: "html5", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         video.src = url;
         video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
       } else {
