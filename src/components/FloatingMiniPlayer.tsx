@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FocusEvent as ReactFocusEvent } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { MiniLivePlayer } from "@/components/MiniLivePlayer";
@@ -14,6 +14,8 @@ export function FloatingMiniPlayer() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [creds, setCreds] = useState<XtreamCreds | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Guarda o último foco fora do mini player para restaurar após fechar.
+  const prevFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const saved = store.getCreds();
@@ -43,21 +45,40 @@ export function FloatingMiniPlayer() {
     HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
   if (hidden) return null;
 
+  // Antes de o foco entrar no wrapper (só o botão Fechar é focável dentro),
+  // memoriza de onde ele veio para restaurar depois do clear().
+  const handleFocusCapture = (e: ReactFocusEvent<HTMLDivElement>) => {
+    const rel = e.relatedTarget as HTMLElement | null;
+    if (rel && !wrapRef.current?.contains(rel)) {
+      prevFocusRef.current = rel;
+    }
+  };
+
+  const handleClose = () => {
+    const prev = prevFocusRef.current;
+    clear();
+    // Restaura o foco no elemento originalmente selecionado (D-pad UX).
+    requestAnimationFrame(() => {
+      if (prev && document.body.contains(prev)) {
+        try { prev.focus({ preventScroll: true }); } catch { /* noop */ }
+      }
+    });
+  };
+
   return (
     <div
       ref={wrapRef}
-      // M3: isolado da navegação espacial global do D-pad. O container ainda
-      // é clicável por mouse/touch, mas nem o vídeo nem o botão X aparecem
-      // no pickNearest() do controle remoto. Se no futuro quisermos foco
-      // intencional, basta remover o aria-hidden e/ou tabIndex=-1 abaixo.
-      aria-hidden="true"
+      // M3: o container fica FORA da navegação espacial global do D-pad
+      // (nenhum focusable existe além do botão Fechar — video sem controls
+      // não é focável). Quando o mini está visível, apenas o Fechar recebe
+      // foco via D-pad; ao fechar, o foco volta ao item anterior.
+      onFocusCapture={handleFocusCapture}
       className="fixed z-50 bottom-16 right-3 sm:bottom-4 sm:right-4 w-56 sm:w-72 transition-all duration-300 translate-y-0 opacity-100"
     >
       <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black">
         <button
           type="button"
-          tabIndex={-1}
-          onClick={clear}
+          onClick={handleClose}
           aria-label="Fechar mini player"
           className="absolute top-1.5 right-1.5 z-10 size-7 rounded-full bg-black/70 hover:bg-black/90 text-white grid place-items-center"
         >
@@ -75,3 +96,4 @@ export function FloatingMiniPlayer() {
     </div>
   );
 }
+
