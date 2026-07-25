@@ -1281,6 +1281,7 @@ export function VideoPlayer({
         const apkLiveMpegtsRaw = asLive && nativeRuntimeRef.current;
         // A/B: legacyApkBuffer desliga o stash pré-v12 SOMENTE para LIVE no APK.
         const apkLiveMpegts = apkLiveMpegtsRaw && !getPerfFlags().legacyApkBuffer;
+        markPlayback("player-create-start", { pipeline: "mpegts.js", url, viaProxy: /^\/api\/stream\?/i.test(url) });
         tsPlayer = mpegts.createPlayer(
           { type: "mpegts", isLive: asLive, url: absUrl },
           {
