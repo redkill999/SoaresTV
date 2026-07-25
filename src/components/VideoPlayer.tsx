@@ -1704,32 +1704,9 @@ export function VideoPlayer({
       // bytes + canPlayType + MediaSource.isTypeSupported, classifica a causa
       // e empurra p/ window.__vodErrors. Reporte via window.__vodReport().
       if (isVod && mediaErr?.code === 4 && !cancelled) {
-        try {
-          void diagnoseVodFormatError(video.currentSrc || workingSrc, video, pushDbg).then((sample) => {
-            // BUG 1: só APK + VOD + MP4 válido confirmado pelos magic bytes.
-            // Assinatura: host + streamId + container + codec + mime (ordem
-            // de prioridade). mp4Brand vai apenas como metadado.
-            if (!sample) return;
-            if (!isNativeAppSync()) return;
-            if (sample.realContainer !== "mp4") return;
-            const host = hostOf(workingSrc);
-            if (!host) return;
-            const mime = (sample.contentType || "").split(";")[0]?.trim().toLowerCase() || "video/mp4";
-            const codec = extractVideoCodecFromContentType(sample.contentType);
-            const sig: VodForceNativeSignature = {
-              host,
-              streamId: mediaId ? String(mediaId) : undefined,
-              container: "mp4",
-              codec,
-              mime,
-            };
-            recordVodNativeFailure(sig, {
-              mp4Brand: sample.mp4Brand,
-              reason: `code=4 ${sample.category}`,
-            });
-          }).catch(() => { /* noop */ });
-        } catch { /* noop */ }
+        try { void diagnoseVodFormatError(video.currentSrc || workingSrc, video, pushDbg); } catch { /* noop */ }
       }
+
 
       if (cancelled || hls) return;
       tryNextVod();
