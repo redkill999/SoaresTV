@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PremiumChrome } from "@/components/PremiumChrome";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { MediaCard } from "@/components/MediaCard";
 import { MediaGrid } from "@/components/MediaGrid";
 import { type TabKey } from "@/components/SectionTabs";
-import { useFavorites } from "@/hooks/use-favorites";
-import { store, type HistItem } from "@/lib/storage";
+import { useFavorites, useHistory } from "@/hooks/use-favorites";
+import { store } from "@/lib/storage";
 import { getLockedIdSet } from "@/lib/parental";
 import { ArrowDownAZ, Clock, Flame, Heart } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -21,16 +21,6 @@ export const Route = createFileRoute("/favorites")({
 // novo primeiro, como já vem do store.toggleFav); "az" = alfabético;
 // "watched" = mais assistidos, cruzando com o histórico.
 type SortKey = "recent" | "az" | "watched";
-
-// Hook reativo ao histórico — quando o usuário assiste algo, a contagem
-// recalcula sem precisar reabrir a página.
-function useHistory(): HistItem[] {
-  return useSyncExternalStore(
-    (cb) => store.subscribeHistory(cb),
-    () => store.getHistory(),
-    () => store.getHistory(),
-  );
-}
 
 function FavoritesPage() {
   const { t } = useTranslation();
