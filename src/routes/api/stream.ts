@@ -302,14 +302,24 @@ async function handle(request: Request) {
   }
 
   // Log estruturado — grep no server-function-logs por [STREAM-PROXY-METRIC].
+  const totalProxyMs = Date.now() - overallStart;
   try {
-    const totalMs = Date.now() - overallStart;
     const summary = uaTimings.map((t) => `${t.ua.split("/")[0]}=${t.ms}ms/${t.status}${t.note ? `(${t.note})` : ""}`).join(" | ");
     // eslint-disable-next-line no-console
     console.log(
-      `[STREAM-PROXY-METRIC] host=${upstreamUrl.host} kind=${isLive ? "live" : "vod"} probe=${isProbe} total=${totalMs}ms attempts=${uaTimings.length} winner=${uaWinner ?? "none"} | ${summary}`,
+      `[STREAM-PROXY-METRIC] host=${upstreamUrl.host} kind=${isLive ? "live" : "vod"} probe=${isProbe} total=${totalProxyMs}ms attempts=${uaTimings.length} winner=${uaWinner ?? "none"} | ${summary}`,
     );
   } catch { /* noop */ }
+
+  // Injeta métricas nos headers CORS para o cliente ler (window.__playbackMetrics).
+  // Não altera nenhum comportamento do proxy — só instrumentação.
+  cors["X-Proxy-UA-Attempts"] = String(uaTimings.length);
+  cors["X-Proxy-Total-Ms"] = String(totalProxyMs);
+  if (uaWinner) cors["X-Proxy-UA-Winner"] = uaWinner.split("/")[0];
+  cors["X-Proxy-UA-Timings"] = uaTimings
+    .map((t) => `${t.ua.split("/")[0]}:${t.ms}:${t.status}${t.note ? `:${t.note}` : ""}`)
+    .join(",");
+
 
 
   if (!upstream) {
