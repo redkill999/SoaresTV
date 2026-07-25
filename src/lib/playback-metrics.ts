@@ -238,15 +238,19 @@ export function installPlaybackMetrics(): void {
   document.addEventListener("playing", onPlaying, true);
   document.addEventListener("loadeddata", onPlaying, true);
 
-  // ---- navegação /player/live/* (proxy p/ "clique") ----------------------
+  // ---- navegação /player/{live,movie,series}/* (proxy p/ "clique") --------
+  const kindOf = (p: string): "live" | "vod" | null => {
+    if (/^\/player\/live\//.test(p)) return "live";
+    if (/^\/player\/(movie|series)\//.test(p)) return "vod";
+    return null;
+  };
   let lastPath = window.location.pathname;
   const noteNav = () => {
     const p = window.location.pathname;
     if (p !== lastPath) {
       lastPath = p;
-      if (/^\/player\/live\//.test(p)) {
-        state.navigations.push({ t: performance.now(), path: p });
-      }
+      const k = kindOf(p);
+      if (k) state.navigations.push({ t: performance.now(), path: p, kind: k });
     }
   };
   const origPush = history.pushState.bind(history);
@@ -262,9 +266,10 @@ export function installPlaybackMetrics(): void {
     return r;
   };
   window.addEventListener("popstate", noteNav);
-  // Também captura navegação inicial se já entrar direto em /player/live/*.
-  if (/^\/player\/live\//.test(lastPath)) {
-    state.navigations.push({ t: performance.now(), path: lastPath });
+  // Também captura navegação inicial se já entrar direto num /player/*.
+  {
+    const k = kindOf(lastPath);
+    if (k) state.navigations.push({ t: performance.now(), path: lastPath, kind: k });
   }
 
   // eslint-disable-next-line no-console
