@@ -1298,6 +1298,7 @@ export function VideoPlayer({
             liveBufferLatencyMinRemain: apkLiveMpegts ? 2 : 1,
           },
         );
+        markPlayback("player-create-end");
         const markMpegtsFirstFrame = () => { mpegtsHadFirstFrame = true; };
         video.addEventListener("playing", markMpegtsFirstFrame, { once: true });
         tsPlayer.on(mpegts.Events.ERROR, (errType: unknown, errDetail: unknown) => {
