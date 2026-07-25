@@ -308,7 +308,7 @@ async function handle(request: Request) {
       lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
         authRejected = true;
-        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "auth-reject" });
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "auth-reject", upstreamHeaders: pickDiagHeaders(res) });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
@@ -324,7 +324,7 @@ async function handle(request: Request) {
         if (AUTH_FAIL_RE.test(preview)) {
           authRejected = true;
           lastStatus = 401;
-          uaTimings.push({ ua, ms: Date.now() - uaStart, status: 401, note: "body-auth-reject" });
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: 401, note: "body-auth-reject", upstreamHeaders: pickDiagHeaders(res) });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -334,14 +334,14 @@ async function handle(request: Request) {
       }
       if ((isProbe || isLive) && !res.ok) {
         lastNonPlayableReason = reasonForStatus(res.status) || `Stream upstream HTTP ${res.status}`;
-        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "not-ok" });
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "not-ok", upstreamHeaders: pickDiagHeaders(res) });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
       if ((isProbe || isLive) && res.ok) {
         if (!loopPlayable) {
           lastNonPlayableReason = "Resposta upstream não parece vídeo.";
-          uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "non-playable" });
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "non-playable", upstreamHeaders: pickDiagHeaders(res) });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -349,7 +349,7 @@ async function handle(request: Request) {
       upstream = res;
       acceptedLooksBinary = loopBodyLooksBinary;
       uaWinner = ua;
-      uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "winner" });
+      uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "winner", upstreamHeaders: pickDiagHeaders(res) });
       break;
     } catch (e) {
       const errMs = Date.now() - uaStart;
