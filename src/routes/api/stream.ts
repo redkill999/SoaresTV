@@ -19,7 +19,7 @@ function corsHeadersFor(request: Request): Record<string, string> {
   const base: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     "Access-Control-Allow-Headers": "Range, Content-Type, Accept, Origin, Referer, User-Agent",
-    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type",
+    "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, X-Proxy-UA-Attempts, X-Proxy-UA-Winner, X-Proxy-UA-Timings, X-Proxy-Total-Ms",
     Vary: "Origin",
   };
   const reqOrigin = request.headers.get("origin");
