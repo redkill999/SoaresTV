@@ -86,7 +86,7 @@ function summarize(state: Metrics): void {
     attempts.length ? attempts.reduce((a, b) => a + b, 0) / attempts.length : 0;
 
   // Match navigate → first frame por proximidade temporal.
-  const perChannel: Array<{ navAt: number; framedAt?: number; deltaMs?: number; path: string; src?: string }> = [];
+  const perChannel: Array<{ navAt: number; framedAt?: number; deltaMs?: number; path: string; kind: "live" | "vod"; src?: string }> = [];
   for (const n of navs) {
     const f = frames.find((f) => f.t > n.t && f.t - n.t < 60_000);
     perChannel.push({
@@ -94,9 +94,21 @@ function summarize(state: Metrics): void {
       framedAt: f?.t,
       deltaMs: f ? f.t - n.t : undefined,
       path: n.path,
+      kind: n.kind,
       src: f?.src ? maskUrl(f.src) : undefined,
     });
   }
+
+  const liveRows = perChannel.filter((p) => p.kind === "live");
+  const vodRows = perChannel.filter((p) => p.kind === "vod");
+  const avgOf = (rows: typeof perChannel) => {
+    const d = rows.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
+    const avg = d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0;
+    const med = d.length ? [...d].sort((a, b) => a - b)[Math.floor(d.length / 2)] : 0;
+    return { avg, med, n: d.length };
+  };
+  const liveStats = avgOf(liveRows);
+  const vodStats = avgOf(vodRows);
 
   const deltas = perChannel.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
   const avgFirstFrame = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
