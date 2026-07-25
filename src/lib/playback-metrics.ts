@@ -110,9 +110,6 @@ function summarize(state: Metrics): void {
   const liveStats = avgOf(liveRows);
   const vodStats = avgOf(vodRows);
 
-  const deltas = perChannel.map((p) => p.deltaMs).filter((n): n is number => typeof n === "number");
-  const avgFirstFrame = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
-  const medFirstFrame = deltas.length ? [...deltas].sort((a, b) => a - b)[Math.floor(deltas.length / 2)] : 0;
 
   const winners: Record<string, number> = {};
   for (const c of calls) {
