@@ -412,11 +412,19 @@ async function handle(request: Request) {
   const needsPreview = request.method !== "HEAD" && !isPlaylist && (isProbe || looksTextual || !upstream.ok);
   let preview = lastPreview;
   let bodyLooksBinary = acceptedLooksBinary;
+  let detectedContainer: string | undefined;
+  let detectedBrand: string | undefined;
+  let detectedMagic: string | undefined;
   if (needsPreview) {
     try {
-      const sniff = preview ? { preview, binaryLike: bodyLooksBinary } : await sniffBody(upstream);
+      const sniff = preview
+        ? { preview, binaryLike: bodyLooksBinary, container: undefined as string | undefined, brand: undefined as string | undefined, magic: undefined as string | undefined }
+        : await sniffBody(upstream);
       preview = sniff.preview;
       bodyLooksBinary = bodyLooksBinary || sniff.binaryLike;
+      detectedContainer = sniff.container;
+      detectedBrand = sniff.brand;
+      detectedMagic = sniff.magic;
       if (AUTH_FAIL_RE.test(preview)) {
         try { await upstream.body?.cancel(); } catch { /* noop */ }
         if (isProbe) {
@@ -427,6 +435,9 @@ async function handle(request: Request) {
             finalUrlHost,
             reason: AUTH_REASON,
             bodyPreview: maskIptvUrl(preview),
+            container: detectedContainer,
+            brand: detectedBrand,
+            magic: detectedMagic,
           });
         }
         return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", 401);
@@ -444,6 +455,9 @@ async function handle(request: Request) {
       finalUrlHost,
       reason: playable ? undefined : reasonForStatus(upstream.status) || "Resposta upstream não parece vídeo.",
       bodyPreview: !playable && preview ? maskIptvUrl(preview) : undefined,
+      container: detectedContainer,
+      brand: detectedBrand,
+      magic: detectedMagic,
     });
   }
 
