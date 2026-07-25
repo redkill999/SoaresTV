@@ -693,34 +693,14 @@ export function VideoPlayer({
 
 
 
-  // BUG 1: consulta pré-play de aprendizado VOD force-native (APK+VOD apenas).
-  // Se o mesmo host+streamId (ou host+container) já falhou 2+ vezes com MP4
-  // válido, abrimos direto no ExoPlayer. Se o ExoPlayer também falhar, o
-  // aprendizado é apagado (rollback) para evitar loop.
-  const vodNativeLearnedRef = useRef<{ key: string } | null>(null);
-  const vodForceNativeMatch = useMemo(() => {
-    if (isLiveSrc) return null;
-    if (!isNativeAppSync()) return null;
-    const container = containerFromExtension(src);
-    const res = shouldForceNativeVod({
-      host: hostOf(src),
-      streamId: mediaId ?? null,
-      container: container ?? null,
-    });
-    return res.match ? { key: res.key } : null;
-  }, [src, isLiveSrc, mediaId]);
-  useEffect(() => {
-    vodNativeLearnedRef.current = vodForceNativeMatch;
-  }, [vodForceNativeMatch]);
-
   // shouldUseNativePlayer: inclui ExoPlayer por padrão no APK LIVE
   // (apkLiveAutoNative, declarado acima). Se ExoPlayer não abrir, watchdog cai
   // pro pipeline Web.
   const shouldUseNativePlayer =
     settings.defaultPlayer === "exo" ||
     (isLiveSrc && (!!srcHostProfile.forceNativeForLive || mandatoryNativeLive)) ||
-    apkLiveAutoNative ||
-    !!vodForceNativeMatch;
+    apkLiveAutoNative;
+
 
 
 
