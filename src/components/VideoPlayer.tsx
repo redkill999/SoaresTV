@@ -697,6 +697,10 @@ export function VideoPlayer({
   // Sem isso, o cleanup chamava stopNative() em modo "web" também,
   // potencialmente matando outra instância do plugin.
   const nativeOpenedRef = useRef(false);
+  // Timer defensivo de stopNative() +4s do watchdog manual do ExoPlayer.
+  // Guardado em ref para ser cancelado no unmount — sem isso, sair da tela
+  // durante os 4s dispararia stopNative() órfão após navegação.
+  const nativeStopDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const launchNativeFromDebug = useCallback(async () => {
     manualNativeStartRef.current = true;
