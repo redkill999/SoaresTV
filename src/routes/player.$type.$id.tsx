@@ -291,6 +291,12 @@ function PlayerPage() {
         onMouseMove={revealControls}
         onMouseEnter={revealControls}
         onTouchStart={revealControls}
+        // H1 (audit D-pad): controle remoto Android TV nunca dispara mouse
+        // events, então os controles ficavam invisíveis mesmo com foco.
+        // Reutilizamos exatamente o mesmo revealControls() em keydown e
+        // focus (capture) — mesma janela de 2500ms, mesmo estado.
+        onKeyDown={revealControls}
+        onFocusCapture={revealControls}
       >
         <div className="absolute inset-0 bg-player">
           {parentalLocked && !parentalUnlocked ? (

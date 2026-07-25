@@ -265,7 +265,7 @@ function MovieGrid({ filtered, progressMap }: { filtered: VodStream[]; progressM
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((m) => {
+        {visible.map((m, i) => {
           const id = `${m.stream_id}.${m.container_extension || "mp4"}`;
           return (
             <XciptvTile
@@ -275,6 +275,7 @@ function MovieGrid({ filtered, progressMap }: { filtered: VodStream[]; progressM
               name={m.name}
               image={m.stream_icon}
               progress={progressMap.get(id)}
+              defaultFocus={i === 0}
             />
           );
         })}

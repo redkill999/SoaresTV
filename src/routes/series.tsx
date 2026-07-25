@@ -264,7 +264,7 @@ function SeriesGrid({ filtered, progressMap }: { filtered: Series[]; progressMap
   return (
     <>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-        {visible.map((s) => {
+        {visible.map((s, i) => {
           const id = String(s.series_id);
           return (
             <XciptvTile
@@ -274,6 +274,7 @@ function SeriesGrid({ filtered, progressMap }: { filtered: Series[]; progressMap
               name={s.name}
               image={s.cover}
               progress={progressMap.get(id)}
+              defaultFocus={i === 0}
             />
           );
         })}

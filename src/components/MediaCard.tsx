@@ -25,6 +25,7 @@ export const MediaCard = memo(function MediaCard({
   badge,
   aspect = "poster",
   progress,
+  defaultFocus,
 }: {
   type: FavItem["type"];
   id: string | number;
@@ -34,6 +35,8 @@ export const MediaCard = memo(function MediaCard({
   aspect?: Aspect;
   /** 0–1: mostra barra de progresso na base da capa (continue assistindo). */
   progress?: number;
+  /** Marca este card como alvo inicial de foco no modo TV/D-pad. */
+  defaultFocus?: boolean;
 }) {
   const idStr = String(id);
   const fav = useIsFavorite(type, idStr);
@@ -52,6 +55,7 @@ export const MediaCard = memo(function MediaCard({
         to="/player/$type/$id"
         params={{ type, id: idStr }}
         search={{ name }}
+        data-tv-default-focus={defaultFocus ? "" : undefined}
         className="block"
       >
         <div
@@ -115,6 +119,8 @@ export const MediaCard = memo(function MediaCard({
 
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         onClick={(e) => {
           e.preventDefault();
           store.toggleFav({ type, id: idStr, name, logo: image });

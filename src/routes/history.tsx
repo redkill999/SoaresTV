@@ -55,7 +55,7 @@ function HistoryPage() {
         emptyTitle={t("empty.noResults")}
         emptyHint={t("empty.recentHint")}
       >
-        {items.map((it) => {
+        {items.map((it, i) => {
           const progress =
             it.type !== "live" && it.duration && it.duration > 0 && typeof it.position === "number"
               ? it.position / it.duration
@@ -69,6 +69,7 @@ function HistoryPage() {
               image={it.logo}
               aspect={it.type === "live" ? "wide" : "poster"}
               progress={progress}
+              defaultFocus={i === 0}
             />
           );
         })}

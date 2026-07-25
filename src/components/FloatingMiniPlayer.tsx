@@ -46,11 +46,17 @@ export function FloatingMiniPlayer() {
   return (
     <div
       ref={wrapRef}
+      // M3: isolado da navegação espacial global do D-pad. O container ainda
+      // é clicável por mouse/touch, mas nem o vídeo nem o botão X aparecem
+      // no pickNearest() do controle remoto. Se no futuro quisermos foco
+      // intencional, basta remover o aria-hidden e/ou tabIndex=-1 abaixo.
+      aria-hidden="true"
       className="fixed z-50 bottom-16 right-3 sm:bottom-4 sm:right-4 w-56 sm:w-72 transition-all duration-300 translate-y-0 opacity-100"
     >
       <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black">
         <button
           type="button"
+          tabIndex={-1}
           onClick={clear}
           aria-label="Fechar mini player"
           className="absolute top-1.5 right-1.5 z-10 size-7 rounded-full bg-black/70 hover:bg-black/90 text-white grid place-items-center"
