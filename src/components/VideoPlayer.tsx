@@ -43,6 +43,12 @@ async function loadMpegts() {
   return mpegtsLoading;
 }
 
+// One-shot: purga aprendizado VOD force-native do experimento revertido (BUG 1).
+// Sem isso, instalações que acumularam registros continuariam forçando ExoPlayer
+// em VOD e travando reprodução no APK.
+try { clearAllVodNativeLearning(); } catch { /* noop */ }
+
+
 type MpegTsPlayer = {
   destroy(): void;
   unload(): void;
