@@ -119,8 +119,17 @@ function summarize(state: Metrics): void {
     if (c.uaWinner) winners[c.uaWinner] = (winners[c.uaWinner] || 0) + 1;
   }
 
+  const flags =
+    typeof window !== "undefined" && window.__perfFlags
+      ? { ...window.__perfFlags }
+      : undefined;
+
   // eslint-disable-next-line no-console
   console.group("%c[PLAYBACK METRICS] resumo", "color:#0ff;font-weight:bold");
+  if (flags) {
+    // eslint-disable-next-line no-console
+    console.log("perfFlags:", flags);
+  }
   // eslint-disable-next-line no-console
   console.log(`proxy calls: ${calls.length}`);
   // eslint-disable-next-line no-console
@@ -132,11 +141,18 @@ function summarize(state: Metrics): void {
   // eslint-disable-next-line no-console
   console.log(`UA vencedores:`, winners);
   // eslint-disable-next-line no-console
-  console.log(`navegações p/ /player/live: ${navs.length} | first-frames capturados: ${frames.length}`);
+  console.log(`navegações totais: ${navs.length} (live=${liveRows.length} vod=${vodRows.length}) | first-frames capturados: ${frames.length}`);
   // eslint-disable-next-line no-console
-  console.log(`tempo clique → 1º frame — avg ${fmt(avgFirstFrame)} | mediana ${fmt(medFirstFrame)} | amostras ${deltas.length}`);
+  console.log(
+    `LIVE  clique→1º frame — avg ${fmt(liveStats.avg)} | mediana ${fmt(liveStats.med)} | amostras ${liveStats.n}`,
+  );
+  // eslint-disable-next-line no-console
+  console.log(
+    `VOD   clique→1º frame — avg ${fmt(vodStats.avg)} | mediana ${fmt(vodStats.med)} | amostras ${vodStats.n}`,
+  );
   // eslint-disable-next-line no-console
   console.table(perChannel.map((p) => ({
+    kind: p.kind,
     path: p.path,
     firstFrameMs: p.deltaMs ?? "—",
     src: p.src ?? "—",
