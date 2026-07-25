@@ -597,6 +597,7 @@ export function VideoPlayer({
           name === "jeepCapVideoPlayerPlay" ||
           /\b(?:ready|play)\b/i.test(name)
         ) {
+          if (!nativeLivePlayedRef.current) markPlayback("native-open-end");
           nativeLivePlayedRef.current = true;
           nativeLivePausedRef.current = false;
           if (nativeLiveWatchdogRef.current) {
