@@ -1765,7 +1765,10 @@ export function VideoPlayer({
 
       if (Hls.isSupported()) {
         // Config estável (revertida da versão agressiva que travava abertura).
-        const apkLiveHlsSmooth = isLive && nativeRuntimeRef.current;
+        const apkLiveHlsSmoothRaw = isLive && nativeRuntimeRef.current;
+        // Flag de A/B: quando legacyApkBuffer=true, desliga o smooth-buffer v12
+        // APENAS para LIVE no APK, restaurando os params pré-commit 2a98f49.
+        const apkLiveHlsSmooth = apkLiveHlsSmoothRaw && !getPerfFlags().legacyApkBuffer;
         hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
