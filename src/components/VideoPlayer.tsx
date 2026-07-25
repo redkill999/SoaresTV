@@ -1321,7 +1321,9 @@ export function VideoPlayer({
           }
           tryNextVod();
         });
+        markPlayback("attach-media-start");
         tsPlayer.attachMediaElement(video);
+        markPlayback("attach-media-end");
         tsPlayer.load();
         const playPromise = tsPlayer.play();
         if (playPromise && typeof playPromise.then === "function") {
