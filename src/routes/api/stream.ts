@@ -272,10 +272,26 @@ async function handle(request: Request) {
   // ---- INSTRUMENTAÇÃO TEMPORÁRIA (read-only) ----------------------------
   // Coleta tempos por UA para relatório do gargalo do proxy. Não altera
   // nenhuma decisão de fluxo. Removível sem impacto funcional.
-  const uaTimings: Array<{ ua: string; ms: number; status: number | "err"; note?: string }> = [];
+  const uaTimings: Array<{
+    ua: string;
+    ms: number;
+    status: number | "err";
+    note?: string;
+    upstreamHeaders?: Record<string, string>;
+  }> = [];
   let uaWinner: string | null = null;
   const overallStart = Date.now();
+  // Captura headers relevantes do upstream para diagnóstico.
+  const pickDiagHeaders = (res: Response): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const h of ["content-type", "server", "cf-ray", "cf-cache-status", "via", "x-cache", "x-powered-by", "location", "www-authenticate", "content-length", "accept-ranges"]) {
+      const v = res.headers.get(h);
+      if (v) out[h] = v;
+    }
+    return out;
+  };
   // -----------------------------------------------------------------------
+
 
   for (const ua of uaCandidates) {
     const uaStart = Date.now();
