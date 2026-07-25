@@ -8,6 +8,7 @@ import { getHostProfile, hostOf, rememberHlsUnsupported, rememberWebIncompatible
 import { playNative, stopNative, getNativeCurrentTime } from "@/lib/native-player";
 import { store, getCompatForUrl, USER_AGENT_STRINGS, type AppSettings, type AspectRatio, type ListCompat } from "@/lib/storage";
 import { maskIptvUrl } from "@/lib/iptv-url";
+import { diagnoseVodFormatError } from "@/lib/vod-error-diag";
 
 
 
