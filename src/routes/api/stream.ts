@@ -68,8 +68,10 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status): Response {
-  return new Response(JSON.stringify({ error, status }), {
+function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status, diag?: unknown): Response {
+  const body: Record<string, unknown> = { error, status };
+  if (diag !== undefined) body.diag = diag;
+  return new Response(JSON.stringify(body), {
     status: responseStatus >= 500 ? 424 : responseStatus,
     headers: { ...cors, "Content-Type": "application/json" },
   });
@@ -81,6 +83,7 @@ function jsonData(cors: Record<string, string>, data: unknown, status = 200): Re
     headers: { ...cors, "Content-Type": "application/json" },
   });
 }
+
 
 function isProbablyText(contentType: string): boolean {
   return /^(text\/|application\/(json|xml|xhtml))/i.test(contentType);
