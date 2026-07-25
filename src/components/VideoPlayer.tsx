@@ -1822,8 +1822,11 @@ export function VideoPlayer({
           maxLoadingDelay: 4,
           capLevelToPlayerSize: true,
         });
+        markPlayback("player-create-end");
         hls.loadSource(url);
+        markPlayback("attach-media-start");
         hls.attachMedia(video);
+        markPlayback("attach-media-end");
 
         // Dispara play() assim que o manifest é parseado — não espera o
         // autoPlay do browser engatar, reduz delay até primeiro frame.
