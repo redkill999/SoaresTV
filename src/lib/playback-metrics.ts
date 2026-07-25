@@ -38,6 +38,7 @@ type FirstFrame = {
 type Navigation = {
   t: number;
   path: string;
+  kind: "live" | "vod";
 };
 
 type Metrics = {
