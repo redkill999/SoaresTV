@@ -723,7 +723,11 @@ export function VideoPlayer({
           setPlayerMode("web");
           showStreamDiagnostic("Canal LIVE preso no ExoPlayer antes de tocar. Veja o diagnóstico abaixo.");
           void stopNative().catch(() => undefined);
-          setTimeout(() => { void stopNative().catch(() => undefined); }, 4_000);
+          if (nativeStopDelayRef.current) clearTimeout(nativeStopDelayRef.current);
+          nativeStopDelayRef.current = setTimeout(() => {
+            nativeStopDelayRef.current = null;
+            void stopNative().catch(() => undefined);
+          }, 4_000);
         }, 35_000);
       }
       return;
