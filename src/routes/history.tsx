@@ -47,6 +47,7 @@ function HistoryPage() {
         )}
       </div>
 
+      <div data-tv-scope>
       <MediaGrid
         empty={items.length === 0}
         aspect="poster"
@@ -72,6 +73,7 @@ function HistoryPage() {
           );
         })}
       </MediaGrid>
+      </div>
     </AppShell>
   );
 }
