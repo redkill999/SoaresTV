@@ -34,6 +34,9 @@ export function ParentalGate({
         <Input
           type="password"
           inputMode="numeric"
+          autoFocus
+          data-tv-default-focus
+          aria-label="PIN parental"
           value={pin}
           onChange={(e) => setPin(e.target.value)}
           className="text-center text-lg tracking-widest mb-2 bg-white/5 border-white/10"
