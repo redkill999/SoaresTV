@@ -68,8 +68,10 @@ function isPlaylistPath(path: string): boolean {
   return /\.m3u8?(\?|$)/i.test(path);
 }
 
-function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status): Response {
-  return new Response(JSON.stringify({ error, status }), {
+function jsonError(cors: Record<string, string>, error: string, status: number, responseStatus = status, diag?: unknown): Response {
+  const body: Record<string, unknown> = { error, status };
+  if (diag !== undefined) body.diag = diag;
+  return new Response(JSON.stringify(body), {
     status: responseStatus >= 500 ? 424 : responseStatus,
     headers: { ...cors, "Content-Type": "application/json" },
   });
@@ -81,6 +83,7 @@ function jsonData(cors: Record<string, string>, data: unknown, status = 200): Re
     headers: { ...cors, "Content-Type": "application/json" },
   });
 }
+
 
 function isProbablyText(contentType: string): boolean {
   return /^(text\/|application\/(json|xml|xhtml))/i.test(contentType);
@@ -216,8 +219,9 @@ function rewritePlaylist(text: string, baseUrl: string, ua?: string | null, kind
 
 async function handle(request: Request) {
   const cors = corsHeadersFor(request);
-  const jerr = (e: string, s: number, rs?: number) => jsonError(cors, e, s, rs);
+  const jerr = (e: string, s: number, rs?: number, diag?: unknown) => jsonError(cors, e, s, rs, diag);
   const jdata = (d: unknown, s?: number) => jsonData(cors, d, s);
+
 
   const url = new URL(request.url);
   const target = url.searchParams.get("u");
@@ -268,10 +272,26 @@ async function handle(request: Request) {
   // ---- INSTRUMENTAÇÃO TEMPORÁRIA (read-only) ----------------------------
   // Coleta tempos por UA para relatório do gargalo do proxy. Não altera
   // nenhuma decisão de fluxo. Removível sem impacto funcional.
-  const uaTimings: Array<{ ua: string; ms: number; status: number | "err"; note?: string }> = [];
+  const uaTimings: Array<{
+    ua: string;
+    ms: number;
+    status: number | "err";
+    note?: string;
+    upstreamHeaders?: Record<string, string>;
+  }> = [];
   let uaWinner: string | null = null;
   const overallStart = Date.now();
+  // Captura headers relevantes do upstream para diagnóstico.
+  const pickDiagHeaders = (res: Response): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const h of ["content-type", "server", "cf-ray", "cf-cache-status", "via", "x-cache", "x-powered-by", "location", "www-authenticate", "content-length", "accept-ranges"]) {
+      const v = res.headers.get(h);
+      if (v) out[h] = v;
+    }
+    return out;
+  };
   // -----------------------------------------------------------------------
+
 
   for (const ua of uaCandidates) {
     const uaStart = Date.now();
@@ -288,7 +308,7 @@ async function handle(request: Request) {
       lastContentType = res.headers.get("content-type") || "";
       if (res.status === 401 || res.status === 403) {
         authRejected = true;
-        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "auth-reject" });
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "auth-reject", upstreamHeaders: pickDiagHeaders(res) });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
@@ -304,7 +324,7 @@ async function handle(request: Request) {
         if (AUTH_FAIL_RE.test(preview)) {
           authRejected = true;
           lastStatus = 401;
-          uaTimings.push({ ua, ms: Date.now() - uaStart, status: 401, note: "body-auth-reject" });
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: 401, note: "body-auth-reject", upstreamHeaders: pickDiagHeaders(res) });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -314,14 +334,14 @@ async function handle(request: Request) {
       }
       if ((isProbe || isLive) && !res.ok) {
         lastNonPlayableReason = reasonForStatus(res.status) || `Stream upstream HTTP ${res.status}`;
-        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "not-ok" });
+        uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "not-ok", upstreamHeaders: pickDiagHeaders(res) });
         try { await res.body?.cancel(); } catch { /* noop */ }
         continue;
       }
       if ((isProbe || isLive) && res.ok) {
         if (!loopPlayable) {
           lastNonPlayableReason = "Resposta upstream não parece vídeo.";
-          uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "non-playable" });
+          uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "non-playable", upstreamHeaders: pickDiagHeaders(res) });
           try { await res.body?.cancel(); } catch { /* noop */ }
           continue;
         }
@@ -329,7 +349,7 @@ async function handle(request: Request) {
       upstream = res;
       acceptedLooksBinary = loopBodyLooksBinary;
       uaWinner = ua;
-      uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "winner" });
+      uaTimings.push({ ua, ms: Date.now() - uaStart, status: res.status, note: "winner", upstreamHeaders: pickDiagHeaders(res) });
       break;
     } catch (e) {
       const errMs = Date.now() - uaStart;
@@ -360,12 +380,39 @@ async function handle(request: Request) {
 
 
 
+  // Envelope de diagnóstico (read-only). Nunca influencia decisão de fluxo:
+  // é apenas anexado aos JSONs de erro/probe para o cliente registrar o
+  // motivo real da falha, etapa, resposta upstream e UA vencedora/tentadas.
+  const buildDiagnosticEnvelope = (stage: string, decision: string, reason: string): Record<string, unknown> => ({
+    stage,
+    decision,
+    reason,
+    host: upstreamUrl.host,
+    kind: isLive ? "live" : "vod",
+    isProbe,
+    totalProxyMs,
+    attempts: uaTimings.length,
+    uaWinner: uaWinner ?? null,
+    uaAttempts: uaTimings.map((t) => ({
+      ua: t.ua,
+      ms: t.ms,
+      status: t.status,
+      note: t.note,
+      upstreamHeaders: t.upstreamHeaders,
+    })),
+    lastStatus,
+    lastContentType,
+    forcedUA: forcedUA || undefined,
+    hasClientRange: !!clientRange,
+  });
+
   if (!upstream) {
     const rawMsg = lastError instanceof Error ? lastError.message : "upstream fetch failed";
     const msg = maskIptvUrl(rawMsg);
     // 401/403 explícito do upstream: propaga com mensagem clara.
     if (authRejected || lastStatus === 401 || lastStatus === 403) {
       const status = lastStatus === 403 ? 403 : 401;
+      const diag = buildDiagnosticEnvelope("auth", "reject", AUTH_REASON);
       if (isProbe) {
         return jdata({
           ok: false,
@@ -374,25 +421,30 @@ async function handle(request: Request) {
           finalUrlHost: upstreamUrl.host,
           reason: AUTH_REASON,
           bodyPreview: maskIptvUrl(lastPreview),
+          diag,
         });
       }
-      return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status);
+      return jerr("Servidor recusou: usuário sem autorização, conta expirada ou limite de conexões.", status, undefined, diag);
     }
     // Use 4xx (not 5xx) so the runtime-error boundary doesn't flag the
     // recoverable fallback as a blank-screen crash. The player already
     // walks to the next candidate on any non-OK response.
+    const failReason = lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg;
+    const diag = buildDiagnosticEnvelope("upstream-fetch", uaTimings.length ? "all-attempts-failed" : "no-attempts", failReason);
     if (isProbe) {
       return jdata({
         ok: false,
         status: lastStatus || 424,
           contentType: lastContentType,
         finalUrlHost: upstreamUrl.host,
-          reason: lastNonPlayableReason || reasonForStatus(lastStatus || 424) || msg,
+          reason: failReason,
           bodyPreview: lastPreview ? maskIptvUrl(lastPreview) : undefined,
+          diag,
       });
     }
-    return jerr(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424);
+    return jerr(lastNonPlayableReason || msg, lastStatus >= 400 ? lastStatus : 424, undefined, diag);
   }
+
 
   const ct = upstream.headers.get("content-type") || "";
   const finalUrlHost = (() => {
