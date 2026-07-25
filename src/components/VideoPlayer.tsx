@@ -1299,7 +1299,6 @@ export function VideoPlayer({
         } else {
           void video.play().then(() => setCanManualPlay(false)).catch(() => setCanManualPlay(true));
         }
-        armMpegtsStallWatchdog();
         return true;
       } catch {
         return false;
