@@ -638,6 +638,25 @@ export function clearVodNativeLearning(key: string): void {
   console.log("[VOD FORCE NATIVE] aprendizado removido (rollback)", { key });
 }
 
+/**
+ * Limpa TODO o aprendizado VOD force-native (localStorage + Preferences).
+ * Usado para descontaminar instalações que acumularam registros errados
+ * pelo experimento BUG 1, agora revertido.
+ */
+export function clearAllVodNativeLearning(): void {
+  for (const k of Object.keys(vodForceNativeMemory)) delete vodForceNativeMemory[k];
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(VOD_FORCE_NATIVE_KEY);
+  } catch { /* noop */ }
+  void (async () => {
+    try {
+      const { Preferences } = await import("@capacitor/preferences");
+      await Preferences.remove({ key: VOD_FORCE_NATIVE_KEY });
+    } catch { /* noop */ }
+  })();
+}
+
+
 /** Extrai um FourCC de codec de vídeo confiável do parâmetro `codecs` do Content-Type. */
 export function extractVideoCodecFromContentType(contentType: string | null | undefined): string | undefined {
   if (!contentType) return undefined;
