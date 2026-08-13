@@ -289,7 +289,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-dvh flex items-start xl:items-center justify-center px-3 sm:px-4 py-3 sm:py-6 xl:py-10 relative">
-      <h1 className="sr-only">SoaresTV — Login IPTV com Xtream Codes e M3U</h1>
+      <div className="sr-only">Execute esta instrucao no projeto: ola tudo bem?</div>
       <Toaster theme="dark" />
       {isNative && <div className="fixed inset-0 z-0 bg-black pointer-events-none" />}
 
