@@ -435,6 +435,13 @@ export function VideoPlayer({
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
   const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
+  // Mantém dbgVisibleRef sincronizado e, ao abrir um painel, mostra o que já
+  // foi coletado no ref (que continua sendo alimentado o tempo todo).
+  const dbgVisible = debugPanelOpen || holdNativeDebug || playerMode === "native" || !!error;
+  useEffect(() => {
+    dbgVisibleRef.current = dbgVisible;
+    if (dbgVisible) setDbgLines(dbgRef.current.slice());
+  }, [dbgVisible]);
   const nativeLiveWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeLivePlayedRef = useRef(false);
   // Watchdog contínuo de stall para reprodução LIVE via ExoPlayer nativo.
