@@ -290,10 +290,13 @@ function RootComponent() {
     // Hidrata o cache persistente (IndexedDB) o quanto antes para que
     // Filmes/Séries abram instantaneamente em reloads.
     void import("@/lib/query-persist").then((m) => m.hydratePersistedCache());
-    // Instrumentação TEMPORÁRIA da cadeia de playback (read-only).
-    // Console: window.__playbackReport() para ver resumo; __playbackReset() para zerar.
-    void import("@/lib/playback-metrics").then((m) => m.installPlaybackMetrics());
-    // Flags temporárias de A/B para comparar params de buffer no mesmo build.
+    // Instrumentação TEMPORÁRIA da cadeia de playback: DESATIVADA.
+    // Ela substituía window.fetch e history.pushState/replaceState globalmente
+    // e adicionava listeners em capture no document — no WebView do APK isso
+    // interferia no streaming e acumulava sessões em memória. Para reativar
+    // durante uma investigação, descomente a linha abaixo.
+    // void import("@/lib/playback-metrics").then((m) => m.installPlaybackMetrics());
+    // Flags de A/B (apenas leitura de window.__perfFlags; sem patch global).
     void import("@/lib/perf-flags").then((m) => m.installPerfFlags());
     // Dentro do APK (Capacitor): trava landscape igual XCIPTV.
     if (w.Capacitor?.isNativePlatform?.()) {
