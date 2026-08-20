@@ -260,6 +260,9 @@ export async function diagnoseVodFormatError(
     wouldFixWithExo: c.wouldFix,
   };
   store.push(sample);
+  // Cap de memória: em sessões longas no APK esse array crescia sem limite
+  // (cada sample carrega URL, headers e magic bytes).
+  if (store.length > 50) store.splice(0, store.length - 50);
   pushDbg(
     `[VOD-DIAG] ext=${extension} ct=${contentType || "-"} real=${real.kind}${real.brand ? "/" + real.brand : ""} magic=[${magic}] status=${httpStatus} → ${c.category} (${c.reason})`,
   );
