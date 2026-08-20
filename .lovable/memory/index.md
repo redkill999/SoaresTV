@@ -24,3 +24,4 @@ LIVE no APK toca pelo pipeline WEB (/api/stream + HLS/mpegts) por padrão. NUNCA
 - [APK LIVE fast-fail](mem://fixes/apk-live-fastfail) — APK respeita TS-first em hosts TS-only/preferTs e HLS sem primeiro frame avança em 18s; Web/VOD intactos.
 - [fetchM3U login rápido](mem://fixes/fetchm3u-series-fast-login) — mapXtreamSeries não chama mais get_series_info por série; login M3U cai de 20–60s para poucos segundos.
 - [LIVE fast-start aprendizado](mem://features/live-fast-start-learning) — hls.js 4/12 (baseline) → 3/10 após host abrir <12s; auto-reverte em erro fatal; NUNCA em hosts locked-hls-first
+- [Sem instrumentação global](mem://constraints/no-global-instrumentation) — não patchar window.fetch/history; pushDbg sem setState por linha; caps em arrays de diagnóstico

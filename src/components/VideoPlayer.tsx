@@ -388,11 +388,19 @@ export function VideoPlayer({
   // quando ocorre erro. Limpo no início de cada nova fonte (src).
   const dbgRef = useRef<string[]>([]);
   const [dbgLines, setDbgLines] = useState<string[]>([]);
+  // Só espelhamos o buffer de debug no state quando algum painel de
+  // diagnóstico está realmente visível. Antes, CADA linha de log disparava
+  // um setState no VideoPlayer (componente enorme), gerando dezenas de
+  // re-renders por segundo durante LIVE — principal fonte de travamento /
+  // crash por pressão de memória no WebView do APK.
+  const dbgVisibleRef = useRef(false);
   const pushDbg = useCallback((line: string) => {
     const stamp = new Date().toISOString().slice(11, 23);
     const entry = `[${stamp}] ${line}`;
-    dbgRef.current = [...dbgRef.current, entry].slice(-40);
-    setDbgLines(dbgRef.current);
+    const next = dbgRef.current.concat(entry);
+    if (next.length > 40) next.splice(0, next.length - 40);
+    dbgRef.current = next;
+    if (dbgVisibleRef.current) setDbgLines(next.slice());
     // eslint-disable-next-line no-console
     console.log("[STREAM DEBUG]", entry);
   }, []);
@@ -427,6 +435,13 @@ export function VideoPlayer({
   // <video>/MSE (web). "native" = plugin abriu overlay fullscreen, MSE inativo.
   // "web" = caminho clássico hls.js/mpegts.js.
   const [playerMode, setPlayerMode] = useState<"deciding" | "native" | "web">("deciding");
+  // Mantém dbgVisibleRef sincronizado e, ao abrir um painel, mostra o que já
+  // foi coletado no ref (que continua sendo alimentado o tempo todo).
+  const dbgVisible = debugPanelOpen || holdNativeDebug || playerMode === "native" || !!error;
+  useEffect(() => {
+    dbgVisibleRef.current = dbgVisible;
+    if (dbgVisible) setDbgLines(dbgRef.current.slice());
+  }, [dbgVisible]);
   const nativeLiveWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeLivePlayedRef = useRef(false);
   // Watchdog contínuo de stall para reprodução LIVE via ExoPlayer nativo.
