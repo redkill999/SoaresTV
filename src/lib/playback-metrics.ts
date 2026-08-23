@@ -382,6 +382,7 @@ export function installPlaybackMetrics(): void {
         status: res.status,
         uaTimings, uaWinner, uaAttempts,
       });
+      if (state.proxyCalls.length > 300) state.proxyCalls.splice(0, state.proxyCalls.length - 300);
       return res;
     } catch (e) {
       const t1 = performance.now();
