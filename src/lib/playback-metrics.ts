@@ -393,6 +393,7 @@ export function installPlaybackMetrics(): void {
         kind, forcedUa,
         status: 0,
       });
+      if (state.proxyCalls.length > 300) state.proxyCalls.splice(0, state.proxyCalls.length - 300);
       throw e;
     }
   };
