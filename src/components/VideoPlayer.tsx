@@ -475,6 +475,20 @@ export function VideoPlayer({
     onProgressRef.current = onProgress;
   }, [onProgress]);
   useEffect(() => store.subscribeAppSettings(() => setSettings(store.getAppSettings())), []);
+  // Limpeza periódica (60s) dos buffers de diagnóstico/telemetria enquanto um
+  // player estiver montado. Não toca no pipeline — só apara arrays em memória.
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void import("@/lib/playback-janitor").then((m) => {
+      if (cancelled) return;
+      stop = m.startPlaybackJanitor();
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
 
 
 
