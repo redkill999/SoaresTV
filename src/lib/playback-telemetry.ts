@@ -126,6 +126,8 @@ export function markPlayback(
   const s = st.current;
   if (!s) return;
   s.events.push({ name, t: performance.now() });
+  // Cap por sessão: em LIVE longo com reconexões esse array crescia sem limite.
+  if (s.events.length > 200) s.events.splice(0, s.events.length - 200);
   if (meta) {
     if (meta.pipeline && !s.pipeline) s.pipeline = meta.pipeline;
     if (meta.url && !s.url) {
