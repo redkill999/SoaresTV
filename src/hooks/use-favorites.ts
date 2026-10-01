@@ -22,7 +22,7 @@ export function useFavorites(): FavItem[] {
 export function useIsFavorite(type: FavItem["type"], id: string | number): boolean {
   const idStr = String(id);
   const getSnapshot = useCallback(
-    () => store.getFavs().some((f) => f.type === type && f.id === idStr),
+    () => store.isFav(type, idStr),
     [type, idStr],
   );
   const subscribe = useCallback((cb: () => void) => store.subscribeFavs(cb), []);
