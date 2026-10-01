@@ -7,6 +7,7 @@ import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
 import { ParentalGate } from "@/components/ParentalGate";
 import { Button } from "@/components/ui/button";
 import { store, type XtreamCreds } from "@/lib/storage";
+import { providerIdFromXtream } from "@/lib/content-ref";
 import { api, streamUrl } from "@/lib/xtream";
 import { tryResolveStreamUrl } from "@/lib/streaming/stream-resolver";
 import { findCategoryIdFor, isItemLocked } from "@/lib/parental";
@@ -56,6 +57,7 @@ function PlayerPage() {
     setHydrated(true);
     setCreds(store.getCreds());
   }, []);
+  const providerId = creds ? providerIdFromXtream(creds.server, creds.username) : "no-provider";
   const [episodeUrl, setEpisodeUrl] = useState<string | null>(null);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [activeTitle, setActiveTitle] = useState(name);
@@ -84,7 +86,7 @@ function PlayerPage() {
   }, [parentalLocked, type, id]);
 
   const seriesQ = useQuery({
-    queryKey: ["series-info", id],
+    queryKey: ["series-info", providerId, id],
     enabled: !!creds && type === "series",
     queryFn: () => api<SeriesInfo>(creds!, "get_series_info", { series_id: id }),
   });
@@ -129,7 +131,7 @@ function PlayerPage() {
 
 
   const movieQ = useQuery({
-    queryKey: ["movie-info", id],
+    queryKey: ["movie-info", providerId, id],
     enabled: !!creds && type === "movie",
     queryFn: () => {
       const [sid] = id.split(".");

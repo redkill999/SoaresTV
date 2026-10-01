@@ -396,7 +396,12 @@ export const store = {
   },
 
 
-  getFavs: () => { migrateLegacyItems(); return read<FavItem[]>(K.favs, []); },
+  getFavs: () => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    const all = read<FavItem[]>(K.favs, []);
+    return pid ? all.filter((x) => x.providerId === pid) : all;
+  },
   toggleFav: (item: FavItem) => {
     // Legacy API: continua funcionando. Enriquece com providerId+stableId
     // do provedor ATIVO se possível — evita gerar novos itens "órfãos".
@@ -445,30 +450,52 @@ export const store = {
     write(K.favs, next);
     return next;
   },
-  isFav: (type: FavItem["type"], id: string | number) =>
-    read<FavItem[]>(K.favs, []).some((x) => x.type === type && x.id === String(id)),
+  isFav: (type: FavItem["type"], id: string | number) => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    return read<FavItem[]>(K.favs, []).some((x) =>
+      x.type === type && x.id === String(id) && (!pid || x.providerId === pid),
+    );
+  },
   isFavRef: (ref: Pick<import("./content-ref").ContentReference, "stableId">) =>
     read<FavItem[]>(K.favs, []).some((x) => x.stableId === ref.stableId),
   subscribeFavs: (fn: Listener) => subscribe(K.favs, fn),
 
 
-  getHistory: () => read<HistItem[]>(K.hist, []),
+  getHistory: () => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    const all = read<HistItem[]>(K.hist, []);
+    return pid ? all.filter((x) => x.providerId === pid) : all;
+  },
   pushHistory: (item: HistItem) => {
+    migrateLegacyItems();
     const now = Date.now();
     const TTL = 60 * 24 * 60 * 60 * 1000; // 60 dias
     const MAX = 200;
+    const pid = getCurrentProviderIdInternal();
+    const stableId = item.stableId ?? (pid ? stableIdFromLegacy(pid, item.type, String(item.id)) : undefined);
+    const enriched: HistItem = {
+      ...item,
+      id: String(item.id),
+      providerId: item.providerId ?? pid ?? undefined,
+      stableId,
+    };
     const cur = read<HistItem[]>(K.hist, []).filter(
-      (x) => !(x.type === item.type && x.id === item.id) && (now - x.at) < TTL,
+      (x) => !(stableId ? x.stableId === stableId : x.type === enriched.type && x.id === enriched.id) && (now - x.at) < TTL,
     );
-    const next = [item, ...cur].slice(0, MAX);
+    const next = [enriched, ...cur].slice(0, MAX);
     write(K.hist, next);
   },
   /** Atualiza posição/duração do item mais recente sem reordenar o histórico.
    *  Throttle: ignora se a última gravação foi há <4s E a posição mudou <5s
    *  — evita 12 writes/min do tick do player saturando localStorage no APK. */
   updateProgress: (type: HistItem["type"], id: string, position: number, duration: number) => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    const stableId = pid ? stableIdFromLegacy(pid, type, String(id)) : undefined;
     const cur = read<HistItem[]>(K.hist, []);
-    const idx = cur.findIndex((x) => x.type === type && x.id === id);
+    const idx = cur.findIndex((x) => stableId ? x.stableId === stableId : x.type === type && x.id === id);
     if (idx === -1) return;
     const prev = cur[idx];
     const now = Date.now();
@@ -480,11 +507,18 @@ export const store = {
     write(K.hist, next);
   },
   removeHistory: (type: HistItem["type"], id: string) => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    const stableId = pid ? stableIdFromLegacy(pid, type, String(id)) : undefined;
     const cur = read<HistItem[]>(K.hist, []);
-    write(K.hist, cur.filter((x) => !(x.type === type && x.id === id)));
+    write(K.hist, cur.filter((x) => stableId ? x.stableId !== stableId : !(x.type === type && x.id === id)));
   },
-  getHistoryItem: (type: HistItem["type"], id: string) =>
-    read<HistItem[]>(K.hist, []).find((x) => x.type === type && x.id === id) ?? null,
+  getHistoryItem: (type: HistItem["type"], id: string) => {
+    migrateLegacyItems();
+    const pid = getCurrentProviderIdInternal();
+    const stableId = pid ? stableIdFromLegacy(pid, type, String(id)) : undefined;
+    return read<HistItem[]>(K.hist, []).find((x) => stableId ? x.stableId === stableId : x.type === type && x.id === id) ?? null;
+  },
   clearHistory: () => write(K.hist, []),
   subscribeHistory: (fn: Listener) => subscribe(K.hist, fn),
 
@@ -498,14 +532,18 @@ export const store = {
   },
   subscribeAppSettings: (fn: Listener) => subscribe(K.appSettings, fn),
 
-  /** Último episódio assistido por série (id da série -> id do episódio). */
+  /** Último episódio assistido por série, isolado por provedor. */
   getLastEpisode: (seriesId: string): string | null => {
+    const pid = getCurrentProviderIdInternal();
+    const key = pid ? `${pid}:${seriesId}` : seriesId;
     const map = read<Record<string, string>>(K.lastEp, {});
-    return map[seriesId] ?? null;
+    return map[key] ?? null;
   },
   setLastEpisode: (seriesId: string, episodeId: string) => {
+    const pid = getCurrentProviderIdInternal();
+    const key = pid ? `${pid}:${seriesId}` : seriesId;
     const map = read<Record<string, string>>(K.lastEp, {});
-    if (map[seriesId] === episodeId) return;
-    write(K.lastEp, { ...map, [seriesId]: episodeId });
+    if (map[key] === episodeId) return;
+    write(K.lastEp, { ...map, [key]: episodeId });
   },
 };

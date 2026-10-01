@@ -79,9 +79,9 @@ function LoadingPage() {
         { k: "live",   action: "get_live_categories",   timeout: 15000 },
         { k: "vod",    action: "get_vod_categories",    timeout: 15000 },
         { k: "series", action: "get_series_categories", timeout: 15000 },
-        // EPG só é validado quando o usuário abrir o Guia. Testar get_live_streams
-        // aqui baixa a lista completa e trava o APK.
-        { k: "epg",    action: "get_series_categories", timeout: 15000 },
+        // EPG depende de um stream_id real. Não usar uma API de categorias
+        // como falso positivo; o Guia fará a validação real ao carregar um canal.
+        // Mantemos `unknown` aqui para não travar o APK baixando toda a lista de canais.
       ];
       const result: Record<TestKey, Status> = {
         live: "pending", vod: "pending", series: "pending", epg: "pending",
@@ -95,6 +95,8 @@ function LoadingPage() {
         }
         set(t.k, result[t.k]);
       }));
+      result.epg = "pending"; // desconhecido até o Guia testar um stream real
+      set("epg", "pending");
       return result;
     };
 
