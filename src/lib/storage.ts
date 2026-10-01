@@ -380,6 +380,9 @@ export function getCurrentProviderId(): string | null {
 }
 
 
+let favMemo: { all: FavItem[] | null; pid: string | null; out: FavItem[] } = { all: null, pid: null, out: [] };
+let histMemo: { all: HistItem[] | null; pid: string | null; out: HistItem[] } = { all: null, pid: null, out: [] };
+
 export const store = {
   getCreds: () => deobfuscateCreds(read<XtreamCreds | null>(K.creds, null)),
   setCreds: (c: XtreamCreds | null) => {
@@ -400,7 +403,12 @@ export const store = {
     migrateLegacyItems();
     const pid = getCurrentProviderIdInternal();
     const all = read<FavItem[]>(K.favs, []);
-    return pid ? all.filter((x) => x.providerId === pid) : all;
+    // Snapshot estável p/ useSyncExternalStore: mesma entrada → mesma referência
+    // (senão React entra em loop — erro #185).
+    if (favMemo.all === all && favMemo.pid === pid) return favMemo.out;
+    const out = pid ? all.filter((x) => x.providerId === pid) : all;
+    favMemo = { all, pid, out };
+    return out;
   },
   toggleFav: (item: FavItem) => {
     // Legacy API: continua funcionando. Enriquece com providerId+stableId
@@ -466,7 +474,10 @@ export const store = {
     migrateLegacyItems();
     const pid = getCurrentProviderIdInternal();
     const all = read<HistItem[]>(K.hist, []);
-    return pid ? all.filter((x) => x.providerId === pid) : all;
+    if (histMemo.all === all && histMemo.pid === pid) return histMemo.out;
+    const out = pid ? all.filter((x) => x.providerId === pid) : all;
+    histMemo = { all, pid, out };
+    return out;
   },
   pushHistory: (item: HistItem) => {
     migrateLegacyItems();
