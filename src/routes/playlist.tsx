@@ -23,7 +23,7 @@ export const Route = createFileRoute("/playlist")({
     <div className="min-h-dvh flex items-center justify-center p-6 text-center">
       <div>
         <h2 className="text-lg font-semibold mb-2">Erro ao carregar a lista</h2>
-        <p className="text-sm text-muted-foreground mb-4 max-w-md">{error.message}</p>
+        <p className="text-sm text-muted-foreground mb-4 max-w-md">{error instanceof Error ? error.message : String(error)}</p>
         <a href="/" className="text-primary underline">Voltar para o login</a>
       </div>
     </div>
